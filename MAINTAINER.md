@@ -102,3 +102,9 @@ gh api -X PUT repos/grey7213/homer-android-apk/collaborators/<用户名> -f perm
 
 `push` 权限够用：能开分支、开 PR、发 Release，不能改仓库设置或删分支。
 给完让他们先跑 `python tools/bootstrap.py --check`，环境不齐当场就能看出来。
+
+**分支保护开不了。** 私有仓要 GitHub Pro 才能设 required status checks，
+免费额度下 API 直接返回 `Upgrade to GitHub Pro`。也就是说 `push` 权限的人
+技术上能直接 push 到 `main`。靠约定管：CONTRIBUTING 里写明走 PR，
+我收 PR 时看 CI 绿灯。真需要硬性拦截就得升 Pro 或把仓库转公开。
+
