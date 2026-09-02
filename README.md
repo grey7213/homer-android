@@ -55,4 +55,3 @@ cd android-app
 本仓库不含任何签名材料。`assembleDebug` 用 Android 调试证书，装不上正式版。
 正式签名由持有发布私钥的维护者完成 —— 私钥、口令、补丁私钥都不进版本库，
 `.gitignore` 已按扩展名挡掉。
-
