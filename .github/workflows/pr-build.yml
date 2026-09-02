@@ -1,0 +1,83 @@
+name: PR 构建校验
+
+# 每个 PR 都跑一遍单测和 assembleDebug。绿灯不代表功能对，但能挡掉
+# 「编译不过」「web 补丁对不上基线」「新文件没进 APK」这三类返工。
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: 取原生壳源码
+        uses: actions/checkout@v4
+
+      - name: 让 bootstrap 能拉私有仓的 web-base
+        # checkout 的凭据只写进它自己的 .git/config；bootstrap 在 .web-cache/tree
+        # 另起一个仓库，拿不到那份凭据，所以这里配一条全局改写规则。
+        run: |
+          git config --global url."https://x-access-token:${{ github.token }}@github.com/".insteadOf "https://github.com/"
+
+      - name: 装 JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: 装 Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 读 web 基线
+        id: base
+        run: |
+          echo "commit=$(python3 -c "import json;print(json.load(open('web-base.json'))['commit'])")" >> "$GITHUB_OUTPUT"
+
+      - name: 缓存 web 基线与 node 依赖
+        # 一个 key 覆盖两者：node_modules 就在 .web-cache 里面，分成两个
+        # 缓存会因路径重叠互相打架。
+        uses: actions/cache@v4
+        with:
+          path: .web-cache
+          key: web-${{ runner.os }}-${{ steps.base.outputs.commit }}
+
+      - name: 装配工作区
+        run: python3 tools/bootstrap.py
+
+      - name: 落地 PR 内的 web 补丁
+        run: python3 tools/apply_web_patches.py --strict
+
+      - name: 单测 + assembleDebug
+        working-directory: android-app
+        run: ./gradlew --no-daemon testDebugUnitTest assembleDebug
+
+      - name: 校验前端资源真的进了 APK
+        run: python3 tools/verify_apk_assets.py
+
+      - name: 传 debug APK 供人工验收
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug-${{ github.event.pull_request.number || github.sha }}
+          path: android-app/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: 失败时传单测报告
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: android-app/app/build/reports/tests/
+          if-no-files-found: ignore

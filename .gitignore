@@ -1,0 +1,34 @@
+# web 端不是本仓库的真源。bootstrap 会按 web-base.json 的 pin 从 AIXingYue 装配这两棵树。
+# 不要提交它们 —— 提交了就出现第二份真源，两边各改一处时静默互相回退。
+/frontend/
+/sillytavern-runtime/
+/.web-cache/
+
+# Gradle / Android 构建产物
+.gradle/
+build/
+local.properties
+*.iml
+.idea/
+captures/
+
+# 成品包一律走 homer-android-apk 的 Releases，不进 git 历史
+*.apk
+*.aab
+*.apks
+*.idsig
+
+# 签名材料。任何一个都不许进版本库
+*.keystore
+*.jks
+*.p12
+*.pem
+*.key
+signing.properties
+keystore.properties
+
+# 缓存
+__pycache__/
+*.py[cod]
+node_modules/
+*.log

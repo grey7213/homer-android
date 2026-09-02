@@ -1,0 +1,152 @@
+plugins {
+    id "com.android.application"
+}
+
+def configuredServer = providers.gradleProperty("HOMER_SERVER_BASE_URL")
+        .orElse("https://patcher.villainy.top/")
+        .get()
+def configuredDebugServer = providers.gradleProperty("HOMER_DEBUG_SERVER_BASE_URL")
+        .orElse(configuredServer)
+        .get()
+def configuredPatchKey = providers.gradleProperty("HOMER_PATCH_PUBLIC_KEY_B64")
+        .orElse("")
+        .get()
+
+def workspaceRoot = rootProject.projectDir.parentFile
+def webClientSource = new File(workspaceRoot, "frontend")
+def dialogueRuntimeRoot = new File(workspaceRoot, "sillytavern-runtime")
+def dialogueClientSource = new File(dialogueRuntimeRoot, "public")
+def dialogueLibraryOutput = new File(dialogueRuntimeRoot, "dist/_webpack")
+def generatedClientAssets = layout.buildDirectory.dir("generated/homerClientAssets")
+
+// 这两棵树由 tools/bootstrap.py 装配，不在版本控制内。缺了直接报清楚，
+// 否则 syncHomerClientAssets 会安静地打出一个没有前端资源的 APK。
+if (!dialogueClientSource.isDirectory() || !webClientSource.isDirectory()) {
+    throw new GradleException(
+            "缺少 web 端：" + webClientSource + " 或 " + dialogueClientSource + " 不存在。\n" +
+            "在仓库根先跑：python tools/bootstrap.py")
+}
+if (!new File(dialogueRuntimeRoot, "node_modules/webpack").isDirectory()) {
+    throw new GradleException(
+            "sillytavern-runtime 缺 node_modules/webpack，compileHomerDialogueLibraries 会失败。\n" +
+            "在仓库根先跑：python tools/bootstrap.py")
+}
+
+
+tasks.register("compileHomerDialogueLibraries", Exec) {
+    group = "build"
+    description = "Compiles the browser-only SillyTavern dependency bundle for the local client runtime."
+    workingDir dialogueRuntimeRoot
+    commandLine "node", "docker/build-lib.js"
+    inputs.file(new File(dialogueRuntimeRoot, "public/lib.js"))
+    inputs.file(new File(dialogueRuntimeRoot, "webpack.config.js"))
+    inputs.file(new File(dialogueRuntimeRoot, "package-lock.json"))
+    outputs.dir(dialogueLibraryOutput)
+}
+
+tasks.register("syncHomerClientAssets", Sync) {
+    group = "build"
+    description = "Bundles the Homer web UI and dialogue client runtime into the APK."
+    dependsOn(tasks.named("compileHomerDialogueLibraries"))
+    into(generatedClientAssets)
+    from(webClientSource) {
+        into "client/web"
+    }
+    from(dialogueClientSource) {
+        into "client/runtime"
+        // The user explicitly removed Yuzi Phone from the active product.
+        exclude "scripts/extensions/third-party/st-yuzi-phone/**"
+    }
+    doLast {
+        File root = generatedClientAssets.get().asFile
+        File clientRoot = new File(root, "client")
+        List<File> compiledLibraries = fileTree(dialogueLibraryOutput)
+                .matching { include "*/output/lib.js" }
+                .files
+                .findAll { it.isFile() }
+                .sort { left, right -> right.lastModified() <=> left.lastModified() }
+        if (compiledLibraries.isEmpty()) {
+            throw new GradleException("Compiled dialogue library was not produced")
+        }
+        copy {
+            from compiledLibraries.first()
+            into new File(clientRoot, "runtime")
+            rename { "lib.js" }
+        }
+        File indexFile = new File(clientRoot, "index.txt")
+        List<String> entries = fileTree(clientRoot)
+                .matching { exclude "index.txt" }
+                .files
+                .findAll { it.isFile() }
+                .collect { clientRoot.toPath().relativize(it.toPath()).toString().replace('\\', '/') }
+                .sort()
+        indexFile.parentFile.mkdirs()
+        indexFile.setText(entries.join("\n") + "\n", "UTF-8")
+    }
+}
+
+if (!configuredServer.startsWith("https://") || !configuredServer.endsWith("/")) {
+    throw new GradleException("HOMER_SERVER_BASE_URL must be an HTTPS URL ending in /")
+}
+def debugServerIsHttps = configuredDebugServer.startsWith("https://")
+def debugServerIsPrivateHttp = configuredDebugServer ==~ /^http:\/\/(127\.0\.0\.1|localhost|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3})(:\d+)?\/$/
+if ((!debugServerIsHttps && !debugServerIsPrivateHttp) || !configuredDebugServer.endsWith("/")) {
+    throw new GradleException("HOMER_DEBUG_SERVER_BASE_URL must be HTTPS or an HTTP private-network URL ending in /")
+}
+
+def javaString = { value ->
+    "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+}
+
+android {
+    namespace "org.nebula.horizon.composeai.ctf"
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "org.nebula.horizon.composeai"
+        minSdk 26
+        targetSdk 35
+        versionCode 267
+        versionName "1.14.2"
+        buildConfigField "String", "PATCH_PUBLIC_KEY_B64", javaString(configuredPatchKey)
+        testInstrumentationRunner "android.test.InstrumentationTestRunner"
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    buildTypes {
+        debug {
+            applicationIdSuffix ".debug"
+            versionNameSuffix "-debug"
+            buildConfigField "String", "SERVER_BASE_URL", javaString(configuredDebugServer)
+        }
+        release {
+            buildConfigField "String", "SERVER_BASE_URL", javaString(configuredServer)
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    testOptions {
+        unitTests.returnDefaultValues = true
+    }
+
+    sourceSets {
+        main.assets.srcDir(generatedClientAssets)
+    }
+}
+
+tasks.named("preBuild").configure {
+    dependsOn(tasks.named("syncHomerClientAssets"))
+}
+
+dependencies {
+    testImplementation "junit:junit:4.13.2"
+}

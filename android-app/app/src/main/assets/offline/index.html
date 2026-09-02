@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self'; img-src data: file:; font-src 'none'; connect-src 'none'; media-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>对话 · 惑梦</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="app-shell">
+    <aside id="sidebar" class="sidebar" aria-label="站内导航">
+      <div class="brand"><img class="brand-mark" src="img/app-icon.png" alt=""><span>惑梦</span></div>
+      <nav class="nav-list" aria-label="主要页面">
+        <button type="button"><span class="nav-icon">我</span><span>我的</span></button>
+        <button type="button"><span class="nav-icon">探</span><span>探索</span></button>
+        <button type="button"><span class="nav-icon">藏</span><span>收藏</span></button>
+        <button type="button"><span class="nav-icon">创</span><span>创意工坊</span></button>
+      </nav>
+      <section class="history" aria-label="历史会话">
+        <header><span>历史会话</span><span class="history-count">1</span></header>
+        <button class="history-item is-active" type="button">
+          <span id="history-avatar" class="history-avatar"><img src="img/default-avatar.png" alt=""></span>
+          <span class="history-copy"><strong id="history-title">角色对话</strong><small id="history-last">本机最近会话</small></span>
+        </button>
+      </section>
+      <div class="local-note">消息来自此设备的应用私有目录</div>
+    </aside>
+
+    <section class="dialogue">
+      <header class="topbar">
+        <button id="menu-button" class="icon-button menu-icon" type="button" aria-label="打开导航"><span></span><span></span><span></span></button>
+        <div class="dialogue-heading"><h1 id="title">角色对话</h1><p id="connection-state">本机记录</p></div>
+        <button id="settings-button" class="icon-button settings-icon" type="button" aria-label="连接状态">⚙</button>
+      </header>
+
+      <div id="messages" class="messages" aria-live="polite"></div>
+
+      <form id="composer" class="composer">
+        <textarea id="draft" rows="1" maxlength="10000" placeholder="输入想发送的消息"></textarea>
+        <button id="send" class="send-button" type="submit" aria-label="发送">↑</button>
+      </form>
+
+      <section id="status-panel" class="status-panel" hidden>
+        <img class="status-panel__image" src="img/network-error.png" alt="">
+        <div><strong id="status-title">连接状态</strong><p id="status-detail">完整功能将在网络恢复后自动接入。</p></div>
+        <button id="retry" type="button">重新连接</button>
+      </section>
+    </section>
+  </main>
+  <div id="scrim" class="scrim" hidden></div>
+  <script src="app.js"></script>
+</body>
+</html>
