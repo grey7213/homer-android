@@ -342,6 +342,7 @@ public final class HomerActivity extends Activity {
             if (path == null) return "";
             if ("/app/chat.html".equals(path) || "/module/dialogue/".equals(path)) return "chat";
             if ("/app/explore.html".equals(path)) return "explore";
+            if ("/app/histories.html".equals(path)) return "histories";
             if ("/app/favorites.html".equals(path)) return "favorites";
             if ("/app/workshop.html".equals(path)) return "workshop";
             if ("/app/me.html".equals(path)) return "me";
@@ -351,6 +352,10 @@ public final class HomerActivity extends Activity {
             // Invalid URLs are rejected by SafeUrls before navigation.
         }
         return "";
+    }
+
+    static boolean shouldLoadPersistentTarget(String current, String target) {
+        return current == null || !current.equals(target);
     }
 
     private void registerInitialPersistentPage(String target) {
@@ -391,13 +396,23 @@ public final class HomerActivity extends Activity {
         }
         liveView = targetView;
         activePersistentPage = key;
+        String currentTarget = liveView.getUrl();
+        boolean targetChanged = shouldLoadPersistentTarget(currentTarget, target);
         liveView.setAlpha(1f);
         liveView.setVisibility(View.VISIBLE);
-        snapshotView.setVisibility(View.GONE);
-        liveRevealed = true;
-        liveReadyHandled = !newlyCreated;
-        if (newlyCreated) liveView.loadUrl(target);
-        else cacheDatabase.saveLastUrl(liveView.getUrl() == null ? target : liveView.getUrl());
+        if (targetChanged) {
+            boolean conversationTarget = StartupPresentation.isConversationUrl(target);
+            prepareSnapshotForTarget(target);
+            snapshotView.setVisibility(conversationTarget ? View.VISIBLE : View.GONE);
+            liveRevealed = !conversationTarget;
+            liveReadyHandled = false;
+            liveView.loadUrl(target);
+        } else {
+            snapshotView.setVisibility(View.GONE);
+            liveRevealed = true;
+            liveReadyHandled = true;
+            cacheDatabase.saveLastUrl(currentTarget);
+        }
         applyNativeInsetsToWebViews();
         return true;
     }
