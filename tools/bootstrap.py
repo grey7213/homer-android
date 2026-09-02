@@ -266,10 +266,14 @@ def main() -> int:
     ensure_local_properties()
 
     say("\n装配完成。构建：")
-    say(r"  cd android-app")
-    say(r"  .\gradlew.bat testDebugUnitTest assembleDebug ^")
-    say(r"    -PHOMER_DEBUG_SERVER_BASE_URL=https://patcher.villainy.top/")
+    if IS_WINDOWS:
+        say(r"  cd android-app")
+        say(r"  .\gradlew.bat testDebugUnitTest assembleDebug")
+    else:
+        say("  cd android-app")
+        say("  ./gradlew testDebugUnitTest assembleDebug")
     return 0
+
 
 
 if __name__ == "__main__":
