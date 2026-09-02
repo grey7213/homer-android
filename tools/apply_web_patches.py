@@ -68,6 +68,13 @@ def main() -> int:
     if head != pinned:
         die(f"web 检出停在 {head[:12]}，pin 是 {pinned[:12]}。先跑 bootstrap 对齐。")
 
+    # git apply 要求命中的文件在 index 里「未修改」，判定用的是 index 记录的 stat
+    # 而不是内容哈希。CI 从缓存解包 .web-cache 时 mtime/inode 全是新的，于是
+    # 内容逐字节一致的文件也会被判成 does not match index，补丁全军覆没。
+    # 先刷一遍 index：git 会重新读那些 stat 变了的文件，内容相同就静默改回未修改。
+    # 有条目需要更新时它返回非 0，这里是正常路径，所以不 check。
+    git("update-index", "--refresh", check=False)
+
     failed = 0
     for patch in patches:
         text = patch.read_text(encoding="utf-8", errors="replace")
