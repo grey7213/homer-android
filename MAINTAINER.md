@@ -138,6 +138,17 @@ python E:\homer-android\tools\push_web_base.py
 `homer-android/web-base.json` 的 pin。之后记得把 `web-base.json` 的改动提交到 `main`，
 否则贡献者的 bootstrap 会报「基线动了而 pin 没跟上」。
 
+**基线推进之后，`web-patches/` 里已经落地的补丁必须一起删掉。** 那些补丁的改动
+已经包含在新基线里，留着会让 `apply_web_patches.py --strict` 报「基线不符」，
+之后每个 PR 都红灯。删补丁和提交 pin 放同一个提交里：
+
+```powershell
+cd E:\homer-android
+git rm web-patches\<已落地的补丁>.patch
+git commit -m "推进 web 基线到 <主仓库 commit>" web-base.json web-patches
+git push
+```
+
 ## 给贡献者开权限
 
 两个仓库都公开了，**任何人 fork 都能提 PR，不需要我做任何事**。
