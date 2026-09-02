@@ -33,6 +33,13 @@ cd android-app
 
 完整流程、改 web 端的方式、提交与验收要求见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
+## 提交改动
+
+`main` 有保护规则：必须过 PR，CI 的 `build` 绿灯才能合，force push 和删分支都禁了。
+
+两条路都行 —— fork 后提 PR（任何人，不需要我先做什么），或者找我加 collaborator
+后直接在本仓库开分支。发 Release 需要 collaborator 权限。细节见 CONTRIBUTING 第一节。
+
 ## 脚本
 
 | 脚本 | 干什么 |
@@ -55,3 +62,10 @@ cd android-app
 本仓库不含任何签名材料。`assembleDebug` 用 Android 调试证书，装不上正式版。
 正式签名由持有发布私钥的维护者完成 —— 私钥、口令、补丁私钥都不进版本库，
 `.gitignore` 已按扩展名挡掉。
+
+## 许可
+
+`android-app/` 与 `tools/` 是本项目自有代码。构建时会编入
+[SillyTavern](https://github.com/SillyTavern/SillyTavern) 及其扩展，
+那部分按各自的许可（SillyTavern 为 AGPL-3.0）分发，许可文本随
+`web-base` 分支一起保留在 `sillytavern-runtime/LICENSE`。

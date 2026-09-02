@@ -29,17 +29,29 @@ setx ANDROID_HOME "E:\Android\Sdk"
 **路径必须全英文。** aapt 和 apksigner 读不了中文路径 —— 别把仓库放在
 `E:\我的项目\` 这种目录下，构建会以看不懂的报错失败。
 
-### 拿到访问权
+### 选一条推代码的路
 
-两个仓库都是私有的，得先被邀请。把你的 GitHub 用户名告诉我，我加你为 collaborator
-（`write` 权限），你邮箱会收到邀请，或者直接开
-`https://github.com/grey7213/homer-android/invitations` 接受。
+仓库是公开的，clone 不需要任何权限。但推代码有两条路，先想清楚走哪条。
 
-没接受邀请之前 `git clone` 会报 `Repository not found` —— 不是仓库名写错了，
-是私有仓对未授权的人一律显示不存在。
+**路线 A：fork（任何人都能走，我不用做任何事）**
 
-接受后配一次凭据，否则每次 push 都要输密码。装了
-[gh CLI](https://cli.github.com/) 的话最省事：
+在 GitHub 上点 Fork，改完推到自己的 fork，再提 PR 过来。适合一次性贡献。
+你的第一个 PR 我需要在 Actions 页点一下 Approve and run 才会跑 CI ——
+GitHub 对新贡献者默认不自动跑 workflow，不是卡住了。
+
+**路线 B：collaborator（长期合作、需要发 Release）**
+
+把 GitHub 用户名告我，我加你为 collaborator（Write），之后你直接在这个仓库
+开分支推，省掉 fork 一层。**发 Release 必须走这条** —— fork 的贡献者建不了
+Release，只能把 APK 发给我。
+
+两条路都推分支 + 开 PR。`main` 有保护规则：不能直推、CI 的 `build` 必须绿灯
+才能合，force push 和删分支都禁了。所以直推 `main` 会被
+`push declined due to repository rule violations` 挡下，不是你操作错了。
+
+### 配 git 凭据
+
+公开仓 clone 免鉴权，但 push 要。装了 [gh CLI](https://cli.github.com/) 最省事：
 
 ```powershell
 gh auth login          # 选 GitHub.com → HTTPS → 用浏览器登录
@@ -59,6 +71,26 @@ Tokens → 勾 `repo`）当密码填。
 git clone https://github.com/grey7213/homer-android.git
 cd homer-android
 python tools/bootstrap.py
+```
+
+走 fork 路线的话 clone 自己的 fork，然后加一个上游远端方便同步：
+
+```powershell
+git clone https://github.com/<你的用户名>/homer-android.git
+cd homer-android
+git remote add upstream https://github.com/grey7213/homer-android.git
+python tools/bootstrap.py
+```
+
+`bootstrap.py` 读 `web-base.json` 里写死的仓库地址取 web 基线，**始终从上游拉**，
+和你 clone 的是 fork 还是本仓库无关。仓库公开后这一步不需要任何凭据。
+
+基线推进后你的 fork 会落后，`bootstrap.py` 报「基线动了而 pin 没跟上」。
+同步 `main` 就行，`web-base` 分支不用管：
+
+```powershell
+git fetch upstream
+git checkout main && git merge upstream/main
 ```
 
 `bootstrap.py` 做四件事，第一次跑约 5-10 分钟：
@@ -173,9 +205,8 @@ python tools/verify_apk_assets.py
 
 ## 五、开 PR
 
-你有 `write` 权限，技术上能直接 `git push origin main`。**别这么做。**
-走分支 + PR，理由是 PR 会自动跑构建校验 —— 直推 `main` 也会触发 CI，但那时候
-代码已经在主线上了，挂了得回滚。分支上挂了改一下重推就行。
+`main` 推不动 —— ruleset 要求必须过 PR 且 CI 的 `build` 绿灯。直推会被
+`push declined due to repository rule violations` 挡下。开分支：
 
 ```powershell
 git checkout -b fix/explore-blank-screen
@@ -184,9 +215,10 @@ git commit -m "修复探索页在无缓存时白屏"
 git push -u origin fix/explore-blank-screen
 ```
 
-推的是你自己开的分支，不需要 fork —— 你在这个仓库里就有写权限。
+collaborator 推的是本仓库的分支，fork 路线推的是自己 fork 的分支 ——
+两边都在 GitHub 上开 PR 到 `grey7213/homer-android` 的 `main`。
 
-到 GitHub 上开 PR 到 `main`。PR 描述按这个结构写，四段都要有：
+PR 描述按这个结构写，四段都要有：
 
 ```markdown
 ## 问题
@@ -217,6 +249,9 @@ PR 开好后会自动跑构建校验：装配工作区 → 落地你的 web 补�
 校验资源完整性。绿灯不代表功能对，但能挡掉编译不过、补丁对不上基线、新文件没进包
 这三类返工。CI 会把 debug APK 作为 artifact 传上来，保留 14 天，可以直接下载装机验。
 
+`build` 这个 check 不绿，Merge 按钮点不动 —— 这是 ruleset 强制的，不是我在手工把关。
+走 fork 路线的话首个 PR 我要先点一下 Approve and run，CI 才开始跑。
+
 ---
 
 ## 六、交成品 APK
@@ -245,6 +280,9 @@ gh release create debug-20260902-explore-fix `
 
 在 homer-android 目录里跑就行，`--repo` 已经指明发到哪个仓库了。
 
+发 Release 需要 homer-android-apk 的 Write 权限。fork 路线的贡献者建不了 Release ——
+把 APK 发给我，或者跟我要那个仓库的 Write。`gh release create` 报 403 就是这个原因。
+
 Release 说明里写清三件事：对应哪个 PR、用什么签名（debug 还是正式）、验过什么。
 
 **你手上不会有正式发布私钥，也不需要有。** 正式签名由维护者完成。
@@ -271,17 +309,19 @@ debug 签名的包装不上正式版，也顶不掉用户已装的应用，用�
 
 ## 八、卡住了看这里
 
-**`Repository not found` / clone 报 403**
-私有仓，你还没被邀请或还没接受邀请。私有仓对未授权的人一律显示不存在，
-不是仓库名写错了。看第一节「拿到访问权」。
+**`push declined due to repository rule violations`**
+你在往 `main` 推。`main` 要求必须过 PR 且 CI 绿灯。开个分支推，然后开 PR。
+
+**`remote: Permission to grey7213/... denied`**
+你不是 collaborator。要么走 fork 路线（点 Fork，推自己的副本），
+要么找我加 Write 权限。也可能是登录的是另一个 GitHub 账号 —— `gh auth status` 看身份。
 
 **push 时反复弹窗要密码**
 GitHub 不收账号密码。跑 `gh auth login` + `gh auth setup-git`，或者在弹窗里
 填 Personal Access Token（勾 `repo` 权限）当密码。
 
-**`remote: Permission to grey7213/... denied`**
-权限是 `read` 而不是 `write`，或者你登录的是另一个 GitHub 账号。
-`gh auth status` 看当前身份。
+**PR 里 build 一直不动 / 显示 Expected**
+走 fork 路线的首个 PR 要我点 Approve and run，CI 才开始跑。等我一下。
 
 **`缺少 web 端：... 不存在`**
 Gradle 找不到 `frontend/` 或 `sillytavern-runtime/`。在仓库根跑 `python tools/bootstrap.py`。
