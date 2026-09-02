@@ -9,17 +9,63 @@ grey7213/AIXingYue（公开）           主仓库。web 端真源，我的完�
         │
         │  推 frontend/ + sillytavern-runtime/ 两棵树
         ▼
-grey7213/homer-android（私有）        原生壳源码 + 装配脚本
+grey7213/homer-android（公开）        原生壳源码 + 装配脚本
         ├─ main        android-app/、tools/、web-patches/
         └─ web-base    孤立分支，只有那两棵 web 树，供 bootstrap 检出
         │
         │  贡献者编好的包
         ▼
-grey7213/homer-android-apk（私有）    只走 Releases，不进 git 历史
+grey7213/homer-android-apk（公开）    只走 Releases，不进 git 历史
 ```
 
 `android-app/` 的源码此前只存在于 `E:\homer-apk-1140`，不在任何版本控制内。
 现在 homer-android 是它的真源，`E:\homer-apk-1140` 退化成我本地的出包工作区。
+
+## main 的保护规则
+
+仓库转公开后开了 ruleset `main 保护`（id `22080138`）：
+
+| 规则 | 效果 |
+| --- | --- |
+| `pull_request` | 不能直推 `main`，必须开 PR |
+| `required_status_checks` = `build` | CI 的 build job 绿灯才能合 |
+| `non_fast_forward` | 禁 force push |
+| `deletion` | 禁删 `main` |
+
+`strict` 打开了，所以 PR 分支必须先跟上 `main` 才让合 —— 落后的分支
+GitHub 会提示 Update branch。
+
+**bypass 给了 admin（`RepositoryRole` id 5）**，我推 `web-base.json` 的 pin
+不必绕一圈开 PR。实测过：撤掉 bypass 时我自己直推也会被
+`push declined due to repository rule violations` 挡下，加回来才通。
+CI 上报的 check 名确认是 `build`，和规则里写的一致 —— 名字对不上会导致
+所有 PR 永远卡在「等待 build」。
+
+改规则：
+
+```powershell
+gh api repos/grey7213/homer-android/rulesets/22080138           # 看现状
+gh api -X PUT repos/grey7213/homer-android/rulesets/22080138 -f enforcement=disabled  # 临时关掉
+```
+
+## 每次发布上线怎么合
+
+这是最常走的一条路。前提是 PR 的 CI 已经绿了：
+
+```powershell
+gh pr checks 12                    # 确认 build 通过
+gh pr merge 12 --squash --delete-branch
+```
+
+`--squash` 把贡献者的多个提交压成一个，主线历史干净。合完拉下来出包：
+
+```powershell
+cd E:\homer-android
+git checkout main && git pull
+```
+
+然后走下面的「出正式包」。web 补丁要先落地到主仓库 —— 那部分不在这个仓库的
+merge 范围内，见「收一个 PR」。
 
 ## 收一个 PR
 
@@ -71,8 +117,9 @@ cd E:\homer-apk-1140\android-app
 .\gradlew.bat testReleaseUnitTest assembleRelease -PHOMER_SERVER_BASE_URL=https://patcher.villainy.top/
 ```
 
-签名材料在 `E:\homer-apk-1140\_sign\signer.keystore`，alias `zip1repack`，
-证书指纹 `429b…f320`。读它要 JDK 17+，build-tools 用 `E:\Android\Sdk\build-tools\36.1.0`。
+签名材料在 `E:\homer-apk-1140\_sign\`（本机，不在版本库）。alias、口令、
+证书指纹见 `AGENTS.md` 的构建段 —— **仓库已公开，这些不写进这个文件**。
+读 keystore 要 JDK 17+，build-tools 用 `E:\Android\Sdk\build-tools\36.1.0`。
 版本号在 `android-app/app/build.gradle` 的 `versionCode` / `versionName`。
 
 发布走 `python tools\publish_homer_apk.py <签名后的apk>` —— 它会校验 versionCode
@@ -91,19 +138,18 @@ python E:\homer-android\tools\push_web_base.py
 `homer-android/web-base.json` 的 pin。之后记得把 `web-base.json` 的改动提交到 `main`，
 否则贡献者的 bootstrap 会报「基线动了而 pin 没跟上」。
 
-## 邀请贡献者
+## 给贡献者开权限
 
-两个仓库都是私有，得逐个加。**`write` 权限是发 Release 的最低门槛** ——
-`read` 和 `triage` 都只能看已发布的 Release，建不了新的。
+两个仓库都公开了，**任何人 fork 都能提 PR，不需要我做任何事**。
+只有想直接在这个仓库开分支（省掉 fork）的人才需要加 collaborator：
 
 ```powershell
 gh api -X PUT repos/grey7213/homer-android/collaborators/<用户名> -f permission=push
 gh api -X PUT repos/grey7213/homer-android-apk/collaborators/<用户名> -f permission=push
 ```
 
-API 里的 `push` 就是界面上的 Write。给完对方邮箱收到邀请，或直接开
-`https://github.com/grey7213/<仓库>/invitations` 接受。没接受之前 clone 报
-`Repository not found` —— 私有仓对未授权的人一律显示不存在。
+API 里的 `push` 就是界面上的 Write。对方邮箱收到邀请，或直接开
+`https://github.com/grey7213/<仓库>/invitations` 接受。
 
 查现状：
 
@@ -112,14 +158,25 @@ gh api repos/grey7213/homer-android/collaborators --jq '.[] | "\(.login) \(.role
 gh api repos/grey7213/homer-android/invitations --jq 'length'   # 待接受的邀请数
 ```
 
-`write` 能做：推分支、开 PR、合 PR、发 Release、跑 Actions。
-不能做：改仓库设置、加删协作者、删仓库。
+`write` 能做：在本仓库推分支、开 PR、发 Release、跑 Actions。
+**不能**直推 `main`（ruleset 挡着），不能改仓库设置或删仓库。
 
-**分支保护开不了。** 私有仓要 GitHub Pro 才能设 required status checks，
-免费额度下 API 直接返回 `Upgrade to GitHub Pro`。也就是说 `write` 权限的人
-技术上能直接 push 到 `main`，也能合自己的 PR。靠约定管：CONTRIBUTING 里写明走 PR、
-别直推 `main`，我收 PR 时看 CI 绿灯。真需要硬性拦截就得升 Pro 或把仓库转公开。
+**发 Release 必须给 write。** `read` 和 `triage` 只能看已发布的，建不了新的 ——
+走 fork 路线的人发不了 Release，得把 APK 发给我、我来传，或者我给他们
+homer-android-apk 单独的 write 权限（源码仓可以只给 read）。
 
-想临时收紧可以先给 `read`，只让对方 clone 和开 issue，确认靠谱了再提到 `push`。
-但 `read` 发不了 Release，那就得他们把 APK 发给我、我来传。
+### 两条路线的差别
+
+| | collaborator（write） | fork |
+| --- | --- | --- |
+| 谁适合 | 长期合作、要发 Release 的人 | 一次性贡献、不认识的人 |
+| 推分支 | 直接推本仓库 | 推自己的 fork |
+| 我要做什么 | 先邀请一次 | 什么都不用做 |
+| CI | 直接跑 | 首次 PR 我要点一下 Approve |
+| 能发 Release | 能 | 不能 |
+| 拿得到仓库 secrets | 能（目前没有敏感 secret） | 拿不到 |
+
+fork 的 PR 首次要我在 Actions 页点 Approve and run —— GitHub 对新贡献者
+默认不自动跑 workflow。目前 CI 没用任何 secret，所以 fork 跑起来和本仓库分支
+效果一样。
 

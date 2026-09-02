@@ -22,12 +22,6 @@ jobs:
       - name: 取原生壳源码
         uses: actions/checkout@v4
 
-      - name: 让 bootstrap 能拉私有仓的 web-base
-        # checkout 的凭据只写进它自己的 .git/config；bootstrap 在 .web-cache/tree
-        # 另起一个仓库，拿不到那份凭据，所以这里配一条全局改写规则。
-        run: |
-          git config --global url."https://x-access-token:${{ github.token }}@github.com/".insteadOf "https://github.com/"
-
       - name: 装 JDK 21
         uses: actions/setup-java@v4
         with:
