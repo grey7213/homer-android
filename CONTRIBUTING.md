@@ -29,6 +29,28 @@ setx ANDROID_HOME "E:\Android\Sdk"
 **路径必须全英文。** aapt 和 apksigner 读不了中文路径 —— 别把仓库放在
 `E:\我的项目\` 这种目录下，构建会以看不懂的报错失败。
 
+### 拿到访问权
+
+两个仓库都是私有的，得先被邀请。把你的 GitHub 用户名告诉我，我加你为 collaborator
+（`write` 权限），你邮箱会收到邀请，或者直接开
+`https://github.com/grey7213/homer-android/invitations` 接受。
+
+没接受邀请之前 `git clone` 会报 `Repository not found` —— 不是仓库名写错了，
+是私有仓对未授权的人一律显示不存在。
+
+接受后配一次凭据，否则每次 push 都要输密码。装了
+[gh CLI](https://cli.github.com/) 的话最省事：
+
+```powershell
+gh auth login          # 选 GitHub.com → HTTPS → 用浏览器登录
+gh auth setup-git      # 让 git 复用这份凭据
+```
+
+不想装 gh 就用 Git Credential Manager（Git for Windows 自带）：第一次 push 时
+会弹浏览器登录，之后记住。**GitHub 早就不收账号密码了**，弹窗里别填密码 ——
+要么走浏览器授权，要么用 Personal Access Token（Settings → Developer settings →
+Tokens → 勾 `repo`）当密码填。
+
 ---
 
 ## 二、拉代码并装配工作区
@@ -151,12 +173,18 @@ python tools/verify_apk_assets.py
 
 ## 五、开 PR
 
+你有 `write` 权限，技术上能直接 `git push origin main`。**别这么做。**
+走分支 + PR，理由是 PR 会自动跑构建校验 —— 直推 `main` 也会触发 CI，但那时候
+代码已经在主线上了，挂了得回滚。分支上挂了改一下重推就行。
+
 ```powershell
 git checkout -b fix/explore-blank-screen
 git add android-app web-patches
 git commit -m "修复探索页在无缓存时白屏"
 git push -u origin fix/explore-blank-screen
 ```
+
+推的是你自己开的分支，不需要 fork —— 你在这个仓库里就有写权限。
 
 到 GitHub 上开 PR 到 `main`。PR 描述按这个结构写，四段都要有：
 
@@ -193,14 +221,19 @@ PR 开好后会自动跑构建校验：装配工作区 → 落地你的 web 补�
 
 ## 六、交成品 APK
 
-编好的包传到 [homer-android-apk](https://github.com/grey7213/homer-android-apk) 的 Releases，
-**不要提交进任何仓库的 git 历史** —— 一个包 40 MB，进了历史就永久留在里面，删不掉，
-克隆会越来越慢。
+编好的包传到 [homer-android-apk](https://github.com/grey7213/homer-android-apk) 的 Releases。
 
-网页上传：Releases → Draft a new release，tag 填 `debug-20260902-探索页修复`，
-勾上 pre-release，把 APK 拖进附件区。
+**这个仓库不用 clone，也不要 git push。** 它是个空壳，只有 README，
+存在的意义就是挂 Release 附件。APK 一个 40 MB，`git commit` 进去就永久留在
+对象库里删不掉，每个人克隆都要拖一遍 —— 两个仓库的 `.gitignore` 都把 `*.apk`
+挡掉了，真想提交会被拒。
 
-命令行（装了 gh CLI）：
+网页上传（推荐，不用装东西）：打开
+[Releases 页](https://github.com/grey7213/homer-android-apk/releases) →
+Draft a new release → tag 填 `debug-20260902-探索页修复` → 勾上 Set as a pre-release →
+把 APK 拖进 Attach binaries 区 → Publish release。
+
+命令行（装了 [gh CLI](https://cli.github.com/) 且跑过 `gh auth login`）：
 
 ```powershell
 gh release create debug-20260902-explore-fix `
@@ -209,6 +242,8 @@ gh release create debug-20260902-explore-fix `
   --prerelease `
   android-app/app/build/outputs/apk/debug/app-debug.apk
 ```
+
+在 homer-android 目录里跑就行，`--repo` 已经指明发到哪个仓库了。
 
 Release 说明里写清三件事：对应哪个 PR、用什么签名（debug 还是正式）、验过什么。
 
@@ -235,6 +270,18 @@ debug 签名的包装不上正式版，也顶不掉用户已装的应用，用�
 ---
 
 ## 八、卡住了看这里
+
+**`Repository not found` / clone 报 403**
+私有仓，你还没被邀请或还没接受邀请。私有仓对未授权的人一律显示不存在，
+不是仓库名写错了。看第一节「拿到访问权」。
+
+**push 时反复弹窗要密码**
+GitHub 不收账号密码。跑 `gh auth login` + `gh auth setup-git`，或者在弹窗里
+填 Personal Access Token（勾 `repo` 权限）当密码。
+
+**`remote: Permission to grey7213/... denied`**
+权限是 `read` 而不是 `write`，或者你登录的是另一个 GitHub 账号。
+`gh auth status` 看当前身份。
 
 **`缺少 web 端：... 不存在`**
 Gradle 找不到 `frontend/` 或 `sillytavern-runtime/`。在仓库根跑 `python tools/bootstrap.py`。

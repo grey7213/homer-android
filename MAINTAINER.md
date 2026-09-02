@@ -93,18 +93,33 @@ python E:\homer-android\tools\push_web_base.py
 
 ## 邀请贡献者
 
-两个仓库都是私有，得逐个加：
+两个仓库都是私有，得逐个加。**`write` 权限是发 Release 的最低门槛** ——
+`read` 和 `triage` 都只能看已发布的 Release，建不了新的。
 
 ```powershell
 gh api -X PUT repos/grey7213/homer-android/collaborators/<用户名> -f permission=push
 gh api -X PUT repos/grey7213/homer-android-apk/collaborators/<用户名> -f permission=push
 ```
 
-`push` 权限够用：能开分支、开 PR、发 Release，不能改仓库设置或删分支。
-给完让他们先跑 `python tools/bootstrap.py --check`，环境不齐当场就能看出来。
+API 里的 `push` 就是界面上的 Write。给完对方邮箱收到邀请，或直接开
+`https://github.com/grey7213/<仓库>/invitations` 接受。没接受之前 clone 报
+`Repository not found` —— 私有仓对未授权的人一律显示不存在。
+
+查现状：
+
+```powershell
+gh api repos/grey7213/homer-android/collaborators --jq '.[] | "\(.login) \(.role_name)"'
+gh api repos/grey7213/homer-android/invitations --jq 'length'   # 待接受的邀请数
+```
+
+`write` 能做：推分支、开 PR、合 PR、发 Release、跑 Actions。
+不能做：改仓库设置、加删协作者、删仓库。
 
 **分支保护开不了。** 私有仓要 GitHub Pro 才能设 required status checks，
-免费额度下 API 直接返回 `Upgrade to GitHub Pro`。也就是说 `push` 权限的人
-技术上能直接 push 到 `main`。靠约定管：CONTRIBUTING 里写明走 PR，
-我收 PR 时看 CI 绿灯。真需要硬性拦截就得升 Pro 或把仓库转公开。
+免费额度下 API 直接返回 `Upgrade to GitHub Pro`。也就是说 `write` 权限的人
+技术上能直接 push 到 `main`，也能合自己的 PR。靠约定管：CONTRIBUTING 里写明走 PR、
+别直推 `main`，我收 PR 时看 CI 绿灯。真需要硬性拦截就得升 Pro 或把仓库转公开。
+
+想临时收紧可以先给 `read`，只让对方 clone 和开 issue，确认靠谱了再提到 `push`。
+但 `read` 发不了 Release，那就得他们把 APK 发给我、我来传。
 
