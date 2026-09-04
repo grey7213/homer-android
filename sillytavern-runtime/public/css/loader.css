@@ -1,0 +1,124 @@
+#preloader {
+    position: fixed;
+    margin: 0;
+    padding: 0;
+    top: 0;
+    left: 0;
+    z-index: 999999;
+    width: 100vw;
+    height: 100vh;
+    width: 100dvw;
+    height: 100dvh;
+    background-color: var(--SmartThemeBlurTintColor);
+    color: var(--SmartThemeBodyColor);
+    /*for some reason the full screen blur does not work on iOS*/
+    backdrop-filter: blur(30px);
+    opacity: 1;
+}
+
+#load-spinner {
+    --spinner-size: 2.25rem;
+    transition: all var(--animation-duration-2x) ease-out;
+    opacity: 1;
+    top: calc(50% - var(--spinner-size) / 2);
+    left: calc(50% - var(--spinner-size) / 2);
+    position: absolute;
+    width: var(--spinner-size);
+    height: var(--spinner-size);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 3px solid rgba(228, 196, 135, 0.18);
+    border-top-color: #e4c487;
+    border-radius: 999px;
+    animation: homer-loader-spin 0.8s linear infinite;
+    font-size: 0;
+}
+
+@keyframes homer-loader-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Action loader toast styles */
+.action-loader-toast {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+}
+
+.action-loader-message {
+    flex: 1;
+}
+
+.action-loader-stop {
+    cursor: pointer;
+    font-size: 1.2em;
+    opacity: 0.8;
+    transition: opacity 0.15s ease, color 0.15s ease;
+}
+
+.action-loader-stop:hover {
+    opacity: 1;
+    color: color-mix(in srgb, currentColor 40%, #e74c3c 60%);
+}
+
+/* Unified Homer loading surface used before the conversation shell is ready. */
+#loader.splash-screen {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1.25rem;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    color: #f8edda;
+    background:
+        radial-gradient(circle at 18% 10%, rgba(209, 164, 86, 0.16), transparent 30rem),
+        radial-gradient(circle at 86% 88%, rgba(120, 70, 35, 0.15), transparent 32rem),
+        linear-gradient(145deg, #0b0a09, #15110d 55%, #090807);
+    transition: all var(--animation-duration-2x) ease-out;
+}
+
+#loader.splash-screen #load-spinner {
+    position: static;
+    top: unset;
+    left: unset;
+}
+
+.splash-mark {
+    width: 4.6rem;
+    height: 4.6rem;
+    display: grid;
+    place-items: center;
+    border: 1px solid rgba(245, 213, 153, 0.45);
+    border-radius: 50%;
+    background: radial-gradient(circle at 34% 28%, #f0d392, #9b6b31 72%, #51361f);
+    color: #24170d;
+    font-family: "STKaiti", "KaiTi", serif;
+    font-size: 2rem;
+    font-weight: 900;
+    box-shadow: 0 0 0 0.4rem rgba(216, 177, 103, 0.06), 0 0.8rem 2.5rem rgba(164, 105, 43, 0.25);
+}
+
+.splash-message {
+    margin: 0.35rem 0 0;
+    font-size: 1.35rem;
+    font-weight: 750;
+    letter-spacing: 0.04em;
+}
+
+.splash-detail {
+    margin: -0.65rem 0 0;
+    color: #b9aa96;
+    font-size: 0.9rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #load-spinner {
+        animation: none;
+    }
+}

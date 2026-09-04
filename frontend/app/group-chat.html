@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>群聊 · 惑梦（Homer）</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/img/favicon-32.png?v=20260901-persistent-pages">
+  <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
+  <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
+  <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
+  <style>
+    .group-layout { display:grid; grid-template-columns:260px minmax(0,1fr) 320px; height:100vh; }
+    .group-panel { border-right:1px solid rgba(196,181,253,.14); background:rgba(12,6,34,.62); backdrop-filter:blur(14px); overflow:hidden; display:flex; flex-direction:column; }
+    .group-panel.right { border-right:none; border-left:1px solid rgba(196,181,253,.14); }
+    .group-head { padding:16px; border-bottom:1px solid rgba(196,181,253,.12); font-weight:800; color:#fff; }
+    .group-scroll { overflow:auto; flex:1; padding:12px; }
+    .group-item { width:100%; text-align:left; padding:11px; border-radius:14px; border:1px solid transparent; color:#e8e2ff; transition:.16s; }
+    .group-item:hover, .group-item.is-active { background:rgba(168,85,247,.14); border-color:rgba(240,171,252,.24); }
+    .role-card { display:flex; gap:10px; align-items:center; padding:9px; border-radius:13px; border:1px solid rgba(196,181,253,.13); background:rgba(255,255,255,.04); cursor:pointer; }
+    .role-card img, .role-avatar { width:38px; height:38px; border-radius:50%; object-fit:cover; background:linear-gradient(135deg,#8b5cf6,#ec4899); color:white; display:flex; align-items:center; justify-content:center; font-weight:800; flex-shrink:0; }
+    .chat-main { display:flex; flex-direction:column; min-width:0; }
+    .chat-top { padding:16px 22px; border-bottom:1px solid rgba(196,181,253,.13); background:rgba(10,4,32,.58); }
+    .group-messages { flex:1; overflow:auto; padding:24px; display:flex; flex-direction:column; gap:13px; }
+    .gmsg { max-width:76%; display:flex; flex-direction:column; gap:4px; }
+    .gmsg.user { align-self:flex-end; align-items:flex-end; }
+    .gmsg.assistant { align-self:flex-start; }
+    .gmsg .speaker { font-size:12px; color:rgba(232,226,255,.58); padding:0 6px; }
+    .gmsg .bubble { padding:12px 15px; border-radius:18px; line-height:1.65; font-size:14px; word-break:break-word; }
+    .gmsg.user .bubble { background:linear-gradient(135deg,#8b5cf6,#d946ef 65%,#fb7185); color:#fff; border-bottom-right-radius:5px; }
+    .gmsg.assistant .bubble { background:rgba(255,255,255,.06); border:1px solid rgba(196,181,253,.18); color:#f4efff; border-bottom-left-radius:5px; }
+    .group-input { padding:14px 18px; border-top:1px solid rgba(196,181,253,.13); display:flex; gap:10px; background:rgba(10,4,32,.75); }
+    .group-input textarea { flex:1; resize:none; min-height:44px; max-height:140px; border-radius:15px; padding:12px 14px; background:rgba(255,255,255,.05); border:1px solid rgba(196,181,253,.22); color:white; }
+    .chip { display:inline-flex; align-items:center; gap:6px; padding:6px 9px; border-radius:999px; background:rgba(168,85,247,.15); color:#f5d0fe; font-size:12px; margin:4px; }
+    @media (max-width: 1024px) {
+      .group-layout { grid-template-columns:1fr; height:auto; min-height:100vh; }
+      .group-panel { display:none; }
+      .group-panel.right { display:flex; min-height:360px; border-left:none; border-top:1px solid rgba(196,181,253,.14); }
+      .chat-main { min-height:calc(100vh - 430px); }
+      .group-input { padding-bottom:78px; }
+    }
+    /* Fengyue clone group chat skin. */
+    .group-layout { background: var(--fy-bg); }
+    .group-panel {
+      border-color: var(--fy-border);
+      background: var(--fy-panel);
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
+    .group-panel.right { border-left-color: var(--fy-border); }
+    .group-head {
+      border-bottom-color: var(--fy-border);
+      color: var(--fy-text);
+      background: var(--fy-panel);
+    }
+    .group-item {
+      color: var(--fy-text);
+      border-radius: 12px;
+    }
+    .group-item:hover,
+    .group-item.is-active {
+      background: var(--fy-accent-soft);
+      border-color: var(--fy-accent);
+      color: var(--fy-accent-2);
+    }
+    .role-card {
+      border-color: var(--fy-border);
+      background: var(--fy-panel-2);
+    }
+    .role-card:hover {
+      border-color: var(--fy-accent);
+      background: var(--fy-accent-soft);
+    }
+    .role-card img,
+    .role-avatar {
+      background: linear-gradient(135deg, #f0a868, #e8834e);
+    }
+    .chat-top {
+      border-bottom-color: var(--fy-border);
+      background: var(--fy-panel);
+    }
+    .group-messages {
+      background: var(--fy-bg);
+    }
+    .gmsg .speaker {
+      color: var(--fy-text-mute);
+    }
+    .gmsg.user .bubble {
+      background: var(--fy-accent-2);
+      color: #fff;
+      border-bottom-right-radius: 5px;
+    }
+    .gmsg.assistant .bubble {
+      background: var(--fy-panel);
+      border: 1px solid var(--fy-border);
+      color: var(--fy-text);
+      border-bottom-left-radius: 5px;
+    }
+    .group-input {
+      border-top-color: var(--fy-border);
+      background: var(--fy-panel);
+    }
+    .group-input textarea {
+      background: var(--fy-panel-2);
+      border-color: var(--fy-border);
+      color: var(--fy-text);
+    }
+    .group-input textarea:focus {
+      outline: none;
+      border-color: var(--fy-accent);
+      box-shadow: 0 0 0 3px rgba(239,154,95,.16);
+      background: #fff;
+    }
+    .chip {
+      background: var(--fy-accent-soft);
+      color: var(--fy-accent-2);
+    }
+    .px-5.py-2.border-t {
+      border-top-color: var(--fy-border) !important;
+      background: var(--fy-panel);
+    }
+    @media (max-width: 1024px) {
+      .group-panel.right {
+        border-top-color: var(--fy-border);
+      }
+    }
+
+    /* 2026-07-11 reference-editor redesign. */
+    body { background:#f5f5f7; color:rgba(0,0,0,.85); }
+    .xy-stars-bg { display:none; }
+    .group-layout {
+      --group-accent:#ff2e63;
+      --group-accent-hover:#e92556;
+      --group-accent-soft:#fff0f4;
+      --group-canvas:#f5f5f7;
+      --group-panel:#fff;
+      --group-border:#e6e6ea;
+      --group-text:rgba(0,0,0,.85);
+      --group-soft:rgba(0,0,0,.55);
+      --group-muted:rgba(0,0,0,.38);
+      grid-template-columns:240px minmax(0,1fr) 300px;
+      background:var(--group-canvas);
+    }
+    .group-panel,
+    .group-panel.right {
+      border-color:var(--group-border);
+      background:var(--group-panel);
+    }
+    .group-head {
+      min-height:64px;
+      padding:0 18px;
+      display:flex;
+      align-items:center;
+      border-bottom-color:var(--group-border);
+      color:var(--group-text);
+      background:#fff;
+      font-size:15px;
+      font-weight:750;
+    }
+    .group-scroll { padding:12px; }
+    .group-item {
+      padding:11px 12px;
+      border-radius:9px;
+      color:var(--group-text);
+    }
+    .group-item:hover,
+    .group-item.is-active {
+      color:var(--group-text);
+      border-color:rgba(255,46,99,.30);
+      background:var(--group-accent-soft);
+    }
+    .group-item .text-violet-200\/50,
+    .group-item .text-violet-200\/55 { color:var(--group-muted)!important; }
+    .chat-main { min-height:0; background:var(--group-canvas); }
+    .chat-top {
+      min-height:64px;
+      padding:11px 20px;
+      border-bottom-color:var(--group-border);
+      background:rgba(255,255,255,.96);
+      box-shadow:0 4px 18px rgba(0,0,0,.035);
+    }
+    .chat-top h1 { color:var(--group-text)!important; font-size:17px; font-weight:750; }
+    .chat-top p { color:var(--group-muted)!important; }
+    .group-messages {
+      padding:24px clamp(18px,4vw,48px);
+      gap:16px;
+      background:var(--group-canvas);
+      scrollbar-gutter:stable;
+    }
+    .gmsg { width:100%; max-width:800px; margin-inline:auto; }
+    .gmsg.user { align-items:flex-end; }
+    .gmsg.assistant { align-items:flex-start; }
+    .gmsg .speaker { color:var(--group-muted); }
+    .gmsg .bubble {
+      width:auto;
+      max-width:78%;
+      padding:11px 14px;
+      border-radius:12px;
+      line-height:1.72;
+      box-shadow:0 2px 12px rgba(0,0,0,.045);
+    }
+    .gmsg.user .bubble {
+      color:#fff;
+      border:1px solid var(--group-accent);
+      border-radius:12px 12px 4px 12px;
+      background:var(--group-accent);
+    }
+    .gmsg.assistant .bubble {
+      color:var(--group-text);
+      border-color:var(--group-border);
+      border-radius:12px 12px 12px 4px;
+      background:#fff;
+    }
+    .px-5.py-2.border-t {
+      padding:10px 18px!important;
+      border-top-color:var(--group-border)!important;
+      background:#fff;
+    }
+    .px-5.py-2.border-t .text-violet-200\/60 { color:var(--group-muted)!important; }
+    .chip {
+      margin:3px;
+      padding:6px 9px;
+      border:1px solid rgba(255,46,99,.18);
+      border-radius:8px;
+      color:var(--group-accent);
+      background:var(--group-accent-soft);
+    }
+    .group-input {
+      margin:0 clamp(14px,3vw,32px) 18px;
+      padding:9px;
+      gap:8px;
+      border:1px solid var(--group-border);
+      border-radius:14px;
+      background:#fff;
+      box-shadow:0 8px 28px rgba(0,0,0,.08);
+    }
+    .group-input textarea {
+      min-height:44px;
+      padding:11px 13px;
+      border-color:transparent;
+      border-radius:9px;
+      color:var(--group-text);
+      background:#f7f7f9;
+    }
+    .group-input textarea::placeholder { color:var(--group-muted); }
+    .group-input textarea:focus {
+      color:var(--group-text);
+      border-color:rgba(255,46,99,.46);
+      background:#fff;
+      box-shadow:0 0 0 2px rgba(255,46,99,.12);
+    }
+    .xy-btn { border-radius:8px; }
+    .xy-btn-primary { color:#fff!important; border-color:var(--group-accent)!important; background:var(--group-accent)!important; box-shadow:none!important; }
+    .xy-btn-primary:hover { border-color:var(--group-accent-hover)!important; background:var(--group-accent-hover)!important; transform:none!important; }
+    .xy-btn-ghost { color:var(--group-soft)!important; border-color:var(--group-border)!important; background:#fff!important; }
+    .xy-btn-ghost:hover { color:var(--group-accent)!important; border-color:rgba(255,46,99,.38)!important; background:var(--group-accent-soft)!important; }
+    .role-card {
+      padding:9px;
+      border-radius:10px;
+      border-color:var(--group-border);
+      background:#f9f9fa;
+    }
+    .role-card:hover { border-color:rgba(255,46,99,.36); background:var(--group-accent-soft); }
+    .role-card img,
+    .role-avatar { width:40px; height:40px; border-radius:9px; background:linear-gradient(135deg,#ff6b8b,#ff2e63); }
+    .role-card .text-white { color:var(--group-text)!important; }
+    .role-card .text-violet-200\/55 { color:var(--group-muted)!important; }
+    .group-panel .xy-input {
+      min-height:40px;
+      border-radius:8px;
+      border-color:var(--group-border);
+      color:var(--group-text);
+      background:#f7f7f9;
+    }
+    .group-panel .xy-input:focus { border-color:rgba(255,46,99,.46); box-shadow:0 0 0 2px rgba(255,46,99,.12); background:#fff; }
+
+    @media (max-width:1024px) {
+      .group-layout { grid-template-columns:1fr; height:auto; min-height:100vh; gap:12px; padding:12px 12px 78px; }
+      .group-panel,
+      .group-panel.right,
+      .chat-main { border:1px solid var(--group-border); border-radius:12px; overflow:hidden; background:#fff; }
+      .group-panel { display:flex; max-height:184px; }
+      .group-panel.right { display:flex; min-height:0; max-height:none; border-top:1px solid var(--group-border); }
+      .group-scroll { min-height:0; }
+      .group-panel:first-child .group-scroll { display:flex; gap:8px; overflow-x:auto; overflow-y:hidden; }
+      .group-panel:first-child .group-item { min-width:180px; margin-bottom:0!important; }
+      .chat-main { min-height:62vh; }
+      .group-messages { min-height:340px; padding:18px 14px; }
+      .group-input { margin:0 10px 10px; padding-bottom:9px; }
+    }
+    @media (max-width:640px) {
+      .group-layout { padding:8px 8px 76px; gap:8px; }
+      .group-head { min-height:52px; padding:0 14px; }
+      .chat-top { min-height:58px; padding:9px 12px; }
+      .chat-top h1 { font-size:16px; }
+      .gmsg .bubble { max-width:88%; }
+      .group-input textarea { min-width:0; }
+      .group-input .xy-btn { min-width:54px; padding-inline:10px; }
+    }
+    @media (prefers-reduced-motion:reduce) {
+      .group-item,
+      .role-card,
+      .xy-btn { transition:none!important; }
+    }
+  </style>
+  <script type="module" src="/app/assets/js/group-chat.js?v=20260812-license-removal"></script>
+  <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
+</head>
+<body class="min-h-screen">
+  <div class="xy-stars-bg"></div>
+  <div class="app-shell" x-data="groupChatPage()" x-cloak>
+    <aside class="app-sidebar" data-app-sidebar></aside>
+    <main class="app-main">
+      <div class="group-layout">
+        <aside class="group-panel">
+          <div class="group-head" x-text="groupText('page_title', '群聊')"></div>
+          <div class="group-scroll">
+            <template x-if="!groups.length">
+              <div class="text-xs text-violet-200/60 text-center py-10" x-text="groupText('empty_groups', '还没有群聊')"></div>
+            </template>
+            <template x-for="g in groups" :key="g.id">
+              <button class="group-item mb-2" :class="{ 'is-active': current?.id === g.id }" @click="openGroup(g)">
+                <div class="flex items-center justify-between gap-2">
+                  <div class="font-semibold truncate" x-text="g.name"></div>
+                  <span class="text-xs text-violet-200/50" x-text="(g.members||[]).length + groupText('member_count_suffix', '人')"></span>
+                </div>
+                <div class="text-xs text-violet-200/55 truncate mt-1" x-text="g.last_message || groupText('last_message_default', '点击打开')"></div>
+              </button>
+            </template>
+          </div>
+        </aside>
+
+        <section class="chat-main">
+          <div class="chat-top">
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <h1 class="text-xl font-extrabold text-white" x-text="current?.name || groupText('empty_current_title', '创建或选择一个群聊')"></h1>
+                <p class="text-xs text-violet-200/60 mt-1" x-text="current ? (current.members||[]).map(m=>m.app_name).join('、') : groupText('empty_current_hint', '选择至少 2 个角色开始多人对话')"></p>
+              </div>
+              <button class="xy-btn xy-btn-ghost text-sm" x-show="current" @click="deleteGroup(current)" x-text="groupText('delete_group_button', '删除群聊')"></button>
+            </div>
+          </div>
+
+          <div class="group-messages" x-ref="messages">
+            <template x-if="!current">
+              <div class="m-auto text-center text-violet-200/70">
+                <img src="/assets/img/apk/empty_view.webp?v=20260901-persistent-pages" class="w-32 mx-auto opacity-60 mb-4">
+                <p class="text-sm" x-text="groupText('no_current_text', '从右侧选择角色创建群聊')"></p>
+              </div>
+            </template>
+            <template x-for="m in messages" :key="m.id">
+              <div class="gmsg" :class="m.role === 'user' ? 'user' : 'assistant'">
+                <div class="speaker" x-text="m.speaker_name || (m.role === 'user' ? groupText('user_speaker', '我') : groupText('assistant_speaker', '角色'))"></div>
+                <div class="bubble" x-text="m.content"></div>
+              </div>
+            </template>
+            <template x-if="busy && current">
+              <div class="gmsg assistant"><div class="speaker" x-text="groupText('loading_speaker', '生成中')"></div><div class="bubble">...</div></div>
+            </template>
+          </div>
+
+          <div class="px-5 py-2 border-t border-violet-200/10" x-show="current">
+            <div class="text-xs text-violet-200/60 mb-2" x-text="groupText('force_reply_label', '指定角色发言')"></div>
+            <template x-for="m in current?.members || []" :key="m.app_id">
+              <button class="chip" @click="replyAs(m)" :disabled="busy" x-text="m.app_name"></button>
+            </template>
+          </div>
+
+          <div class="group-input" x-show="current">
+            <textarea x-model="draft" rows="1" @keydown.enter.prevent="send" :placeholder="groupText('input_placeholder', '发送群聊消息，下一位角色会自动回复...')"></textarea>
+            <button class="xy-btn xy-btn-primary" @click="send" :disabled="busy || !draft.trim()" x-text="groupText('send_button', '发送')"></button>
+          </div>
+        </section>
+
+        <aside class="group-panel right">
+          <div class="group-head" x-text="groupText('create_panel_title', '创建群聊')"></div>
+          <div class="group-scroll">
+            <input class="xy-input text-sm mb-2" x-model="groupName" :placeholder="groupText('group_name_placeholder', '群聊名称')">
+            <div class="mb-3">
+              <template x-for="r in selected" :key="r.id">
+                <span class="chip"><span x-text="r.name"></span><button @click="removeRole(r.id)">×</button></span>
+              </template>
+            </div>
+            <button class="xy-btn xy-btn-primary w-full justify-center mb-4" @click="createGroup" :disabled="busy || selected.length < 2" x-text="groupText('create_button', '创建群聊')"></button>
+
+            <div class="flex gap-2 mb-3">
+              <input class="xy-input text-sm" x-model="query" @keydown.enter.prevent="searchRoles" :placeholder="groupText('search_placeholder', '搜索角色')">
+              <button class="xy-btn xy-btn-ghost" @click="searchRoles" x-text="groupText('search_button', '搜索')"></button>
+            </div>
+            <div class="grid gap-2">
+              <template x-for="c in candidates" :key="c.id">
+                <div class="role-card" @click="addRole(c)">
+                  <img x-show="c.cover || c.cover_url" :src="c.cover || c.cover_url" referrerpolicy="no-referrer" onerror="this.style.display='none'">
+                  <div class="role-avatar" x-show="!(c.cover || c.cover_url)" x-text="(c.name || '?').slice(0,1)"></div>
+                  <div class="min-w-0">
+                    <div class="text-sm text-white font-semibold truncate" x-text="c.name"></div>
+                    <div class="text-xs text-violet-200/55 truncate" x-text="c.summary || c.description || groupText('role_card_fallback', '角色卡')"></div>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </main>
+    <nav class="app-bottom-nav" data-app-bottom-nav></nav>
+    <div class="fixed top-4 right-4 z-[80]" x-show="toast">
+      <div class="px-4 py-3 rounded-xl border text-sm" :class="toast?.type === 'error' ? 'bg-rose-950/90 border-rose-400/40 text-rose-100' : 'bg-violet-950/90 border-violet-300/30 text-violet-100'" x-text="toast?.message"></div>
+    </div>
+  </div>
+</body>
+</html>

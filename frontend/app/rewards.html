@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>积分充值 · 惑梦（Homer）</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/img/favicon-32.png?v=20260901-persistent-pages">
+  <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
+  <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
+  <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
+  <link rel="stylesheet" href="/app/assets/css/rewards-payment.css?v=20260713-payment-orders">
+  <script type="module" src="/app/assets/js/hub-pages.js?v=20260812-license-removal"></script>
+  <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
+</head>
+<body class="min-h-screen hub-page hub-page--rewards">
+  <div class="xy-stars-bg"></div>
+  <div class="xy-meteor"></div>
+
+  <div class="app-shell" x-data="rewardsPage()" x-cloak>
+    <aside class="app-sidebar" data-app-sidebar></aside>
+    <main class="app-main">
+      <header class="app-topbar">
+        <h1 x-text="rewardsText('page_title', '积分充值')">积分充值</h1>
+        <div class="grow"></div>
+        <div class="flex gap-2">
+          <button class="xy-btn xy-btn-ghost text-sm" x-show="aifadianAvailable()" @click="openAifadian">爱发电卡密</button>
+          <button class="xy-btn xy-btn-primary text-sm" x-show="onlinePaymentAvailable()" @click="focusPayment">在线支付宝</button>
+        </div>
+      </header>
+      <section class="app-page-pad max-w-6xl mx-auto rw-page">
+        <template x-if="message">
+          <div class="form-panel !py-3 text-sm" :class="{
+            'text-emerald-600 border-emerald-400/40': messageType === 'success',
+            'text-blue-600 border-blue-400/40': messageType === 'info',
+            'text-rose-600 border-rose-400/40': messageType === 'error'
+          }" x-text="message"></div>
+        </template>
+
+        <!-- 余额条 + 兑换码 -->
+        <div class="rw-top">
+          <div class="ws-headline rw-balance">
+            <div class="ws-headline__lead">
+              <div class="ws-headline__eyebrow" x-text="rewardsText('credits_eyebrow', '当前余额')">当前余额</div>
+              <div class="rw-balance__row">
+                <div class="rw-balance__num" x-text="balance.points.toLocaleString('zh-CN')"></div>
+                <button class="xy-btn xy-btn-ghost text-sm" @click="loadRewards" x-text="dashboardText('balance_refresh_text', '刷新')">刷新</button>
+              </div>
+              <p class="ws-headline__copy"><span x-text="deposit?.credits_name || '惑梦币'">惑梦币</span><span x-text="rewardsText('balance_suffix', '余额，网页与 APK 共用。')">余额，网页与 APK 共用。</span></p>
+            </div>
+            <dl class="ws-stats">
+              <div class="ws-stat">
+                <dt x-text="dashboardText('balance_free_label', '免费') + rewardsText('balance_unit_suffix', '额度')">免费额度</dt>
+                <dd x-text="balance.free_points.toLocaleString('zh-CN')"></dd>
+              </div>
+              <div class="ws-stat">
+                <dt x-text="dashboardText('balance_paid_label', '充值') + rewardsText('balance_unit_suffix', '额度')">充值额度</dt>
+                <dd x-text="balance.paid_points.toLocaleString('zh-CN')"></dd>
+              </div>
+              <div class="ws-stat">
+                <dt x-text="dashboardText('balance_reward_label', '奖励') + rewardsText('balance_unit_suffix', '额度')">奖励额度</dt>
+                <dd x-text="balance.reward_points.toLocaleString('zh-CN')"></dd>
+              </div>
+            </dl>
+          </div>
+
+          <aside class="ws-panel rw-redeem">
+            <h3>爱发电卡密</h3>
+            <p class="rw-redeem__copy">保留原有爱发电充值方式。购买卡密后，在这里兑换到当前账号。</p>
+            <p class="rw-redeem__note" x-text="paymentNote()"></p>
+            <button class="xy-btn xy-btn-ghost w-full justify-center mt-3" x-show="aifadianAvailable()" @click="openAifadian">前往爱发电购买卡密</button>
+            <div class="rw-redeem__row">
+              <input class="xy-input flex-1 uppercase font-mono" x-model="redeemInput" @keydown.enter="redeemNow" :placeholder="depositText('redeem_placeholder', 'XY-XXXX-XXXX-XXXX-XXXX')">
+              <button class="xy-btn xy-btn-ghost shrink-0" @click="redeemNow" :disabled="busy">兑换卡密</button>
+            </div>
+          </aside>
+        </div>
+
+        <!-- 套餐/订阅 + 农场每日奖励 -->
+        <div class="rw-grid">
+          <div class="rw-maincol">
+            <div class="ws-panel" x-show="onlinePaymentAvailable()">
+              <div class="ws-panel__head">
+                <h3>在线支付宝 · 固定套餐</h3>
+                <span class="rw-rate" x-text="deposit?.rate_label || '1 CNY = 1000 惑梦币'"></span>
+              </div>
+              <div class="rw-plans">
+                <template x-for="pkg in (deposit?.packages || [])" :key="pkg.id">
+                  <button class="rw-plan" :class="{ 'is-best': isBestPlan(pkg), 'ring-2 ring-violet-400': selectedPlan?.id === pkg.id }" @click="selectPlan(pkg)">
+                    <span class="rw-plan__flag" x-show="isBestPlan(pkg)" x-text="rewardsText('best_flag_text', '超值')">超值</span>
+                    <span class="rw-plan__price">¥<b x-text="pkg.price_cny"></b></span>
+                    <span class="rw-plan__credits" x-text="packagePoints(pkg) + ' ' + (deposit?.credits_name || '惑梦币')"></span>
+                    <span class="rw-plan__bonus" x-show="pkg.bonus_rate">＋<b x-text="pkg.bonus_rate"></b>% <span x-text="rewardsText('bonus_suffix', '加赠')">加赠</span></span>
+                  </button>
+                </template>
+              </div>
+            </div>
+
+            <div class="ws-panel" x-show="onlinePaymentAvailable()">
+              <div class="ws-panel__head">
+                <h3 x-text="depositText('subscriptions_title', '月度订阅')">月度订阅</h3>
+                <span class="rw-rate" x-text="depositText('subscriptions_note', '订阅为月度额度包，额度用完后可继续兑换积分包。')"></span>
+              </div>
+              <div class="rw-plans rw-plans--subs">
+                <template x-for="sub in (deposit?.subscriptions || [])" :key="sub.id">
+                  <button class="rw-plan" :class="{ 'ring-2 ring-violet-400': selectedPlan?.id === sub.id }" @click="selectPlan(sub)">
+                    <span class="rw-plan__price">¥<b x-text="sub.price_cny"></b><i x-text="'/' + (sub.period || '月')"></i></span>
+                    <span class="rw-plan__credits" x-text="packagePoints(sub) + ' ' + (deposit?.credits_name || '惑梦币') + '/' + (sub.period || '月')"></span>
+                    <span class="rw-plan__desc" x-show="sub.description" x-text="sub.description || ''"></span>
+                  </button>
+                </template>
+              </div>
+            </div>
+
+            <div class="ws-panel" x-show="onlinePaymentAvailable()">
+              <div class="ws-panel__head">
+                <h3>在线支付宝 · 自定义金额</h3>
+                <span class="rw-rate" x-text="customAmountRangeText()">¥1.00～¥5000.00 · 最多两位小数</span>
+              </div>
+              <div class="grid md:grid-cols-[minmax(0,1fr)_auto] gap-3 items-end">
+                <label class="block">
+                  <span class="text-xs" style="color:var(--fy-text-mute)">充值金额（人民币）</span>
+                  <input class="xy-input w-full mt-2" type="text" inputmode="decimal" autocomplete="off" x-model="customAmountInput" @input="onCustomAmountInput" placeholder="例如 10.50">
+                </label>
+                <button class="xy-btn xy-btn-ghost justify-center" @click="selectCustomAmount()">使用此金额</button>
+              </div>
+              <p class="text-xs mt-2 text-rose-500" x-show="customAmountError" x-text="customAmountError"></p>
+              <p class="rw-daily__copy mt-3" x-show="customAmountCny() !== null">
+                预计到账 <b x-text="customPointsEstimate().toLocaleString('zh-CN')"></b> <span x-text="deposit?.credits_name || '惑梦币'"></span>，最终以服务端订单为准。
+              </p>
+            </div>
+
+            <div id="payment-checkout" class="ws-panel" x-show="paymentSelectionReady() && onlinePaymentAvailable()" x-transition>
+              <div class="ws-panel__head">
+                <h3>确认支付</h3>
+                <span class="rw-rate" x-text="paymentSelectionLabel()"></span>
+              </div>
+              <p class="rw-daily__copy">选择支付方式。付款成功后，惑梦币会自动充值到当前登录账号。</p>
+              <div class="rw-pay-methods" role="radiogroup" aria-label="支付方式">
+                <template x-for="method in availablePayTypes()" :key="method.id">
+                  <button type="button" role="radio" class="rw-pay-method" :aria-checked="payType === method.id" :class="{ 'is-selected': payType === method.id }" @click="selectPayType(method.id)">
+                    <span aria-hidden="true" class="rw-pay-method__icon" :class="`rw-pay-method__icon--${method.id}`" x-text="method.id === 'alipay' ? '支' : '微'"></span>
+                    <span class="rw-pay-method__label" x-text="method.label"></span>
+                    <span class="rw-pay-method__check" aria-hidden="true">✓</span>
+                  </button>
+                </template>
+              </div>
+              <div class="rw-pay-summary">
+                <div><span>实付金额</span><strong x-text="paymentAmountCny() === null ? '—' : `¥${paymentAmountCny().toFixed(2)}`"></strong></div>
+                <div><span>预计到账</span><strong><b x-text="paymentPointsEstimate().toLocaleString('zh-CN')"></b> <span x-text="deposit?.credits_name || '惑梦币'"></span></strong></div>
+              </div>
+              <button class="xy-btn xy-btn-primary rw-pay-submit" @click="createPayment" :disabled="busy || !paymentSelectionReady() || !payType">
+                <span x-show="!busy" x-text="paymentSubmitText()">确认支付</span>
+                <span x-show="busy" class="xy-loading"></span>
+              </button>
+              <p class="rw-pay-footnote">点击后将进入安全支付页面，未付款订单不会扣款，也不会增加余额。</p>
+            </div>
+          </div>
+
+          <aside class="ws-panel rw-daily rw-farm-entry">
+            <div class="ws-panel__head">
+              <h3>惑梦农场</h3>
+              <a class="xy-btn xy-btn-primary text-sm" href="/app/farm.html">进入农场</a>
+            </div>
+            <p class="rw-daily__copy">每日第一次有效收获，可领取 <b x-text="rewards?.daily?.points || siteSettings?.rewards?.daily_points || 10"></b> 惑梦币。历史签到记录继续有效，不会重复发放。</p>
+            <div class="rw-farm-entry__art" aria-hidden="true">
+              <span>🌱</span><span>🥕</span><span>🌾</span>
+            </div>
+            <div class="rw-rows">
+              <template x-for="task in (rewards?.tasks || [])" :key="task.key">
+                <div class="rw-row">
+                  <div class="rw-row__main">
+                    <div class="rw-row__title" x-text="task.label"></div>
+                    <div class="rw-row__meta" x-text="task.status === 'available' ? rewardsText('task_available_label', '可完成') : task.status"></div>
+                  </div>
+                  <span class="rw-pill">+<b x-text="task.points"></b></span>
+                </div>
+              </template>
+            </div>
+          </aside>
+        </div>
+
+        <!-- 在线支付订单 -->
+        <div class="ws-panel rw-orders" x-show="onlinePaymentAvailable() || paymentOrdersTotal > 0">
+          <div class="ws-panel__head">
+            <div>
+              <h3>支付订单</h3>
+              <p class="rw-orders__hint">仅显示当前账号的在线支付订单</p>
+            </div>
+            <button class="xy-btn xy-btn-ghost text-sm" @click="loadPaymentOrders(false)" :disabled="paymentOrdersLoading">
+              <span x-show="!paymentOrdersLoading">刷新订单</span>
+              <span x-show="paymentOrdersLoading" class="xy-loading"></span>
+            </button>
+          </div>
+          <template x-if="paymentOrdersLoading && paymentOrders.length === 0">
+            <div class="rw-rows__empty">正在加载支付订单…</div>
+          </template>
+          <template x-if="!paymentOrdersLoading && paymentOrders.length === 0">
+            <div class="rw-rows__empty">暂无支付订单</div>
+          </template>
+          <div class="rw-order-list" x-show="paymentOrders.length > 0">
+            <template x-for="order in visiblePaymentOrders()" :key="order.order_no">
+              <article class="rw-order-card">
+                <div class="rw-order-card__main">
+                  <div class="rw-order-card__top">
+                    <strong x-text="order.plan_name || order.product_name || '在线充值'"></strong>
+                    <span class="rw-order-status" :class="orderStatusClass(order)" x-text="order.status_label || orderStatusText(order)"></span>
+                  </div>
+                  <div class="rw-order-card__meta">
+                    <span class="font-mono" x-text="order.order_no"></span>
+                    <span x-text="formatTime(order.created_at)"></span>
+                    <span x-text="payTypeLabel(order.pay_type)"></span>
+                  </div>
+                  <div class="rw-order-card__paid" x-show="orderPaid(order) && order.paid_at">到账时间：<span x-text="formatTime(order.paid_at)"></span></div>
+                </div>
+                <div class="rw-order-card__amount">
+                  <strong x-text="`¥${order.amount_cny || order.money || '0.00'}`"></strong>
+                  <span><b x-text="Number(order.points || 0).toLocaleString('zh-CN')"></b> <span x-text="deposit?.credits_name || '惑梦币'"></span></span>
+                </div>
+                <div class="rw-order-card__actions" x-show="orderPending(order)">
+                  <button class="xy-btn xy-btn-ghost text-sm" @click="refreshOrderItem(order)" :disabled="refreshingOrderNo === order.order_no">
+                    <span x-show="refreshingOrderNo !== order.order_no">刷新状态</span>
+                    <span x-show="refreshingOrderNo === order.order_no" class="xy-loading"></span>
+                  </button>
+                  <button class="xy-btn xy-btn-primary text-sm" @click="continueOrderPayment(order)">继续支付</button>
+                </div>
+              </article>
+            </template>
+          </div>
+          <button class="rw-orders__more" x-show="paymentOrdersTotal > 5" @click="toggleOrLoadMoreOrders" :disabled="paymentOrdersLoading" x-text="paymentOrdersLoading ? '正在加载…' : paymentOrdersMoreText()"></button>
+        </div>
+
+        <!-- 兑换记录 -->
+        <div class="ws-panel">
+          <div class="ws-panel__head">
+            <h3 x-text="rewardsText('redemptions_title', '兑换记录')">兑换记录</h3>
+            <button class="xy-btn xy-btn-ghost text-sm" @click="loadRedemptions" x-text="rewardsText('redemptions_refresh_text', '刷新')">刷新</button>
+          </div>
+          <p class="rw-daily__copy" x-text="rewardsText('redemptions_hint', '只显示当前账号最近兑换。')">只显示当前账号最近兑换。</p>
+          <div class="rw-rows">
+            <template x-if="redemptions.length === 0">
+              <div class="rw-rows__empty" x-text="emptyText('redemptions_empty_title', '暂无兑换记录')">暂无兑换记录</div>
+            </template>
+            <template x-for="item in redemptions" :key="item.id">
+              <div class="rw-row">
+                <div class="rw-row__main">
+                  <div class="rw-row__title font-mono" x-text="item.code"></div>
+                  <div class="rw-row__meta"><span x-text="formatTime(item.created_at)"></span> · <span x-text="item.point_type"></span></div>
+                </div>
+                <span class="rw-pill">+<b x-text="item.points"></b></span>
+              </div>
+            </template>
+          </div>
+        </div>
+      </section>
+    </main>
+    <nav class="app-bottom-nav" data-app-bottom-nav></nav>
+  </div>
+</body>
+</html>

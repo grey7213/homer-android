@@ -1,0 +1,14 @@
+{
+    "display_name": "惑梦对话模块",
+    "loading_order": 1,
+    "requires": [],
+    "optional": [],
+    "js": "index.js",
+    "css": "style.css?v=20260830-message-direction",
+    "author": "Homer",
+    "version": "1.0.0",
+    "homePage": "",
+    "hooks": {
+        "activate": "init"
+    }
+}

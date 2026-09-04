@@ -1,0 +1,2495 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>管理后台 - 惑梦（Homer）</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/img/favicon-32.png?v=20260901-persistent-pages">
+  <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/img/apple-touch-icon.png?v=20260901-persistent-pages">
+  <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
+  <link rel="stylesheet" href="/assets/css/custom.css?v=20260901-persistent-pages">
+  <link rel="stylesheet" href="/assets/css/admin.css?v=20260817-mobile-model-pricing">
+  <script type="module" src="/assets/js/admin-app.js?v=20260817-preset-pricing"></script>
+  <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
+</head>
+<body class="xy-admin min-h-screen">
+  <div class="xy-stars-bg"></div>
+
+  <main x-data="adminPanel()" x-init="init()" x-cloak>
+    <!-- Toast -->
+    <template x-if="toast">
+      <div class="xy-toast" :class="`xy-toast-${toast.type}`" x-text="toast.message"></div>
+    </template>
+    <template x-if="loading">
+      <div class="xy-admin-loading" role="status" aria-live="polite">
+        <span class="xy-loading"></span>
+        <span>正在处理…</span>
+      </div>
+    </template>
+
+    <!-- 未授权提示 -->
+    <template x-if="state === 'unauthorized'">
+      <div class="min-h-screen flex items-center justify-center px-6">
+        <div class="xy-glass p-10 text-center max-w-md w-full">
+          <div class="w-16 h-16 rounded-2xl bg-red-500/15 flex items-center justify-center mx-auto mb-5">
+            <svg class="w-8 h-8 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+            </svg>
+          </div>
+          <h1 class="text-xl font-bold mb-2" x-text="errorMessage || '需要管理员权限'"></h1>
+          <p class="text-sm text-slate-400 mb-6" x-text="errorDetail || '请使用管理员账号登录'"></p>
+          <div class="flex gap-3">
+            <a href="/dashboard.html" class="xy-btn xy-btn-primary flex-1">前往登录</a>
+            <a href="/" class="xy-btn xy-btn-ghost flex-1">返回首页</a>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <!-- 已授权：管理面板 -->
+    <template x-if="state === 'ready'">
+      <div class="xy-admin-shell flex min-h-screen">
+        <!-- 侧栏 -->
+        <aside class="xy-admin-sidebar hidden md:flex flex-col w-64 p-5">
+          <a href="/" class="flex items-center gap-3 mb-8">
+            <img src="/assets/img/logo-64.png?v=20260901-persistent-pages" alt="惑梦（Homer）" class="w-10 h-10 drop-shadow-[0_0_12px_rgba(168,85,247,0.55)]">
+            <div>
+              <div class="font-bold text-base xy-gradient-text">惑梦（Homer）</div>
+              <div class="text-[10px] text-slate-400">管理后台</div>
+            </div>
+          </a>
+          <nav class="flex-1 space-y-1">
+            <template x-for="tab in tabs" :key="tab.id">
+              <button @click="switchTab(tab.id)" class="xy-admin-nav-item w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium" :class="activeTab === tab.id ? 'is-active' : ''">
+                <span x-html="tab.icon" class="w-5 h-5"></span>
+                <span x-text="tab.label"></span>
+              </button>
+            </template>
+          </nav>
+          <div class="mt-6 pt-6 border-t border-white/5 text-xs text-slate-400">
+            <div class="mb-2 truncate">
+              <span class="text-slate-500">管理员：</span>
+              <span class="text-violet-300 font-medium" x-text="adminInfo?.email"></span>
+            </div>
+            <a href="/dashboard.html" class="xy-link">返回用户中心 →</a>
+          </div>
+        </aside>
+
+        <!-- 移动端顶栏 -->
+        <div class="xy-admin-mobilebar md:hidden fixed top-0 inset-x-0 z-30">
+          <div class="flex items-center justify-between p-4">
+            <div class="flex items-center gap-2">
+              <img src="/assets/img/logo-64.png?v=20260901-persistent-pages" alt="惑梦（Homer）" class="w-8 h-8">
+              <span class="font-bold text-sm">管理后台</span>
+            </div>
+            <select @change="switchTab($event.target.value)" class="xy-input text-sm py-2 px-3 bg-black/40">
+              <template x-for="tab in tabs" :key="tab.id">
+                <option :value="tab.id" :selected="activeTab === tab.id" x-text="tab.label"></option>
+              </template>
+            </select>
+          </div>
+        </div>
+
+        <!-- 主内容 -->
+        <div class="xy-admin-main flex-1 px-4 py-6 sm:px-6 md:px-8 md:py-7 pt-24 md:pt-7 overflow-x-hidden">
+          <!-- 统计 -->
+          <div x-show="activeTab === 'stats'">
+            <div class="flex items-center justify-between mb-6">
+              <div>
+                <h1 class="text-2xl font-bold xy-gradient-text">数据总览</h1>
+                <p class="text-sm text-slate-400 mt-1">服务器整体运行情况</p>
+              </div>
+              <button @click="loadStats" class="xy-btn xy-btn-ghost text-sm" :disabled="loading">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                刷新
+              </button>
+            </div>
+
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+              <div class="xy-glass p-5">
+                <div class="text-xs text-slate-400 mb-1">用户总数</div>
+                <div class="text-3xl font-bold xy-gradient-text" x-text="stats?.user_count ?? '-'"></div>
+                <div class="text-xs text-slate-500 mt-2">管理员 <span class="text-violet-300" x-text="stats?.admin_count ?? '-'"></span> · 24h 新增 <span class="text-emerald-400" x-text="stats?.registrations_24h ?? '-'"></span></div>
+              </div>
+              <div class="xy-glass p-5">
+                <div class="text-xs text-slate-400 mb-1">请求总数</div>
+                <div class="text-3xl font-bold xy-gradient-text" x-text="stats?.request_count ?? '-'"></div>
+                <div class="text-xs text-slate-500 mt-2">24h 请求 <span class="text-blue-400" x-text="stats?.requests_24h ?? '-'"></span></div>
+              </div>
+              <div class="xy-glass p-5">
+                <div class="text-xs text-slate-400 mb-1">已发放积分</div>
+                <div class="text-3xl font-bold xy-gradient-text" x-text="stats?.total_points_issued ?? '-'"></div>
+                <div class="text-xs text-slate-500 mt-2">充值订单 <span x-text="stats?.recharge_order_count ?? '-'"></span></div>
+              </div>
+              <div class="xy-glass p-5">
+                <div class="text-xs text-slate-400 mb-1">用户余额</div>
+                <div class="text-3xl font-bold xy-gradient-text" x-text="stats?.total_user_balance ?? '-'"></div>
+                <div class="text-xs text-slate-500 mt-2">兑换码未用 <span x-text="stats?.redeem_code_unused_count ?? '-'"></span></div>
+              </div>
+            </div>
+
+            <div class="grid xl:grid-cols-2 gap-6 mb-6">
+              <div class="xy-glass p-6">
+                <div class="flex items-center justify-between mb-4">
+                  <h3 class="font-semibold">近 7 日新增用户</h3>
+                  <span class="text-xs text-slate-500">按北京时间统计</span>
+                </div>
+                <div class="h-48 flex items-end gap-2">
+                  <template x-for="day in (stats?.charts?.daily_users || [])" :key="day.label">
+                    <div class="flex-1 min-w-0 flex flex-col items-center gap-2">
+                      <div class="text-xs text-slate-300" x-text="day.value"></div>
+                      <div class="w-full h-32 flex items-end rounded bg-white/5 overflow-hidden">
+                        <div class="w-full rounded-t bg-emerald-400/80 transition-all" :style="`height: ${chartPercent(day.value, stats?.charts?.daily_users || [])}%`"></div>
+                      </div>
+                      <div class="text-[10px] text-slate-500 truncate" x-text="day.label"></div>
+                    </div>
+                  </template>
+                </div>
+              </div>
+
+              <div class="xy-glass p-6">
+                <div class="flex items-center justify-between mb-4">
+                  <h3 class="font-semibold">近 7 日请求量</h3>
+                  <span class="text-xs text-slate-500">全站 API</span>
+                </div>
+                <div class="h-48 flex items-end gap-2">
+                  <template x-for="day in (stats?.charts?.daily_requests || [])" :key="day.label">
+                    <div class="flex-1 min-w-0 flex flex-col items-center gap-2">
+                      <div class="text-xs text-slate-300" x-text="day.value"></div>
+                      <div class="w-full h-32 flex items-end rounded bg-white/5 overflow-hidden">
+                        <div class="w-full rounded-t bg-sky-400/80 transition-all" :style="`height: ${chartPercent(day.value, stats?.charts?.daily_requests || [])}%`"></div>
+                      </div>
+                      <div class="text-[10px] text-slate-500 truncate" x-text="day.label"></div>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </div>
+
+            <div class="grid xl:grid-cols-3 gap-6 mb-6">
+              <div class="xy-glass p-6">
+                <h3 class="font-semibold mb-4">积分余额构成</h3>
+                <div class="space-y-4">
+                  <template x-for="item in (stats?.charts?.points_split || [])" :key="item.label">
+                    <div>
+                      <div class="flex justify-between text-xs mb-1">
+                        <span class="text-slate-300" x-text="item.label"></span>
+                        <span class="text-slate-400"><span x-text="item.value"></span> · <span x-text="distributionPercent(item.value, stats?.charts?.points_split || [])"></span>%</span>
+                      </div>
+                      <div class="h-2 rounded-full bg-white/5 overflow-hidden">
+                        <div class="h-full rounded-full" :class="toneBarClass(item.tone)" :style="`width: ${distributionPercent(item.value, stats?.charts?.points_split || [])}%`"></div>
+                      </div>
+                    </div>
+                  </template>
+                </div>
+              </div>
+
+              <div class="xy-glass p-6">
+                <h3 class="font-semibold mb-4">角色来源构成</h3>
+                <div class="space-y-4">
+                  <template x-for="item in (stats?.charts?.app_sources || [])" :key="item.label">
+                    <div>
+                      <div class="flex justify-between text-xs mb-1">
+                        <span class="text-slate-300" x-text="item.label"></span>
+                        <span class="text-slate-400"><span x-text="item.value"></span> · <span x-text="distributionPercent(item.value, stats?.charts?.app_sources || [])"></span>%</span>
+                      </div>
+                      <div class="h-2 rounded-full bg-white/5 overflow-hidden">
+                        <div class="h-full rounded-full" :class="toneBarClass(item.tone)" :style="`width: ${distributionPercent(item.value, stats?.charts?.app_sources || [])}%`"></div>
+                      </div>
+                    </div>
+                  </template>
+                </div>
+              </div>
+
+              <div class="xy-glass p-6">
+                <h3 class="font-semibold mb-4">请求状态分布</h3>
+                <div class="space-y-4">
+                  <template x-for="item in (stats?.charts?.request_status || [])" :key="item.label">
+                    <div>
+                      <div class="flex justify-between text-xs mb-1">
+                        <span class="text-slate-300" x-text="item.label"></span>
+                        <span class="text-slate-400"><span x-text="item.value"></span> · <span x-text="distributionPercent(item.value, stats?.charts?.request_status || [])"></span>%</span>
+                      </div>
+                      <div class="h-2 rounded-full bg-white/5 overflow-hidden">
+                        <div class="h-full rounded-full" :class="toneBarClass(item.tone)" :style="`width: ${distributionPercent(item.value, stats?.charts?.request_status || [])}%`"></div>
+                      </div>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </div>
+
+            <div class="grid xl:grid-cols-[1fr_420px] gap-6">
+            <div class="xy-glass p-6">
+              <h3 class="font-semibold mb-4">服务信息</h3>
+              <div class="grid md:grid-cols-2 gap-y-3 text-sm">
+                <div class="flex justify-between md:block">
+                  <span class="text-slate-400 md:block md:mb-1 text-xs">服务域名</span>
+                  <code class="text-violet-300 font-mono">patcher.villainy.top</code>
+                </div>
+                <div class="flex justify-between md:block">
+                  <span class="text-slate-400 md:block md:mb-1 text-xs">健康检查</span>
+                  <span class="text-emerald-400 inline-flex items-center gap-1">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                    正常运行
+                  </span>
+                </div>
+                <div class="flex justify-between md:block">
+                  <span class="text-slate-400 md:block md:mb-1 text-xs">当前管理员</span>
+                  <span class="text-slate-200" x-text="adminInfo?.email"></span>
+                </div>
+                <div class="flex justify-between md:block">
+                  <span class="text-slate-400 md:block md:mb-1 text-xs">数据更新</span>
+                  <span class="text-slate-200" x-text="lastStatsRefreshed ? formatTime(lastStatsRefreshed) : '-'"></span>
+                </div>
+              </div>
+            </div>
+
+              <div class="xy-glass p-6">
+                <h3 class="font-semibold mb-4">24h 热门路径</h3>
+                <div class="space-y-3">
+                  <template x-if="!(stats?.charts?.top_paths || []).length">
+                    <div class="text-sm text-slate-500">暂无请求记录</div>
+                  </template>
+                  <template x-for="item in (stats?.charts?.top_paths || [])" :key="item.label">
+                    <div>
+                      <div class="flex justify-between gap-3 text-xs mb-1">
+                        <code class="text-slate-300 truncate" x-text="item.label"></code>
+                        <span class="text-slate-400" x-text="item.value"></span>
+                      </div>
+                      <div class="h-2 rounded-full bg-white/5 overflow-hidden">
+                        <div class="h-full rounded-full bg-violet-400" :style="`width: ${chartPercent(item.value, stats?.charts?.top_paths || [])}%`"></div>
+                      </div>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 用户管理 -->
+          <div x-show="activeTab === 'users'">
+            <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+              <div>
+                <h1 class="text-2xl font-bold xy-gradient-text">用户管理</h1>
+                <p class="text-sm text-slate-400 mt-1">查看和管理所有注册用户</p>
+              </div>
+              <div class="flex items-center gap-2">
+                <input type="text" x-model="userSearch" @keydown.enter="loadUsers(1)" placeholder="搜索邮箱/昵称/ID" class="xy-input text-sm w-56">
+                <button @click="loadUsers(1)" class="xy-btn xy-btn-primary text-sm py-2 px-4">搜索</button>
+              </div>
+            </div>
+
+            <div class="xy-glass overflow-hidden">
+              <div class="overflow-x-auto">
+                <table class="xy-table">
+                  <thead>
+                    <tr>
+                      <th>邮箱</th>
+                      <th>昵称</th>
+                      <th>权限</th>
+                      <th>高级创作</th>
+                      <th>积分</th>
+                      <th>累计充值</th>
+                      <th>注册时间</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <template x-if="users.length === 0 && !loading">
+                      <tr><td colspan="8" class="text-center text-slate-500 py-12">暂无数据</td></tr>
+                    </template>
+                    <template x-for="u in users" :key="u.id">
+                      <tr>
+                        <td class="font-mono text-xs" x-text="u.email"></td>
+                        <td x-text="u.name"></td>
+                        <td>
+                          <span class="xy-badge" :class="adminBadgeClass(u)" x-text="adminLabel(u)"></span>
+                        </td>
+                        <td><span class="xy-badge" :class="advancedCreationBadge(u)" x-text="advancedCreationLabel(u)"></span></td>
+                        <td>
+                          <span class="xy-badge xy-badge-purple" x-text="u.points"></span>
+                        </td>
+                        <td class="text-xs text-emerald-300 font-mono" x-text="`¥${u.paid_money || '0.00'}`"></td>
+                        <td class="text-xs text-slate-400" x-text="formatTime(u.created_at)"></td>
+                        <td>
+                          <div class="flex items-center gap-3 text-xs flex-wrap min-w-40">
+                            <button @click="adjustPointsPrompt(u)" class="text-violet-300 hover:text-white">调整积分</button>
+                            <button @click="toggleAdvancedCreation(u)" class="text-amber-300 hover:text-amber-100" x-text="u.advanced_creation?.admin_override ? '收回高级创作' : '开放高级创作'"></button>
+                            <button
+                              @click="toggleUserAdmin(u)"
+                              :disabled="u.can_toggle_admin === false || (adminInfo?.id === u.id && u.is_admin)"
+                              class="text-cyan-300 hover:text-cyan-100 disabled:text-slate-600 disabled:cursor-not-allowed"
+                              x-text="u.is_admin ? '撤销管理员' : '设为管理员'"></button>
+                          </div>
+                        </td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+              <div class="flex items-center justify-between p-4 border-t border-white/5 text-sm">
+                <span class="text-slate-400">共 <span class="text-white" x-text="userTotal"></span> 条</span>
+                <div class="flex items-center gap-2">
+                  <button @click="loadUsers(userPage - 1)" :disabled="userPage <= 1 || loading" class="xy-btn xy-btn-ghost text-xs py-1.5 px-3">上一页</button>
+                  <span class="text-slate-300 text-xs">第 <span x-text="userPage"></span> / <span x-text="Math.max(1, Math.ceil(userTotal / userLimit))"></span> 页</span>
+                  <button @click="loadUsers(userPage + 1)" :disabled="userPage >= Math.ceil(userTotal / userLimit) || loading" class="xy-btn xy-btn-ghost text-xs py-1.5 px-3">下一页</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 请求日志 -->
+          <div x-show="activeTab === 'logs'">
+            <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+              <div>
+                <h1 class="text-2xl font-bold xy-gradient-text">请求日志</h1>
+                <p class="text-sm text-slate-400 mt-1">所有 API 请求的访问记录</p>
+              </div>
+              <div class="flex items-center gap-2 flex-wrap">
+                <select x-model="logFilters.method" @change="loadLogs(1)" class="xy-input text-sm py-2 w-28">
+                  <option value="">全部方法</option>
+                  <option value="GET">GET</option>
+                  <option value="POST">POST</option>
+                  <option value="PUT">PUT</option>
+                  <option value="DELETE">DELETE</option>
+                </select>
+                <input type="text" x-model="logFilters.path" @keydown.enter="loadLogs(1)" placeholder="路径包含..." class="xy-input text-sm w-48">
+                <button @click="loadLogs(1)" class="xy-btn xy-btn-primary text-sm py-2 px-4">查询</button>
+              </div>
+            </div>
+
+            <div class="xy-glass overflow-hidden">
+              <div class="overflow-x-auto">
+                <table class="xy-table">
+                  <thead>
+                    <tr>
+                      <th class="w-32">时间</th>
+                      <th class="w-20">方法</th>
+                      <th>路径</th>
+                      <th class="w-20">状态</th>
+                      <th class="w-20">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <template x-if="logs.length === 0 && !loading">
+                      <tr><td colspan="5" class="text-center text-slate-500 py-12">暂无数据</td></tr>
+                    </template>
+                    <template x-for="log in logs" :key="log.id">
+                      <tr>
+                        <td class="text-xs text-slate-400 whitespace-nowrap" x-text="formatTime(log.ts)"></td>
+                        <td>
+                          <span class="xy-badge" :class="methodBadge(log.method)" x-text="log.method"></span>
+                        </td>
+                        <td class="font-mono text-xs break-all" x-text="log.path + (log.query ? '?' + log.query : '')"></td>
+                        <td>
+                          <span class="xy-badge" :class="statusBadge(log.status)" x-text="log.status"></span>
+                        </td>
+                        <td>
+                          <button @click="showLogDetail(log.id)" class="text-violet-300 hover:text-white text-xs">详情</button>
+                        </td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+              <div class="flex items-center justify-between p-4 border-t border-white/5 text-sm">
+                <span class="text-slate-400">共 <span class="text-white" x-text="logTotal"></span> 条</span>
+                <div class="flex items-center gap-2">
+                  <button @click="loadLogs(logPage - 1)" :disabled="logPage <= 1 || loading" class="xy-btn xy-btn-ghost text-xs py-1.5 px-3">上一页</button>
+                  <span class="text-slate-300 text-xs">第 <span x-text="logPage"></span> / <span x-text="Math.max(1, Math.ceil(logTotal / logLimit))"></span> 页</span>
+                  <button @click="loadLogs(logPage + 1)" :disabled="logPage >= Math.ceil(logTotal / logLimit) || loading" class="xy-btn xy-btn-ghost text-xs py-1.5 px-3">下一页</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 充值订单 -->
+          <div x-show="activeTab === 'orders'">
+            <div class="flex items-center justify-between mb-6">
+              <div>
+                <h1 class="text-2xl font-bold xy-gradient-text">充值订单</h1>
+                <p class="text-sm text-slate-400 mt-1">所有用户的充值记录</p>
+              </div>
+              <button @click="loadOrders(orderPage)" class="xy-btn xy-btn-ghost text-sm" :disabled="loading">刷新</button>
+            </div>
+
+            <div class="xy-glass overflow-hidden">
+              <div class="overflow-x-auto">
+                <table class="xy-table">
+                  <thead>
+                    <tr>
+                      <th>订单号</th>
+                      <th>用户</th>
+                      <th>商品</th>
+                      <th>积分</th>
+                      <th>来源 IP</th>
+                      <th>时间</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <template x-if="orders.length === 0 && !loading">
+                      <tr><td colspan="6" class="text-center text-slate-500 py-12">暂无订单</td></tr>
+                    </template>
+                    <template x-for="o in orders" :key="o.id">
+                      <tr>
+                        <td class="font-mono text-xs" x-text="o.order_id"></td>
+                        <td>
+                          <div class="text-sm" x-text="o.name || '-'"></div>
+                          <div class="text-xs text-slate-500" x-text="o.email || ''"></div>
+                        </td>
+                        <td class="text-xs text-slate-400" x-text="o.product_id"></td>
+                        <td>
+                          <span class="xy-badge xy-badge-green">+<span x-text="o.points"></span></span>
+                        </td>
+                        <td class="text-xs text-slate-400 font-mono" x-text="o.remote_addr || '-'"></td>
+                        <td class="text-xs text-slate-400" x-text="formatTime(o.created_at)"></td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+              <div class="flex items-center justify-between p-4 border-t border-white/5 text-sm">
+                <span class="text-slate-400">共 <span class="text-white" x-text="orderTotal"></span> 条</span>
+                <div class="flex items-center gap-2">
+                  <button @click="loadOrders(orderPage - 1)" :disabled="orderPage <= 1 || loading" class="xy-btn xy-btn-ghost text-xs py-1.5 px-3">上一页</button>
+                  <span class="text-slate-300 text-xs">第 <span x-text="orderPage"></span> / <span x-text="Math.max(1, Math.ceil(orderTotal / orderLimit))"></span> 页</span>
+                  <button @click="loadOrders(orderPage + 1)" :disabled="orderPage >= Math.ceil(orderTotal / orderLimit) || loading" class="xy-btn xy-btn-ghost text-xs py-1.5 px-3">下一页</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 兑换码 -->
+          <div x-show="activeTab === 'contests'">
+            <div class="flex items-center justify-between mb-6">
+              <div><h1 class="text-2xl font-bold xy-gradient-text">赛事管理</h1><p class="text-sm text-slate-400 mt-1">发布角色卡赛事，管理起止时间、奖励和当前状态</p></div>
+              <button @click="loadContests" class="xy-btn xy-btn-ghost text-sm" :disabled="loading">刷新</button>
+            </div>
+            <div class="grid lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)] gap-5">
+              <section class="xy-glass p-5">
+                <h2 class="font-semibold mb-4">发布新赛事</h2>
+                <div class="space-y-4">
+                  <label class="block"><span class="xy-label">赛事标题 *</span><input class="xy-input" maxlength="120" x-model="contestForm.title" placeholder="例如：盛夏幻想角色创作赛"></label>
+                  <label class="block"><span class="xy-label">赛事内容</span><textarea class="xy-input min-h-28" maxlength="4000" x-model="contestForm.content" placeholder="主题、规则、参赛要求"></textarea></label>
+                  <label class="block"><span class="xy-label">赛事奖励</span><textarea class="xy-input min-h-20" maxlength="1000" x-model="contestForm.reward" placeholder="名次奖励与发放说明"></textarea></label>
+                  <div class="grid sm:grid-cols-2 gap-3"><label><span class="xy-label">开始时间 *</span><input type="datetime-local" class="xy-input" x-model="contestForm.start_at_local"></label><label><span class="xy-label">结束时间 *</span><input type="datetime-local" class="xy-input" x-model="contestForm.end_at_local"></label></div>
+                  <button class="xy-btn xy-btn-primary w-full justify-center" @click="createContest" :disabled="contestSaving"><span x-text="contestSaving ? '发布中…' : '发布赛事'"></span></button>
+                </div>
+              </section>
+              <section class="xy-glass p-5 min-w-0">
+                <div class="flex items-center justify-between mb-4"><h2 class="font-semibold">赛事列表</h2><span class="text-xs text-slate-400" x-text="contestActive ? `当前：${contestActive.title}` : '当前无进行中赛事'"></span></div>
+                <div class="overflow-x-auto"><table class="xy-table"><thead><tr><th>赛事</th><th>起止时间</th><th>状态</th><th>奖励</th><th>操作</th></tr></thead><tbody>
+                  <template x-if="!contests.length && !loading"><tr><td colspan="5" class="text-center text-slate-500 py-8">暂无赛事</td></tr></template>
+                  <template x-for="contest in contests" :key="contest.id"><tr><td><div class="font-medium" x-text="contest.title"></div><div class="text-xs text-slate-500 max-w-xs truncate" x-text="contest.content || '未填写内容'"></div></td><td><div class="text-xs" x-text="formatTime(contest.start_at)"></div><div class="text-xs text-slate-500" x-text="formatTime(contest.end_at)"></div></td><td><span class="xy-badge" :class="contestPhaseClass(contest)" x-text="contestPhaseLabel(contest)"></span></td><td><div class="text-xs max-w-xs whitespace-pre-wrap" x-text="contest.reward || '—'"></div></td><td><button class="xy-btn xy-btn-ghost text-xs py-1.5 px-3" x-show="contest.status === 'active'" @click="closeContest(contest)">关闭</button></td></tr></template>
+                </tbody></table></div>
+              </section>
+            </div>
+          </div>
+
+          <div x-show="activeTab === 'redeem'">
+            <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+              <div>
+                <h1 class="text-2xl font-bold xy-gradient-text">兑换码</h1>
+                <p class="text-sm text-slate-400 mt-1">爱发电购买后，把这里生成的兑换码发给用户兑换额度</p>
+              </div>
+              <button @click="loadRedeemCodes(redeemPage)" class="xy-btn xy-btn-ghost text-sm" :disabled="loading">刷新</button>
+            </div>
+
+            <div class="grid xl:grid-cols-[380px_1fr] gap-6">
+              <div class="xy-glass p-6 h-fit">
+                <h3 class="font-semibold mb-4">生成兑换码</h3>
+                <div class="grid grid-cols-2 gap-3">
+                  <div>
+                    <label class="xy-label">数量</label>
+                    <input type="number" min="1" max="200" class="xy-input" x-model.number="redeemForm.count">
+                  </div>
+                  <div>
+                    <label class="xy-label">额度</label>
+                    <input type="number" min="1" class="xy-input" x-model.number="redeemForm.points">
+                  </div>
+                </div>
+                <div class="mt-3">
+                  <label class="xy-label">余额类型</label>
+                  <select class="xy-input" x-model="redeemForm.point_type">
+                    <option value="paid">充值额度</option>
+                    <option value="free">免费额度</option>
+                    <option value="reward">奖励额度</option>
+                  </select>
+                </div>
+                <div class="mt-3">
+                  <label class="xy-label">过期时间</label>
+                  <input type="datetime-local" class="xy-input" x-model="redeemForm.expires_at_local">
+                </div>
+                <div class="mt-3">
+                  <label class="xy-label">备注</label>
+                  <textarea class="xy-input min-h-20" x-model="redeemForm.note" placeholder="例如：爱发电 50 元套餐"></textarea>
+                </div>
+                <button @click="createRedeemCodes" class="xy-btn xy-btn-primary w-full justify-center mt-4" :disabled="loading">
+                  <span x-show="!loading">生成兑换码</span>
+                  <span x-show="loading" class="xy-loading"></span>
+                </button>
+
+                <template x-if="createdRedeemCodes.length">
+                  <div class="mt-5">
+                    <div class="text-xs text-slate-400 mb-2">刚生成的兑换码</div>
+                    <div class="rounded-lg bg-black/35 border border-white/10 p-3 max-h-60 overflow-y-auto">
+                      <template x-for="c in createdRedeemCodes" :key="c.code">
+                        <code class="block text-xs text-violet-200 font-mono py-1" x-text="c.code"></code>
+                      </template>
+                    </div>
+                  </div>
+                </template>
+              </div>
+
+              <div>
+                <div class="flex items-center gap-2 flex-wrap mb-4">
+                  <select x-model="redeemStatus" @change="loadRedeemCodes(1)" class="xy-input text-sm py-2 w-36">
+                    <option value="">全部状态</option>
+                    <option value="unused">未使用</option>
+                    <option value="used">已使用</option>
+                    <option value="disabled">已禁用</option>
+                    <option value="expired">已过期</option>
+                  </select>
+                  <button @click="loadRedeemCodes(1)" class="xy-btn xy-btn-ghost text-sm">查询</button>
+                </div>
+
+                <div class="xy-glass overflow-hidden">
+                  <div class="overflow-x-auto">
+                    <table class="xy-table">
+                      <thead>
+                        <tr>
+                          <th>兑换码</th>
+                          <th>额度</th>
+                          <th>类型</th>
+                          <th>状态</th>
+                          <th>使用者</th>
+                          <th>时间</th>
+                          <th>操作</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <template x-if="redeemCodes.length === 0 && !loading">
+                          <tr><td colspan="7" class="text-center text-slate-500 py-12">暂无兑换码</td></tr>
+                        </template>
+                        <template x-for="c in redeemCodes" :key="c.code">
+                          <tr>
+                            <td class="font-mono text-xs text-violet-200" x-text="c.code"></td>
+                            <td><span class="xy-badge xy-badge-green">+<span x-text="c.points"></span></span></td>
+                            <td class="text-xs text-slate-400" x-text="c.point_type"></td>
+                            <td><span class="xy-badge" :class="redeemStatusBadge(c.status)" x-text="redeemStatusLabel(c.status)"></span></td>
+                            <td>
+                              <div class="text-xs" x-text="c.redeemed_name || '-'"></div>
+                              <div class="text-xs text-slate-500" x-text="c.redeemed_email || ''"></div>
+                            </td>
+                            <td class="text-xs text-slate-400">
+                              <div x-text="formatTime(c.created_at)"></div>
+                              <div x-show="c.expires_at">过期：<span x-text="formatTime(c.expires_at)"></span></div>
+                            </td>
+                            <td>
+                              <button x-show="c.status === 'unused'" @click="disableRedeemCode(c)" class="text-red-300 hover:text-red-200 text-xs">禁用</button>
+                            </td>
+                          </tr>
+                        </template>
+                      </tbody>
+                    </table>
+                  </div>
+                  <div class="flex items-center justify-between p-4 border-t border-white/5 text-sm">
+                    <span class="text-slate-400">共 <span class="text-white" x-text="redeemTotal"></span> 条</span>
+                    <div class="flex items-center gap-2">
+                      <button @click="loadRedeemCodes(redeemPage - 1)" :disabled="redeemPage <= 1 || loading" class="xy-btn xy-btn-ghost text-xs py-1.5 px-3">上一页</button>
+                      <span class="text-slate-300 text-xs">第 <span x-text="redeemPage"></span> / <span x-text="Math.max(1, Math.ceil(redeemTotal / redeemLimit))"></span> 页</span>
+                      <button @click="loadRedeemCodes(redeemPage + 1)" :disabled="redeemPage >= Math.ceil(redeemTotal / redeemLimit) || loading" class="xy-btn xy-btn-ghost text-xs py-1.5 px-3">下一页</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 模型配置 -->
+          <div x-show="activeTab === 'llm'">
+            <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+              <div>
+                <h1 class="text-2xl font-bold xy-gradient-text">模型配置</h1>
+                <p class="text-sm text-slate-400 mt-1">手动添加 API 节点，或自动读取目录并检测真正可对话的模型</p>
+              </div>
+              <button @click="loadLlmSettings" class="xy-btn xy-btn-ghost text-sm" :disabled="loading">刷新</button>
+            </div>
+
+            <div class="grid lg:grid-cols-[1fr_320px] gap-6">
+              <form class="xy-glass p-6 space-y-5" @submit.prevent="saveLlmSettings">
+                <div class="flex items-center justify-between gap-3">
+                  <label class="flex items-center gap-3 text-sm text-slate-200">
+                    <input type="checkbox" x-model="llmForm.enabled" class="accent-violet-500">
+                    启用站点模型 API
+                  </label>
+                  <button type="button" @click="addModelPreset" class="xy-btn xy-btn-ghost text-sm">新增 API 节点</button>
+                </div>
+                <div class="space-y-4">
+                  <template x-for="(preset, idx) in llmForm.presets" :key="preset.id">
+                    <div class="rounded-xl border border-white/10 bg-white/5 p-4 space-y-4">
+                      <div class="flex items-center justify-between gap-3">
+                        <div class="flex items-center gap-3">
+                          <input type="radio" name="default_model_preset" :checked="llmForm.default_model_preset_id === preset.id" @change="setDefaultModelPreset(preset)" class="accent-violet-500">
+                          <div>
+                            <div class="text-sm font-semibold text-white" x-text="preset.name || '模型预设'"></div>
+                            <div class="text-xs text-slate-500">
+                              <span x-show="llmForm.default_model_preset_id === preset.id">默认 · </span>
+                              <span x-text="preset.model || '未填写模型'"></span>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="flex items-center gap-3">
+                          <label class="flex items-center gap-2 text-xs text-slate-400">
+                            <input type="checkbox" x-model="preset.enabled" class="accent-emerald-500">
+                            启用
+                          </label>
+                          <button type="button" @click="removeModelPreset(idx)" class="text-red-300 hover:text-red-200 text-xs">删除</button>
+                        </div>
+                      </div>
+                      <div class="grid md:grid-cols-2 gap-3">
+                        <div>
+                          <label class="xy-label">供应商名称</label>
+                          <input class="xy-input" x-model="preset.name" placeholder="例如：Pear、OpenAI、GLM">
+                        </div>
+                        <div>
+                          <label class="xy-label">协议格式</label>
+                          <select class="xy-input" x-model="preset.protocol">
+                            <option value="openai">OpenAI-compatible</option>
+                            <option value="anthropic">Anthropic-compatible</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div class="grid md:grid-cols-2 gap-3">
+                        <div>
+                          <label class="xy-label">Base URL</label>
+                          <input class="xy-input" x-model="preset.base_url" :placeholder="preset.protocol === 'anthropic' ? 'https://api.anthropic.com/v1' : 'https://api.openai.com/v1'">
+                          <div class="text-xs text-slate-500 mt-1">填到 /v1 即可，系统会按协议自动调用对应端点。</div>
+                        </div>
+                        <div class="rounded-lg border border-cyan-300/15 bg-cyan-400/5 p-3">
+                          <div class="text-xs font-semibold text-cyan-100">自动接入</div>
+                          <div class="text-xs text-slate-400 mt-1">先读取 `/models`，再用真实流式对话逐个检测；只把通过检测的模型填入列表。</div>
+                          <div class="flex flex-wrap gap-2 mt-3">
+                            <button type="button" @click="autoConfigurePreset(preset)" class="xy-btn xy-btn-primary text-xs py-2 px-3" :disabled="preset.auto_loading || preset.catalog_loading || preset.probe_loading">
+                              <span x-show="!preset.auto_loading">自动读取并检测</span>
+                              <span x-show="preset.auto_loading" class="xy-loading"></span>
+                            </button>
+                            <button type="button" @click="discoverPresetModels(preset)" class="xy-btn xy-btn-ghost text-xs py-2 px-3" :disabled="preset.auto_loading || preset.catalog_loading || preset.probe_loading">
+                              <span x-text="preset.catalog_loading ? '读取中…' : '只读取目录'"></span>
+                            </button>
+                            <button type="button" @click="probePresetModels(preset)" class="xy-btn xy-btn-ghost text-xs py-2 px-3" :disabled="preset.auto_loading || preset.catalog_loading || preset.probe_loading">
+                              <span x-text="preset.probe_loading ? '检测中…' : '检测当前列表'"></span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                      <div>
+                        <label class="xy-label">模型列表（每行一个，或用逗号分隔）</label>
+                        <textarea class="xy-input" style="min-height:90px" x-model="preset.modelsText" @change="syncModelConfigs(preset)" placeholder="gpt-4o-mini&#10;gpt-4o&#10;gemini-2.5-flash"></textarea>
+                        <div class="text-xs text-slate-500 mt-1">用户在编辑器里会看到「供应商 / 模型」的可搜索条目，所有模型共用这个供应商的 Base URL 和 API Key。</div>
+                      </div>
+                      <div class="rounded-xl border border-violet-300/20 bg-violet-400/5 p-4 space-y-3">
+                        <div class="flex items-start justify-between gap-3 flex-wrap">
+                          <div>
+                            <div class="text-sm font-semibold text-white">逐模型预设与计价</div>
+                            <div class="text-xs text-slate-500 mt-1">每个模型只能绑定一个预设；输入和输出分别计价。</div>
+                          </div>
+                          <button type="button" class="xy-btn xy-btn-ghost text-xs" @click="syncModelConfigs(preset)">同步模型列表</button>
+                        </div>
+                        <template x-if="!(preset.modelConfigs || []).length">
+                          <div class="text-xs text-slate-500 rounded-lg border border-dashed border-white/10 p-3">填写模型列表后点击“同步模型列表”。</div>
+                        </template>
+                        <div class="space-y-3">
+                          <template x-for="config in (preset.modelConfigs || [])" :key="config.model">
+                            <div class="xy-admin-model-card rounded-lg border border-white/10 bg-white p-3 space-y-3">
+                              <div class="grid md:grid-cols-2 gap-3">
+                                <div>
+                                  <label class="xy-label">模型 ID</label>
+                                  <input class="xy-input" :value="config.model" disabled>
+                                </div>
+                                <div>
+                                  <label class="xy-label">用户看到的名称</label>
+                                  <input class="xy-input" x-model="config.display_name" :placeholder="config.model">
+                                </div>
+                              </div>
+                              <div>
+                                <label class="xy-label">该模型唯一使用的预设</label>
+                                <select class="xy-input" x-model="config.preset_id">
+                                  <template x-for="option in globalPromptPresetOptions()" :key="option.id">
+                                    <option :value="option.id" x-text="option.name || option.id"></option>
+                                  </template>
+                                </select>
+                              </div>
+                              <div class="grid md:grid-cols-3 gap-3">
+                                <div>
+                                  <label class="xy-label">计价方式</label>
+                                  <select class="xy-input" x-model="config.pricing.mode">
+                                    <option value="per_request">按次</option>
+                                    <option value="per_token">按量（1M Token）</option>
+                                  </select>
+                                </div>
+                                <div>
+                                  <label class="xy-label" x-text="config.pricing.mode === 'per_token' ? '输入价 / 1M Token' : '输入一次价格'"></label>
+                                  <input type="number" min="0" step="0.01" class="xy-input" x-model.number="config.pricing.input_price">
+                                </div>
+                                <div>
+                                  <label class="xy-label" x-text="config.pricing.mode === 'per_token' ? '输出价 / 1M Token' : '输出一次价格'"></label>
+                                  <input type="number" min="0" step="0.01" class="xy-input" x-model.number="config.pricing.output_price">
+                                </div>
+                              </div>
+                              <div class="text-xs text-violet-300" x-text="modelPricingHint(config)"></div>
+                            </div>
+                          </template>
+                        </div>
+                      </div>
+                      <template x-if="preset.catalog_meta || preset.probe_summary">
+                        <div class="rounded-lg border border-white/10 bg-black/15 p-3 space-y-2">
+                          <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-300">
+                            <span x-show="preset.catalog_meta">目录：<strong class="text-white" x-text="preset.catalog_meta?.total || 0"></strong> 个 · <span x-text="preset.catalog_meta?.elapsed_ms || 0"></span> ms</span>
+                            <span x-show="preset.probe_summary">检测：<strong class="text-emerald-300" x-text="preset.probe_summary?.available || 0"></strong> 可用 / <strong class="text-rose-300" x-text="preset.probe_summary?.failed || 0"></strong> 失败 · <span x-text="preset.probe_summary?.elapsed_ms || 0"></span> ms</span>
+                            <button x-show="preset.probe_summary?.available" type="button" @click="applyAvailableModels(preset)" class="text-cyan-300 hover:text-cyan-200 underline underline-offset-2">仅保留可用模型</button>
+                          </div>
+                          <div x-show="(preset.probe_results || []).length" class="max-h-52 overflow-y-auto space-y-1 pr-1">
+                            <template x-for="item in preset.probe_results" :key="item.model">
+                              <div class="grid grid-cols-[minmax(0,1fr)_auto] gap-3 rounded-md border border-white/5 bg-white/[0.03] px-3 py-2 text-xs">
+                                <div class="min-w-0">
+                                  <div class="truncate text-slate-100" x-text="item.model"></div>
+                                  <div x-show="item.error" class="mt-1 break-words text-slate-500" x-text="item.error"></div>
+                                </div>
+                                <div class="text-right whitespace-nowrap">
+                                  <div :class="item.available ? 'text-emerald-300' : 'text-rose-300'" x-text="modelProbeStatusLabel(item)"></div>
+                                  <div class="text-slate-500 mt-1">首字 <span x-text="item.first_content_ms || item.elapsed_ms || 0"></span> ms · 完整 <span x-text="item.elapsed_ms || 0"></span> ms</div>
+                                </div>
+                              </div>
+                            </template>
+                          </div>
+                          <div class="text-[11px] text-amber-200/75">首字表示用户开始看到回复的等待时间，完整表示测试回复全部结束的总耗时。检测会产生少量真实模型请求；通过后仍需点击页面底部“保存模型预设”才会对用户生效。</div>
+                        </div>
+                      </template>
+                      <div class="grid md:grid-cols-2 gap-3">
+                        <div>
+                          <label class="xy-label">Temperature</label>
+                          <input type="number" step="0.1" min="0" max="2" class="xy-input" x-model.number="preset.temperature">
+                        </div>
+                        <div>
+                          <label class="xy-label">API Key</label>
+                          <input type="password" class="xy-input" x-model="preset.api_key" autocomplete="new-password" :placeholder="preset.has_api_key ? ('留空保留 ' + (preset.api_key_preview || '已配置密钥')) : '填写该预设 API Key'">
+                        </div>
+                      </div>
+                      <label class="flex items-center gap-2 text-xs text-slate-400">
+                        <input type="checkbox" x-model="preset.clear_api_key" class="accent-red-500">
+                        清空该预设 API Key
+                      </label>
+                    </div>
+                  </template>
+                </div>
+                <div class="rounded-xl border border-sky-300/15 bg-sky-400/5 p-4 space-y-4">
+                  <div class="flex items-start justify-between gap-3 flex-wrap">
+                    <div>
+                      <h3 class="font-semibold text-white">图片模型</h3>
+                      <p class="text-xs text-slate-400 mt-1">用于 `/app/image-chat.html` 的图片生成。Key 只保存在服务端，不会下发给用户。</p>
+                    </div>
+                    <label class="flex items-center gap-2 text-sm text-slate-200">
+                      <input type="checkbox" x-model="llmForm.image_model.enabled" class="accent-sky-500">
+                      启用图片模型
+                    </label>
+                  </div>
+                  <div class="grid md:grid-cols-2 gap-3">
+                    <div>
+                      <label class="xy-label">显示名称</label>
+                      <input class="xy-input" x-model="llmForm.image_model.name" placeholder="CelestiAI 图片模型">
+                    </div>
+                    <div>
+                      <label class="xy-label">模型名</label>
+                      <input class="xy-input" x-model="llmForm.image_model.model" placeholder="gpt-image-1">
+                    </div>
+                    <div>
+                      <label class="xy-label">Base URL</label>
+                      <input class="xy-input" x-model="llmForm.image_model.base_url" placeholder="https://api.celestiai.xyz/v1">
+                    </div>
+                    <div>
+                      <label class="xy-label">端点路径</label>
+                      <input class="xy-input" x-model="llmForm.image_model.endpoint_path" placeholder="/images/generations">
+                    </div>
+                    <div>
+                      <label class="xy-label">尺寸</label>
+                      <input class="xy-input" x-model="llmForm.image_model.size" placeholder="1024x1024">
+                    </div>
+                    <div>
+                      <label class="xy-label">返回格式</label>
+                      <select class="xy-input" x-model="llmForm.image_model.response_format">
+                        <option value="">自动</option>
+                        <option value="url">图片 URL</option>
+                        <option value="b64_json">Base64 图片</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label class="xy-label">图片数量</label>
+                      <input type="number" min="1" max="4" class="xy-input" x-model.number="llmForm.image_model.n">
+                    </div>
+                    <div>
+                      <label class="xy-label">超时秒数</label>
+                      <input type="number" min="10" max="300" class="xy-input" x-model.number="llmForm.image_model.timeout">
+                    </div>
+                    <div>
+                      <label class="xy-label">质量参数</label>
+                      <input class="xy-input" x-model="llmForm.image_model.quality" placeholder="留空为自动">
+                    </div>
+                    <div>
+                      <label class="xy-label">API Key</label>
+                      <input type="password" class="xy-input" x-model="llmForm.image_model.api_key" autocomplete="new-password" :placeholder="llmForm.image_model.has_api_key ? ('留空保留 ' + (llmForm.image_model.api_key_preview || '已配置密钥')) : '填写图片模型 API Key'">
+                    </div>
+                  </div>
+                  <label class="flex items-center gap-2 text-xs text-slate-400">
+                    <input type="checkbox" x-model="llmForm.image_model.clear_api_key" class="accent-red-500">
+                    清空图片模型 API Key
+                  </label>
+                </div>
+                <div class="rounded-xl border border-fuchsia-300/15 bg-fuchsia-400/5 p-4 space-y-4">
+                  <div class="flex items-start justify-between gap-3 flex-wrap">
+                    <div>
+                      <h3 class="font-semibold text-white">长期记忆</h3>
+                      <p class="text-xs text-slate-400 mt-1">控制 AI 回复时是否读取当前存档摘要和长期记忆，以及自动摘要触发频率。</p>
+                    </div>
+                    <label class="flex items-center gap-2 text-sm text-slate-200">
+                      <input type="checkbox" x-model="llmForm.memory_settings.enabled" class="accent-fuchsia-500">
+                      AI 回复读取记忆
+                    </label>
+                  </div>
+                  <div class="grid md:grid-cols-2 gap-3">
+                    <label class="flex items-center gap-2 text-sm text-slate-200">
+                      <input type="checkbox" x-model="llmForm.memory_settings.auto_summary_enabled" class="accent-emerald-500">
+                      自动摘要
+                    </label>
+                    <label class="flex items-center gap-2 text-sm text-slate-200">
+                      <input type="checkbox" x-model="llmForm.memory_settings.bind_memories_to_conversation" class="accent-emerald-500">
+                      新记忆绑定当前存档
+                    </label>
+                    <label class="flex items-center gap-2 text-sm text-slate-200">
+                      <input type="checkbox" x-model="llmForm.memory_settings.include_role_memories" class="accent-emerald-500">
+                      读取同角色旧记忆
+                    </label>
+                  </div>
+                  <div class="grid md:grid-cols-3 gap-3">
+                    <div>
+                      <label class="xy-label">几条消息后首次摘要</label>
+                      <input type="number" min="2" max="200" class="xy-input" x-model.number="llmForm.memory_settings.auto_summary_message_threshold">
+                    </div>
+                    <div>
+                      <label class="xy-label">新增几条后刷新摘要</label>
+                      <input type="number" min="1" max="200" class="xy-input" x-model.number="llmForm.memory_settings.auto_summary_delta_messages">
+                    </div>
+                    <div>
+                      <label class="xy-label">每次最多读取记忆</label>
+                      <input type="number" min="0" max="20" class="xy-input" x-model.number="llmForm.memory_settings.max_memories">
+                    </div>
+                  </div>
+                  <div class="text-xs text-slate-500">“当前存档”对应当前 conversation_id；复制历史对话时，会一并复制该存档绑定的摘要、变量和长期记忆。</div>
+                </div>
+                <div class="rounded-lg border border-cyan-300/15 bg-cyan-400/5 p-3 text-xs text-slate-400 leading-relaxed">
+                  用户创建角色时只能选择已启用的模型预设。API Key 只保存在服务端，不会下发给用户浏览器。
+                </div>
+                <div class="flex justify-end">
+                  <button type="submit" class="xy-btn xy-btn-primary min-w-32" :disabled="loading">
+                    <span x-show="!loading">保存模型预设</span>
+                    <span x-show="loading" class="xy-loading"></span>
+                  </button>
+                </div>
+                <div class="hidden">
+                  <input x-model="llmForm.base_url">
+                  <input x-model="llmForm.model">
+                  <input x-model.number="llmForm.temperature">
+                  <input x-model="llmForm.api_key">
+                  <input type="checkbox" x-model="llmForm.clear_api_key">
+                </div>
+              </form>
+
+              <aside class="xy-glass p-6 h-fit">
+                <h3 class="font-semibold mb-4">当前状态</h3>
+                <div class="space-y-3 text-sm">
+                  <div class="flex justify-between gap-3">
+                    <span class="text-slate-400">启用</span>
+                    <span :class="llmSettings?.enabled ? 'text-emerald-300' : 'text-slate-500'" x-text="llmSettings?.enabled ? '已启用' : '未启用'"></span>
+                  </div>
+                  <div class="flex justify-between gap-3">
+                    <span class="text-slate-400">密钥</span>
+                    <span class="text-violet-300" x-text="llmSettings?.has_api_key ? ('已配置 ' + (llmSettings?.api_key_preview || '')) : '未配置'"></span>
+                  </div>
+                  <div>
+                    <div class="text-xs text-slate-400 mb-1">Base URL</div>
+                    <code class="block px-3 py-2 rounded bg-black/40 text-xs text-violet-200 break-all" x-text="llmSettings?.base_url || '-'"></code>
+                  </div>
+                  <div>
+                    <div class="text-xs text-slate-400 mb-1">默认模型</div>
+                    <code class="block px-3 py-2 rounded bg-black/40 text-xs text-violet-200 break-all" x-text="llmSettings?.model || '-'"></code>
+                  </div>
+                  <div>
+                    <div class="text-xs text-slate-400 mb-1">预设数量</div>
+                    <span class="text-slate-200" x-text="(llmSettings?.presets || []).length"></span>
+                  </div>
+                  <div>
+                    <div class="text-xs text-slate-400 mb-1">图片模型</div>
+                    <span :class="llmSettings?.image_model?.enabled ? 'text-sky-300' : 'text-slate-500'" x-text="llmSettings?.image_model?.enabled ? ((llmSettings?.image_model?.model || '已启用') + (llmSettings?.image_model?.has_api_key ? ' · 已配置 Key' : ' · 未配置 Key')) : '未启用'"></span>
+                  </div>
+                  <div>
+                    <div class="text-xs text-slate-400 mb-1">长期记忆</div>
+                    <span :class="llmSettings?.memory_settings?.enabled ? 'text-fuchsia-300' : 'text-slate-500'" x-text="llmSettings?.memory_settings?.enabled ? ('读取开启 · ' + (llmSettings?.memory_settings?.auto_summary_message_threshold || 10) + ' 条后摘要') : '读取关闭'"></span>
+                  </div>
+                </div>
+              </aside>
+            </div>
+          </div>
+
+          <!-- 全局预设 -->
+          <div x-show="activeTab === 'global-presets'">
+            <div class="flex items-start justify-between gap-4 mb-6 flex-wrap">
+              <div>
+                <h1 class="text-2xl font-bold xy-gradient-text">全局预设</h1>
+                <p class="text-sm text-slate-400 mt-1">导入一个 SillyTavern JSON 时自动拆出提示词预设和附带正则；模型配置中每个模型只能绑定一个预设。</p>
+              </div>
+              <div class="flex items-center gap-2 flex-wrap">
+                <label class="xy-btn xy-btn-ghost text-sm cursor-pointer">
+                  导入预设 JSON（自动识别正则）
+                  <input type="file" accept=".json,application/json" class="hidden" @change="importGlobalPromptFile">
+                </label>
+                <label class="xy-btn xy-btn-ghost text-sm cursor-pointer">
+                  导入正则 ZIP / JSON
+                  <input type="file" accept=".zip,.json,application/zip,application/json" class="hidden" @change="importGlobalRegexFile">
+                </label>
+                <button type="button" class="xy-btn xy-btn-ghost text-sm" @click="loadGlobalPresets" :disabled="loading">刷新</button>
+              </div>
+            </div>
+
+            <div class="flex gap-2 mb-4">
+              <button type="button" class="xy-btn text-sm" :class="globalPresetKind === 'prompt' ? 'xy-btn-primary' : 'xy-btn-ghost'" @click="switchGlobalPresetKind('prompt')">提示词预设</button>
+              <button type="button" class="xy-btn text-sm" :class="globalPresetKind === 'regex' ? 'xy-btn-primary' : 'xy-btn-ghost'" @click="switchGlobalPresetKind('regex')">正则预设</button>
+            </div>
+
+            <div class="grid xl:grid-cols-[300px_minmax(0,1fr)] gap-5">
+              <aside class="xy-glass p-4 h-fit space-y-3">
+                <div class="text-xs text-slate-400">预设列表</div>
+                <template x-if="globalPresetItems().length === 0">
+                  <div class="rounded-lg border border-white/10 bg-black/20 p-4 text-sm text-slate-400">还没有此类预设，请从本地文件导入。</div>
+                </template>
+                <template x-for="preset in globalPresetItems()" :key="preset.id">
+                  <button type="button" class="w-full text-left rounded-xl border p-3 transition" :class="globalPresetEditor?.id === preset.id ? 'border-violet-400/50 bg-violet-500/10' : 'border-white/10 bg-black/20 hover:border-white/20'" @click="openGlobalPreset(globalPresetKind, preset.id)">
+                    <div class="flex items-start justify-between gap-2">
+                      <span class="font-medium text-sm break-all" x-text="preset.name || preset.id"></span>
+                      <span class="text-[10px] rounded-full px-2 py-0.5 shrink-0" :class="globalPresetLibrary().active_id === preset.id ? 'bg-emerald-400/15 text-emerald-300' : 'bg-slate-400/10 text-slate-400'" x-text="globalPresetLibrary().active_id === preset.id ? '全局启用' : '已搁置'"></span>
+                    </div>
+                    <div class="text-[11px] text-slate-500 mt-2 break-all" x-text="preset.source_file || preset.source || '-'"></div>
+                    <div class="text-[11px] text-slate-400 mt-1"><span x-text="preset.stats?.entry_count ?? 0"></span> 条 · 启用 <span x-text="preset.stats?.enabled_count ?? 0"></span></div>
+                  </button>
+                </template>
+              </aside>
+
+              <section class="min-w-0">
+                <template x-if="!globalPresetEditor">
+                  <div class="xy-glass p-8 text-sm text-slate-400">请选择或导入一个预设。</div>
+                </template>
+                <template x-if="globalPresetEditor">
+                  <div class="space-y-4">
+                    <div class="xy-glass p-5 space-y-4">
+                      <div class="flex items-start justify-between gap-3 flex-wrap">
+                        <div class="min-w-0">
+                          <div class="flex items-center gap-2 flex-wrap">
+                            <h2 class="text-lg font-semibold break-all" x-text="globalPresetEditor.name || globalPresetEditor.id"></h2>
+                            <span class="text-xs rounded-full px-2 py-1" :class="globalPresetLibrary().active_id === globalPresetEditor.id ? 'bg-emerald-400/15 text-emerald-300' : 'bg-slate-400/10 text-slate-400'" x-text="globalPresetLibrary().active_id === globalPresetEditor.id ? '当前全局启用' : '停用 / 搁置'"></span>
+                          </div>
+                          <p class="text-xs text-slate-500 mt-1 break-all" x-text="globalPresetEditor.source_file || globalPresetEditor.source || '-'"></p>
+                        </div>
+                        <div class="flex items-center gap-2 flex-wrap">
+                          <button type="button" class="xy-btn xy-btn-ghost text-sm" @click="activateGlobalPreset(globalPresetKind, globalPresetEditor.id)" :disabled="loading || globalPresetLibrary().active_id === globalPresetEditor.id">设为当前全局预设</button>
+                          <button type="button" class="xy-btn xy-btn-primary text-sm" @click="saveGlobalPreset" :disabled="loading">保存全部修改</button>
+                        </div>
+                      </div>
+                      <div class="grid sm:grid-cols-2 gap-3">
+                        <div><label class="xy-label">名称</label><input class="xy-input" x-model="globalPresetEditor.name"></div>
+                        <div><label class="xy-label">来源</label><input class="xy-input" x-model="globalPresetEditor.source"></div>
+                      </div>
+                      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                        <div class="rounded-lg bg-black/20 p-3"><div class="text-slate-500">全部条目</div><div class="text-lg text-white" x-text="globalPresetStats().total"></div></div>
+                        <div class="rounded-lg bg-black/20 p-3"><div class="text-slate-500">启用条目</div><div class="text-lg text-emerald-300" x-text="globalPresetStats().enabled"></div></div>
+                        <div class="rounded-lg bg-black/20 p-3"><div class="text-slate-500">Marker</div><div class="text-lg text-amber-300" x-text="globalPresetStats().markers"></div></div>
+                        <div class="rounded-lg bg-black/20 p-3"><div class="text-slate-500">未进顺序表</div><div class="text-lg text-sky-300" x-text="globalPresetStats().unlisted"></div></div>
+                      </div>
+                    </div>
+
+                    <div class="xy-glass p-4">
+                      <div class="grid md:grid-cols-[1fr_180px] gap-3 mb-4">
+                        <input class="xy-input" x-model="globalPresetSearch" placeholder="搜索名称、identifier、正文或正则">
+                        <select class="xy-input" x-model="globalPresetFilter">
+                          <option value="all">全部条目</option>
+                          <option value="enabled">仅启用</option>
+                          <option value="disabled">仅停用</option>
+                          <option value="marker" x-show="globalPresetKind === 'prompt'">仅 Marker</option>
+                        </select>
+                      </div>
+                      <div class="space-y-3 max-h-[72vh] overflow-y-auto pr-1">
+                        <template x-for="entry in globalPresetEntries()" :key="entry.identifier || entry.id || entry.scriptName">
+                          <details class="rounded-xl border border-white/10 bg-black/20 overflow-hidden">
+                            <summary class="cursor-pointer px-4 py-3 flex items-center justify-between gap-3">
+                              <span class="min-w-0">
+                                <span class="block text-sm text-slate-100 break-all" x-text="entry.name || entry.scriptName || entry.identifier || entry.id"></span>
+                                <span class="block text-[11px] text-slate-500 mt-1 break-all" x-text="globalPresetKind === 'prompt' ? ((entry.in_order === false ? '未进顺序表' : ('顺序 ' + (entry.order ?? 0))) + (entry.marker ? ' · Marker' : '') + (entry.role ? (' · ' + entry.role) : '') + (entry.user_toggleable ? ' · 用户可见' : '')) : ('顺序 ' + entry.order + ' · placement ' + JSON.stringify(entry.placement || []))"></span>
+                              </span>
+                              <span class="text-[10px] rounded-full px-2 py-1 shrink-0" :class="isGlobalPresetEntryEnabled(entry) ? 'bg-emerald-400/15 text-emerald-300' : 'bg-slate-400/10 text-slate-400'" x-text="isGlobalPresetEntryEnabled(entry) ? '启用' : '停用'"></span>
+                            </summary>
+                            <div class="border-t border-white/10 p-4 space-y-4">
+                              <template x-if="globalPresetKind === 'prompt'">
+                                <div class="space-y-4">
+                                  <div class="flex gap-4 flex-wrap text-xs text-slate-300">
+                                    <label class="flex items-center gap-2"><input type="checkbox" x-model="entry.in_order" class="accent-violet-500">进入顺序表</label>
+                                    <label class="flex items-center gap-2"><input type="checkbox" x-model="entry.order_enabled" class="accent-emerald-500">顺序项启用</label>
+                                    <label class="flex items-center gap-2"><input type="checkbox" x-model="entry.enabled" class="accent-emerald-500">定义 enabled</label>
+                                    <label class="flex items-center gap-2"><input type="checkbox" x-model="entry.marker" class="accent-amber-500">Marker</label>
+                                    <label class="flex items-center gap-2"><input type="checkbox" x-model="entry.system_prompt" class="accent-sky-500">System Prompt</label>
+                                    <label class="flex items-center gap-2"><input type="checkbox" x-model="entry.forbid_overrides" class="accent-red-500">禁止覆盖</label>
+                                    <label class="flex items-center gap-2"><input type="checkbox" x-model="entry.user_toggleable" class="accent-fuchsia-500">向用户显示并允许开关</label>
+                                  </div>
+                                  <div class="rounded-lg border border-fuchsia-400/20 bg-fuchsia-400/5 px-3 py-2 text-xs text-fuchsia-100/80">默认不向用户公开。即使勾选，Marker、空正文、未进顺序表或“禁止覆盖”的条目也只会以锁定状态显示。</div>
+                                  <div class="grid md:grid-cols-2 gap-3">
+                                    <div><label class="xy-label">名称</label><input class="xy-input" x-model="entry.name"></div>
+                                    <div><label class="xy-label">Identifier</label><input class="xy-input" x-model="entry.identifier"></div>
+                                  </div>
+                                  <div class="grid sm:grid-cols-4 gap-3">
+                                    <div><label class="xy-label">Role</label><select class="xy-input" x-model="entry.role"><option value="system">system</option><option value="user">user</option><option value="assistant">assistant</option><option value="">空</option></select></div>
+                                    <div><label class="xy-label">顺序</label><input type="number" class="xy-input" x-model.number="entry.order"></div>
+                                    <div><label class="xy-label">Injection Position</label><input type="number" class="xy-input" x-model.number="entry.injection_position"></div>
+                                    <div><label class="xy-label">Injection Depth</label><input type="number" class="xy-input" x-model.number="entry.injection_depth"></div>
+                                  </div>
+                                  <div><label class="xy-label">完整正文</label><textarea class="xy-input text-xs font-mono" style="min-height:180px" x-model="entry.content"></textarea></div>
+                                </div>
+                              </template>
+                              <template x-if="globalPresetKind === 'regex'">
+                                <div class="space-y-4">
+                                  <div class="flex gap-4 flex-wrap text-xs text-slate-300">
+                                    <label class="flex items-center gap-2"><input type="checkbox" x-model="entry.disabled" class="accent-slate-500">停用</label>
+                                    <label class="flex items-center gap-2"><input type="checkbox" x-model="entry.markdownOnly" class="accent-violet-500">Markdown Only</label>
+                                    <label class="flex items-center gap-2"><input type="checkbox" x-model="entry.promptOnly" class="accent-sky-500">Prompt Only</label>
+                                    <label class="flex items-center gap-2"><input type="checkbox" x-model="entry.runOnEdit" class="accent-amber-500">Run On Edit</label>
+                                  </div>
+                                  <div class="grid md:grid-cols-2 gap-3">
+                                    <div><label class="xy-label">脚本名称</label><input class="xy-input" x-model="entry.scriptName"></div>
+                                    <div><label class="xy-label">脚本 ID</label><input class="xy-input" x-model="entry.id"></div>
+                                  </div>
+                                  <div class="grid sm:grid-cols-4 gap-3">
+                                    <div><label class="xy-label">顺序</label><input type="number" class="xy-input" x-model.number="entry.order"></div>
+                                    <div><label class="xy-label">Placement（JSON）</label><input class="xy-input" :value="JSON.stringify(entry.placement || [])" @change="parseGlobalArrayField(entry, 'placement', $event.target.value, 'Placement')"></div>
+                                    <div><label class="xy-label">Min Depth</label><input type="number" class="xy-input" x-model.number="entry.minDepth"></div>
+                                    <div><label class="xy-label">Max Depth</label><input type="number" class="xy-input" x-model.number="entry.maxDepth"></div>
+                                  </div>
+                                  <div><label class="xy-label">Find Regex</label><textarea class="xy-input text-xs font-mono" style="min-height:100px" x-model="entry.findRegex"></textarea></div>
+                                  <div><label class="xy-label">Replace String</label><textarea class="xy-input text-xs font-mono" style="min-height:220px" x-model="entry.replaceString"></textarea></div>
+                                  <div><label class="xy-label">Trim Strings（JSON）</label><textarea class="xy-input text-xs font-mono" style="min-height:80px" :value="JSON.stringify(entry.trimStrings || [], null, 2)" @change="parseGlobalArrayField(entry, 'trimStrings', $event.target.value, 'Trim Strings')"></textarea></div>
+                                </div>
+                              </template>
+                              <details class="rounded-lg border border-white/10 bg-black/20 p-3">
+                                <summary class="cursor-pointer text-xs text-slate-300">完整条目 JSON（保留未知字段）</summary>
+                                <textarea class="xy-input text-xs font-mono mt-3" style="min-height:240px" x-model="entry._raw_json"></textarea>
+                                <button type="button" class="xy-btn xy-btn-ghost text-xs mt-2" @click="applyGlobalEntryJson(entry)">应用条目 JSON</button>
+                              </details>
+                            </div>
+                          </details>
+                        </template>
+                      </div>
+                    </div>
+
+                    <details class="xy-glass p-4">
+                      <summary class="cursor-pointer text-sm font-medium">完整预设 JSON（高级编辑）</summary>
+                      <textarea class="xy-input text-xs font-mono mt-3" style="min-height:320px" x-model="globalPresetEditor._preset_json"></textarea>
+                      <button type="button" class="xy-btn xy-btn-ghost text-xs mt-2" @click="applyGlobalPresetJson">应用完整预设 JSON</button>
+                    </details>
+                  </div>
+                </template>
+              </section>
+            </div>
+          </div>
+
+          <!-- 运营配置 -->
+          <div x-show="activeTab === 'site'">
+            <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+              <div>
+                <h1 class="text-2xl font-bold xy-gradient-text">运营配置</h1>
+                <p class="text-sm text-slate-400 mt-1">编辑官网、App 公告、奖励和购买兑换展示内容</p>
+              </div>
+              <div class="flex items-center gap-2">
+                <button @click="loadSiteSettings" class="xy-btn xy-btn-ghost text-sm" :disabled="loading">刷新</button>
+                <button @click="saveSiteSettings" class="xy-btn xy-btn-primary text-sm" :disabled="loading || !siteForm">
+                  <span x-show="!loading">保存配置</span>
+                  <span x-show="loading" class="xy-loading"></span>
+                </button>
+              </div>
+            </div>
+
+            <template x-if="!siteForm">
+              <div class="xy-glass p-8 text-sm text-slate-400">正在加载运营配置...</div>
+            </template>
+
+            <template x-if="siteForm">
+              <form class="space-y-6" @submit.prevent="saveSiteSettings">
+                <section class="xy-glass p-6">
+                  <div class="flex items-center justify-between gap-3 mb-5">
+                    <div>
+                      <h2 class="font-semibold text-white">官网首页</h2>
+                      <p class="text-xs text-slate-500 mt-1">首页首屏、预览区、下载区和页脚文案</p>
+                    </div>
+                    <a href="/" target="_blank" class="xy-link text-sm">打开首页 →</a>
+                  </div>
+                  <div class="grid md:grid-cols-2 gap-4">
+                    <div>
+                      <label class="xy-label">顶部副标语</label>
+                      <input class="xy-input" x-model="siteForm.home.nav_tagline" maxlength="80">
+                    </div>
+                    <div>
+                      <label class="xy-label">运行状态文案</label>
+                      <input class="xy-input" x-model="siteForm.home.status_text" maxlength="120">
+                    </div>
+                    <div>
+                      <label class="xy-label">首屏标题</label>
+                      <input class="xy-input" x-model="siteForm.home.hero_title" maxlength="80">
+                    </div>
+                    <div>
+                      <label class="xy-label">首屏副标题</label>
+                      <input class="xy-input" x-model="siteForm.home.hero_subtitle" maxlength="140">
+                    </div>
+                    <div>
+                      <label class="xy-label">首屏第二行说明</label>
+                      <input class="xy-input" x-model="siteForm.home.hero_secondary" maxlength="120">
+                    </div>
+                    <div>
+                      <label class="xy-label">信任栏文案</label>
+                      <input class="xy-input" x-model="siteForm.home.trust_text" maxlength="160">
+                    </div>
+                    <div>
+                      <label class="xy-label">主按钮文案</label>
+                      <input class="xy-input" x-model="siteForm.home.primary_cta_text" maxlength="30">
+                    </div>
+                    <div>
+                      <label class="xy-label">主按钮链接</label>
+                      <input class="xy-input" x-model="siteForm.home.primary_cta_href" placeholder="#download 或 https://...">
+                    </div>
+                    <div>
+                      <label class="xy-label">副按钮文案</label>
+                      <input class="xy-input" x-model="siteForm.home.secondary_cta_text" maxlength="30">
+                    </div>
+                    <div>
+                      <label class="xy-label">副按钮链接</label>
+                      <input class="xy-input" x-model="siteForm.home.secondary_cta_href" placeholder="/app/login.html?next=%2Fapp%2F">
+                    </div>
+                    <div>
+                      <label class="xy-label">预览区标题</label>
+                      <input class="xy-input" x-model="siteForm.home.preview_title" maxlength="80">
+                    </div>
+                    <div>
+                      <label class="xy-label">预览区说明</label>
+                      <input class="xy-input" x-model="siteForm.home.preview_subtitle" maxlength="160">
+                    </div>
+                    <div>
+                      <label class="xy-label">下载区标题</label>
+                      <input class="xy-input" x-model="siteForm.home.download_title" maxlength="80">
+                    </div>
+                    <div>
+                      <label class="xy-label">下载区说明</label>
+                      <input class="xy-input" x-model="siteForm.home.download_subtitle" maxlength="120">
+                    </div>
+                    <div>
+                      <label class="xy-label">下载按钮文案</label>
+                      <input class="xy-input" x-model="siteForm.home.download_button_text" maxlength="30">
+                    </div>
+                    <div>
+                      <label class="xy-label">页脚服务文案</label>
+                      <input class="xy-input" x-model="siteForm.home.footer_service_text" maxlength="120">
+                    </div>
+                  </div>
+                </section>
+
+                <section class="xy-glass p-6">
+                  <div class="flex items-center justify-between gap-3 mb-5">
+                    <div>
+                      <h2 class="font-semibold text-white">登录 / 注册</h2>
+                      <p class="text-xs text-slate-500 mt-1">管理 `/app/login.html` 和用户中心未登录面板的按钮、提示和标题</p>
+                    </div>
+                    <a href="/app/login.html" target="_blank" class="xy-link text-sm">打开登录页 →</a>
+                  </div>
+                  <div class="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
+                    <template x-for="item in authCopyItems" :key="item.key">
+                      <div>
+                        <label class="xy-label" x-text="item.label"></label>
+                        <input class="xy-input" x-model="siteForm.auth[item.key]" :maxlength="item.max">
+                      </div>
+                    </template>
+                  </div>
+                </section>
+
+                <section class="xy-glass p-6">
+                  <div class="flex items-center justify-between gap-3 mb-5">
+                    <div>
+                      <h2 class="font-semibold text-white">App 导航标签</h2>
+                      <p class="text-xs text-slate-500 mt-1">管理 Web App 桌面侧栏和移动底栏的菜单名称</p>
+                    </div>
+                    <a href="/app/" target="_blank" class="xy-link text-sm">打开 App →</a>
+                  </div>
+                  <div class="grid xl:grid-cols-2 gap-6">
+                    <div>
+                      <h3 class="text-sm font-semibold text-slate-200 mb-3">桌面侧栏</h3>
+                      <div class="grid md:grid-cols-2 gap-3">
+                        <template x-for="item in navLabelItems" :key="item.key">
+                          <div>
+                            <label class="xy-label" x-text="item.label"></label>
+                            <input class="xy-input" x-model="siteForm.app.nav_labels[item.key]" maxlength="24">
+                          </div>
+                        </template>
+                      </div>
+                    </div>
+                    <div>
+                      <h3 class="text-sm font-semibold text-slate-200 mb-3">移动底栏</h3>
+                      <div class="grid md:grid-cols-2 gap-3">
+                        <template x-for="item in mobileNavLabelItems" :key="item.key">
+                          <div>
+                            <label class="xy-label" x-text="item.label"></label>
+                            <input class="xy-input" x-model="siteForm.app.mobile_nav_labels[item.key]" maxlength="12">
+                          </div>
+                        </template>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="mt-6">
+                    <h3 class="text-sm font-semibold text-slate-200 mb-3">用户卡</h3>
+                    <div class="grid md:grid-cols-3 gap-3">
+                      <template x-for="item in appShellCopyItems" :key="item.key">
+                        <div>
+                          <label class="xy-label" x-text="item.label"></label>
+                          <input class="xy-input" x-model="siteForm.app[item.key]" :maxlength="item.max">
+                        </div>
+                      </template>
+                    </div>
+                  </div>
+                </section>
+
+                <section class="xy-glass p-6">
+                  <div class="flex items-center justify-between gap-3 mb-5">
+                    <div>
+                      <h2 class="font-semibold text-white">App 首页 / 探索</h2>
+                      <p class="text-xs text-slate-500 mt-1">管理首页标题、搜索、筛选、排序、卡片兜底和加载按钮</p>
+                    </div>
+                    <a href="/app/" target="_blank" class="xy-link text-sm">打开首页 →</a>
+                  </div>
+                  <div class="grid md:grid-cols-2 xl:grid-cols-3 gap-4 mb-6">
+                    <template x-for="item in appHomeCopyItems" :key="item.key">
+                      <div>
+                        <label class="xy-label" x-text="item.label"></label>
+                        <input class="xy-input" x-model="siteForm.app_home[item.key]" :maxlength="item.max">
+                      </div>
+                    </template>
+                  </div>
+                  <div class="grid xl:grid-cols-3 gap-6">
+                    <div>
+                      <h3 class="text-sm font-semibold text-slate-200 mb-3">分类标签</h3>
+                      <div class="grid md:grid-cols-2 xl:grid-cols-1 gap-3">
+                        <template x-for="item in appHomeCategoryItems" :key="item.key">
+                          <div>
+                            <label class="xy-label" x-text="item.label"></label>
+                            <input class="xy-input" x-model="siteForm.app_home.category_labels[item.key]" maxlength="30">
+                          </div>
+                        </template>
+                      </div>
+                    </div>
+                    <div>
+                      <h3 class="text-sm font-semibold text-slate-200 mb-3">榜单标签</h3>
+                      <div class="grid md:grid-cols-2 xl:grid-cols-1 gap-3">
+                        <template x-for="item in appHomeRankItems" :key="item.key">
+                          <div>
+                            <label class="xy-label" x-text="item.label"></label>
+                            <input class="xy-input" x-model="siteForm.app_home.rank_labels[item.key]" maxlength="30">
+                          </div>
+                        </template>
+                      </div>
+                    </div>
+                    <div>
+                      <h3 class="text-sm font-semibold text-slate-200 mb-3">排序标签</h3>
+                      <div class="grid md:grid-cols-2 xl:grid-cols-1 gap-3">
+                        <template x-for="item in appHomeSortItems" :key="item.key">
+                          <div>
+                            <label class="xy-label" x-text="item.label"></label>
+                            <input class="xy-input" x-model="siteForm.app_home.sort_labels[item.key]" maxlength="30">
+                          </div>
+                        </template>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                <section class="xy-glass p-6">
+                  <div class="flex items-center justify-between gap-3 mb-5">
+                    <div>
+                      <h2 class="font-semibold text-white">用户中心 / 我的页</h2>
+                      <p class="text-xs text-slate-500 mt-1">余额、农场入口、账户信息、人设与模型连接器说明</p>
+                    </div>
+                    <div class="flex gap-3 text-sm">
+                      <a href="/dashboard.html" target="_blank" class="xy-link">用户中心 →</a>
+                      <a href="/app/me.html" target="_blank" class="xy-link">我的页 →</a>
+                    </div>
+                  </div>
+                  <div class="grid xl:grid-cols-2 gap-6">
+                    <div>
+                      <h3 class="text-sm font-semibold text-slate-200 mb-3">用户中心通用文案</h3>
+                      <div class="grid md:grid-cols-2 gap-3">
+                        <template x-for="item in dashboardCopyItems" :key="item.key">
+                          <div>
+                            <label class="xy-label" x-text="item.label"></label>
+                            <input class="xy-input" x-model="siteForm.dashboard[item.key]" :maxlength="item.max">
+                          </div>
+                        </template>
+                      </div>
+                    </div>
+                    <div>
+                      <h3 class="text-sm font-semibold text-slate-200 mb-3">我的页文案</h3>
+                      <div class="grid md:grid-cols-2 gap-3">
+                        <template x-for="item in accountCopyItems" :key="item.key">
+                          <div>
+                            <label class="xy-label" x-text="item.label"></label>
+                            <input class="xy-input" x-model="siteForm.account[item.key]" :maxlength="item.max">
+                          </div>
+                        </template>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                <section class="xy-glass p-6">
+                  <div class="flex items-center justify-between gap-3 mb-5">
+                    <div>
+                      <h2 class="font-semibold text-white">我的角色管理</h2>
+                      <p class="text-xs text-slate-500 mt-1">管理用户自建角色列表、卡片按钮、编辑弹窗和保存/删除提示</p>
+                    </div>
+                    <a href="/app/my-apps.html" target="_blank" class="xy-link text-sm">打开我的角色 →</a>
+                  </div>
+                  <div class="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
+                    <template x-for="item in myAppsCopyItems" :key="item.key">
+                      <div>
+                        <label class="xy-label" x-text="item.label"></label>
+                        <input class="xy-input" x-model="siteForm.my_apps[item.key]" :maxlength="item.max">
+                      </div>
+                    </template>
+                  </div>
+                </section>
+
+                <section class="xy-glass p-6">
+                  <div class="flex items-center justify-between gap-3 mb-5">
+                    <div>
+                      <h2 class="font-semibold text-white">空状态 / 工作台 / 图片聊天</h2>
+                      <p class="text-xs text-slate-500 mt-1">管理主要 App 页面无数据提示、工作台介绍和图片聊天占位说明</p>
+                    </div>
+                  </div>
+                  <div class="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
+                    <template x-for="item in emptyStateItems" :key="item.key">
+                      <div>
+                        <label class="xy-label" x-text="item.label"></label>
+                        <input class="xy-input" x-model="siteForm.empty_states[item.key]" :maxlength="item.max">
+                      </div>
+                    </template>
+                  </div>
+                </section>
+
+                <section class="xy-glass p-6">
+                  <div class="flex items-center justify-between gap-3 mb-5">
+                    <div>
+                      <h2 class="font-semibold text-white">角色详情 / 聊天页</h2>
+                      <p class="text-xs text-slate-500 mt-1">管理角色详情页、聊天页、记忆抽屉、消息操作和确认提示</p>
+                    </div>
+                    <div class="flex gap-3 text-sm">
+                      <a href="/app/character.html" target="_blank" class="xy-link">角色详情 →</a>
+                      <a href="/app/chat.html" target="_blank" class="xy-link">聊天页 →</a>
+                    </div>
+                  </div>
+                  <div class="grid xl:grid-cols-2 gap-6">
+                    <div>
+                      <h3 class="text-sm font-semibold text-slate-200 mb-3">角色详情页</h3>
+                      <div class="grid md:grid-cols-2 gap-3">
+                        <template x-for="item in characterCopyItems" :key="item.key">
+                          <div>
+                            <label class="xy-label" x-text="item.label"></label>
+                            <input class="xy-input" x-model="siteForm.character[item.key]" :maxlength="item.max">
+                          </div>
+                        </template>
+                      </div>
+                    </div>
+                    <div>
+                      <h3 class="text-sm font-semibold text-slate-200 mb-3">聊天页</h3>
+                      <div class="grid md:grid-cols-2 gap-3">
+                        <template x-for="item in chatCopyItems" :key="item.key">
+                          <div>
+                            <label class="xy-label" x-text="item.label"></label>
+                            <input class="xy-input" x-model="siteForm.chat[item.key]" :maxlength="item.max">
+                          </div>
+                        </template>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                <section class="xy-glass p-6">
+                  <div class="flex items-center justify-between gap-3 mb-5">
+                    <div>
+                      <h2 class="font-semibold text-white">角色编辑器</h2>
+                      <p class="text-xs text-slate-500 mt-1">管理 `/app/create.html` 的工具栏、字段、提示词、世界书、模型和占位提示</p>
+                    </div>
+                    <a href="/app/create.html" target="_blank" class="xy-link text-sm">打开编辑器 →</a>
+                  </div>
+                  <div class="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
+                    <template x-for="item in creatorCopyItems" :key="item.key">
+                      <div>
+                        <label class="xy-label" x-text="item.label"></label>
+                        <input class="xy-input" x-model="siteForm.creator[item.key]" :maxlength="item.max">
+                      </div>
+                    </template>
+                  </div>
+                  <div class="mt-6">
+                    <h3 class="text-sm font-semibold text-slate-200 mb-3">高级编辑控件</h3>
+                    <div class="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
+                      <template x-for="item in creatorAdvancedCopyItems" :key="item.key">
+                        <div>
+                          <label class="xy-label" x-text="item.label"></label>
+                          <input class="xy-input" x-model="siteForm.creator[item.key]" :maxlength="item.max">
+                        </div>
+                      </template>
+                    </div>
+                  </div>
+                </section>
+
+                <section class="xy-glass p-6">
+                  <div class="flex items-center justify-between gap-3 mb-5">
+                    <div>
+                      <h2 class="font-semibold text-white">群聊页</h2>
+                      <p class="text-xs text-slate-500 mt-1">管理群聊列表、创建面板、输入框、toast 和确认提示</p>
+                    </div>
+                    <a href="/app/group-chat.html" target="_blank" class="xy-link text-sm">打开群聊 →</a>
+                  </div>
+                  <div class="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
+                    <template x-for="item in groupChatCopyItems" :key="item.key">
+                      <div>
+                        <label class="xy-label" x-text="item.label"></label>
+                        <input class="xy-input" x-model="siteForm.group_chat[item.key]" :maxlength="item.max">
+                      </div>
+                    </template>
+                  </div>
+                </section>
+
+                <section class="xy-glass p-6">
+                  <div class="flex items-center justify-between gap-3 mb-5">
+                    <div>
+                      <h2 class="font-semibold text-white">首页功能卡片</h2>
+                      <p class="text-xs text-slate-500 mt-1">管理官网“核心功能”区域的标题、说明和卡片文案</p>
+                    </div>
+                    <button type="button" @click="addFeatureCard" class="xy-btn xy-btn-ghost text-sm">添加功能卡片</button>
+                  </div>
+                  <div class="grid md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                      <label class="xy-label">功能区标题</label>
+                      <input class="xy-input" x-model="siteForm.home.features_title" maxlength="60">
+                    </div>
+                    <div>
+                      <label class="xy-label">功能区说明</label>
+                      <input class="xy-input" x-model="siteForm.home.features_subtitle" maxlength="160">
+                    </div>
+                  </div>
+                  <div class="grid lg:grid-cols-2 gap-3">
+                    <template x-for="(card, idx) in siteForm.home.feature_cards" :key="idx">
+                      <div class="rounded-xl border border-white/10 bg-white/5 p-4 space-y-3">
+                        <div class="flex items-center justify-between gap-3">
+                          <div class="text-sm font-semibold text-slate-200">功能卡片 <span x-text="idx + 1"></span></div>
+                          <button type="button" @click="removeFeatureCard(idx)" class="text-red-300 hover:text-red-200 text-xs">删除</button>
+                        </div>
+                        <div>
+                          <label class="xy-label">标题</label>
+                          <input class="xy-input" x-model="card.title" maxlength="40">
+                        </div>
+                        <div>
+                          <label class="xy-label">描述</label>
+                          <textarea class="xy-input min-h-20" x-model="card.description" maxlength="180"></textarea>
+                        </div>
+                      </div>
+                    </template>
+                  </div>
+                </section>
+
+                <section class="xy-glass p-6">
+                  <div class="grid xl:grid-cols-[360px_1fr] gap-6">
+                    <div>
+                      <div class="flex items-center justify-between gap-3 mb-4">
+                        <div>
+                          <h2 class="font-semibold text-white">下载信息</h2>
+                          <p class="text-xs text-slate-500 mt-1">版本、系统要求、架构、语言等展示项</p>
+                        </div>
+                        <button type="button" @click="addDownloadFact" class="text-violet-300 hover:text-white text-xs">添加</button>
+                      </div>
+                      <div class="space-y-3">
+                        <template x-for="(fact, idx) in siteForm.home.download_facts" :key="idx">
+                          <div class="rounded-xl border border-white/10 bg-white/5 p-3 grid grid-cols-[1fr_1fr_auto] gap-2 items-end">
+                            <div>
+                              <label class="xy-label">标签</label>
+                              <input class="xy-input text-sm" x-model="fact.label" maxlength="24">
+                            </div>
+                            <div>
+                              <label class="xy-label">内容</label>
+                              <input class="xy-input text-sm" x-model="fact.value" maxlength="60">
+                            </div>
+                            <button type="button" @click="removeDownloadFact(idx)" class="text-red-300 hover:text-red-200 text-xs mb-3">删除</button>
+                          </div>
+                        </template>
+                      </div>
+                      <div class="mt-4">
+                        <label class="xy-label">安装提示</label>
+                        <textarea class="xy-input min-h-24" x-model="siteForm.home.download_note" maxlength="240"></textarea>
+                      </div>
+                    </div>
+
+                    <div>
+                      <div class="flex items-center justify-between gap-3 mb-4">
+                        <div>
+                          <h2 class="font-semibold text-white">常见问题</h2>
+                          <p class="text-xs text-slate-500 mt-1">官网 FAQ 问题和回答，前台按顺序展示</p>
+                        </div>
+                        <button type="button" @click="addFaqItem" class="xy-btn xy-btn-ghost text-sm">添加 FAQ</button>
+                      </div>
+                      <div class="mb-4">
+                        <label class="xy-label">FAQ 标题</label>
+                        <input class="xy-input" x-model="siteForm.home.faq_title" maxlength="60">
+                      </div>
+                      <div class="space-y-3">
+                        <template x-for="(faq, idx) in siteForm.home.faq_items" :key="idx">
+                          <div class="rounded-xl border border-white/10 bg-white/5 p-4 space-y-3">
+                            <div class="flex items-center justify-between gap-3">
+                              <div class="text-sm font-semibold text-slate-200">FAQ <span x-text="idx + 1"></span></div>
+                              <button type="button" @click="removeFaqItem(idx)" class="text-red-300 hover:text-red-200 text-xs">删除</button>
+                            </div>
+                            <div>
+                              <label class="xy-label">问题</label>
+                              <input class="xy-input" x-model="faq.q" maxlength="90">
+                            </div>
+                            <div>
+                              <label class="xy-label">回答</label>
+                              <textarea class="xy-input min-h-20" x-model="faq.a" maxlength="320"></textarea>
+                            </div>
+                          </div>
+                        </template>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                <section class="xy-glass p-6">
+                  <div class="flex items-center justify-between gap-3 mb-5">
+                    <div>
+                      <h2 class="font-semibold text-white">App 公告</h2>
+                      <p class="text-xs text-slate-500 mt-1">开启后显示在 `/app` 页面主内容顶部</p>
+                    </div>
+                    <label class="flex items-center gap-2 text-sm text-slate-300">
+                      <input type="checkbox" x-model="siteForm.app.announcement_enabled" class="accent-violet-500">
+                      启用公告
+                    </label>
+                  </div>
+                  <div class="grid md:grid-cols-2 gap-4">
+                    <div>
+                      <label class="xy-label">公告标题</label>
+                      <input class="xy-input" x-model="siteForm.app.announcement_title" maxlength="60">
+                    </div>
+                    <div>
+                      <label class="xy-label">链接文案</label>
+                      <input class="xy-input" x-model="siteForm.app.announcement_link_text" maxlength="30" placeholder="例如：查看详情">
+                    </div>
+                    <div class="md:col-span-2">
+                      <label class="xy-label">公告正文</label>
+                      <textarea class="xy-input min-h-24" x-model="siteForm.app.announcement_text" maxlength="300"></textarea>
+                    </div>
+                    <div class="md:col-span-2">
+                      <label class="xy-label">公告链接</label>
+                      <input class="xy-input" x-model="siteForm.app.announcement_link_href" placeholder="/app/info.html 或 https://...">
+                    </div>
+                  </div>
+                </section>
+
+                <section class="xy-glass p-6">
+                  <div class="flex items-center justify-between gap-3 mb-5">
+                    <div>
+                      <h2 class="font-semibold text-white">App 信息中心</h2>
+                      <p class="text-xs text-slate-500 mt-1">编辑 `/app/info.html` 的说明文案和统计标签</p>
+                    </div>
+                    <a href="/app/info.html" target="_blank" class="xy-link text-sm">打开信息中心 →</a>
+                  </div>
+                  <div class="grid md:grid-cols-2 gap-4">
+                    <div>
+                      <label class="xy-label">顶部标题</label>
+                      <input class="xy-input" x-model="siteForm.app.info_topbar_title" maxlength="40">
+                    </div>
+                    <div>
+                      <label class="xy-label">下载按钮文案</label>
+                      <input class="xy-input" x-model="siteForm.app.info_download_button_text" maxlength="30">
+                    </div>
+                    <div>
+                      <label class="xy-label">眉标</label>
+                      <input class="xy-input" x-model="siteForm.app.info_eyebrow" maxlength="80">
+                    </div>
+                    <div>
+                      <label class="xy-label">主标题</label>
+                      <textarea class="xy-input min-h-20" x-model="siteForm.app.info_title" maxlength="100"></textarea>
+                    </div>
+                    <div class="md:col-span-2">
+                      <label class="xy-label">说明文案</label>
+                      <textarea class="xy-input min-h-24" x-model="siteForm.app.info_copy" maxlength="220"></textarea>
+                    </div>
+                    <div>
+                      <label class="xy-label">统计标签：上游角色</label>
+                      <input class="xy-input" x-model="siteForm.app.info_stat_upstream_label" maxlength="30">
+                    </div>
+                    <div>
+                      <label class="xy-label">统计标签：用户角色</label>
+                      <input class="xy-input" x-model="siteForm.app.info_stat_user_label" maxlength="30">
+                    </div>
+                    <div>
+                      <label class="xy-label">统计标签：收藏</label>
+                      <input class="xy-input" x-model="siteForm.app.info_stat_favorites_label" maxlength="30">
+                    </div>
+                    <div>
+                      <label class="xy-label">统计标签：会话</label>
+                      <input class="xy-input" x-model="siteForm.app.info_stat_conversations_label" maxlength="30">
+                    </div>
+                  </div>
+                </section>
+
+                <section class="xy-glass p-6">
+                  <div class="flex items-center justify-between gap-3 mb-5">
+                    <div>
+                      <h2 class="font-semibold text-white">农场每日奖励</h2>
+                      <p class="text-xs text-slate-500 mt-1">每日首次有效收获奖励；同时兼容旧版 APK 签到接口，共享每日唯一领取记录</p>
+                    </div>
+                    <button type="button" @click="addRewardTask" class="xy-btn xy-btn-ghost text-sm">添加任务</button>
+                  </div>
+                  <div class="grid md:grid-cols-3 gap-4 mb-4">
+                    <div>
+                      <label class="xy-label">每日首次收获惑梦币</label>
+                      <input type="number" min="1" max="100000" class="xy-input" x-model.number="siteForm.rewards.daily_points">
+                    </div>
+                    <div>
+                      <label class="xy-label">奖励区标题</label>
+                      <input class="xy-input" x-model="siteForm.rewards.daily_title" maxlength="60">
+                    </div>
+                    <div>
+                      <label class="xy-label">奖励区说明</label>
+                      <input class="xy-input" x-model="siteForm.rewards.daily_description" maxlength="160">
+                    </div>
+                  </div>
+                  <div class="grid md:grid-cols-2 xl:grid-cols-3 gap-4 mb-5">
+                    <template x-for="item in rewardsCopyItems" :key="item.key">
+                      <div>
+                        <label class="xy-label" x-text="item.label"></label>
+                        <input class="xy-input" x-model="siteForm.rewards[item.key]" :maxlength="item.max">
+                      </div>
+                    </template>
+                  </div>
+                  <div class="space-y-3">
+                    <template x-for="(task, idx) in siteForm.rewards.tasks" :key="task.key || idx">
+                      <div class="rounded-xl border border-white/10 bg-white/5 p-4 grid md:grid-cols-[1fr_1.6fr_120px_150px_auto] gap-3 items-end">
+                        <div>
+                          <label class="xy-label">Key</label>
+                          <input class="xy-input" x-model="task.key" maxlength="40">
+                        </div>
+                        <div>
+                          <label class="xy-label">任务文案</label>
+                          <input class="xy-input" x-model="task.label" maxlength="80">
+                        </div>
+                        <div>
+                          <label class="xy-label">积分</label>
+                          <input type="number" min="0" max="100000" class="xy-input" x-model.number="task.points">
+                        </div>
+                        <div>
+                          <label class="xy-label">状态</label>
+                          <input class="xy-input" x-model="task.status" maxlength="30">
+                        </div>
+                        <button type="button" @click="removeRewardTask(idx)" class="text-red-300 hover:text-red-200 text-sm mb-3">删除</button>
+                      </div>
+                    </template>
+                  </div>
+                </section>
+
+                <section class="xy-glass p-6">
+                  <div class="flex items-center justify-between gap-3 mb-5">
+                    <div>
+                      <h2 class="font-semibold text-white">购买与兑换</h2>
+                      <p class="text-xs text-slate-500 mt-1">控制爱发电跳转、兑换说明和推荐套餐</p>
+                    </div>
+                    <button type="button" @click="addDepositPackage" class="xy-btn xy-btn-ghost text-sm">添加套餐</button>
+                  </div>
+                  <div class="grid md:grid-cols-2 gap-4 mb-5">
+                    <div class="md:col-span-2">
+                      <label class="xy-label">爱发电/购买链接</label>
+                      <input class="xy-input" x-model="siteForm.deposit.aifadian_url" placeholder="https://afdian.com/a/...">
+                    </div>
+                    <div>
+                      <label class="xy-label">货币</label>
+                      <input class="xy-input" x-model="siteForm.deposit.currency" maxlength="12">
+                    </div>
+                    <div>
+                      <label class="xy-label">额度名称</label>
+                      <input class="xy-input" x-model="siteForm.deposit.credits_name" maxlength="20">
+                    </div>
+                    <div class="md:col-span-2">
+                      <label class="xy-label">汇率说明</label>
+                      <input class="xy-input" x-model="siteForm.deposit.rate_label" maxlength="120">
+                    </div>
+                    <template x-for="item in depositDisplayItems" :key="item.key">
+                      <div>
+                        <label class="xy-label" x-text="item.label"></label>
+                        <input class="xy-input" x-model="siteForm.deposit[item.key]" :maxlength="item.max">
+                      </div>
+                    </template>
+                    <div class="md:col-span-2">
+                      <label class="xy-label">支持说明</label>
+                      <input class="xy-input" x-model="siteForm.deposit.support_text" maxlength="160">
+                    </div>
+                    <div>
+                      <label class="xy-label">订阅区标题</label>
+                      <input class="xy-input" x-model="siteForm.deposit.subscriptions_title" maxlength="60">
+                    </div>
+                    <div>
+                      <label class="xy-label">订阅区说明</label>
+                      <input class="xy-input" x-model="siteForm.deposit.subscriptions_note" maxlength="180">
+                    </div>
+                    <div>
+                      <label class="xy-label">已配置购买链接时的提示</label>
+                      <textarea class="xy-input min-h-20" x-model="siteForm.deposit.payment_note_available" maxlength="160"></textarea>
+                    </div>
+                    <div>
+                      <label class="xy-label">未配置购买链接时的提示</label>
+                      <textarea class="xy-input min-h-20" x-model="siteForm.deposit.payment_note_unavailable" maxlength="160"></textarea>
+                    </div>
+                  </div>
+
+                  <div class="grid xl:grid-cols-[360px_1fr] gap-5">
+                    <div class="rounded-xl border border-white/10 bg-white/5 p-4">
+                      <div class="flex items-center justify-between mb-3">
+                        <h3 class="text-sm font-semibold text-white">兑换步骤</h3>
+                        <button type="button" @click="addDepositStep" class="text-violet-300 hover:text-white text-xs">添加步骤</button>
+                      </div>
+                      <div class="space-y-2">
+                        <template x-for="(step, idx) in siteForm.deposit.steps" :key="idx">
+                          <div class="flex gap-2">
+                            <input class="xy-input text-sm" x-model="siteForm.deposit.steps[idx]" maxlength="80">
+                            <button type="button" @click="removeDepositStep(idx)" class="text-red-300 hover:text-red-200 text-xs shrink-0">删除</button>
+                          </div>
+                        </template>
+                      </div>
+                    </div>
+
+                    <div class="space-y-3">
+                      <template x-for="(pkg, idx) in siteForm.deposit.packages" :key="pkg.id || idx">
+                        <div class="rounded-xl border border-white/10 bg-white/5 p-4 grid md:grid-cols-[1fr_1.2fr_120px_150px_120px_auto] gap-3 items-end">
+                          <div>
+                            <label class="xy-label">ID</label>
+                            <input class="xy-input" x-model="pkg.id" maxlength="40">
+                          </div>
+                          <div>
+                            <label class="xy-label">套餐名</label>
+                            <input class="xy-input" x-model="pkg.label" maxlength="40">
+                          </div>
+                          <div>
+                            <label class="xy-label">价格</label>
+                            <input type="number" min="0" class="xy-input" x-model.number="pkg.price_cny">
+                          </div>
+                          <div>
+                            <label class="xy-label">惑梦币</label>
+                            <input type="number" min="1" class="xy-input" x-model.number="pkg.points">
+                          </div>
+                          <div>
+                            <label class="xy-label">奖励%</label>
+                            <input type="number" min="0" max="1000" class="xy-input" x-model.number="pkg.bonus_rate">
+                          </div>
+                          <button type="button" @click="removeDepositPackage(idx)" class="text-red-300 hover:text-red-200 text-sm mb-3">删除</button>
+                        </div>
+                      </template>
+                    </div>
+                  </div>
+
+                  <div class="mt-5 rounded-xl border border-white/10 bg-white/5 p-4">
+                    <div class="flex items-center justify-between gap-3 mb-3">
+                      <h3 class="text-sm font-semibold text-white">月度订阅档位</h3>
+                      <button type="button" @click="addDepositSubscription" class="text-violet-300 hover:text-white text-xs">添加订阅</button>
+                    </div>
+                    <div class="space-y-3">
+                      <template x-for="(sub, idx) in siteForm.deposit.subscriptions" :key="sub.id || idx">
+                        <div class="rounded-xl border border-white/10 bg-black/10 p-4 grid md:grid-cols-[1fr_1.1fr_110px_130px_90px_minmax(0,1.6fr)_auto] gap-3 items-end">
+                          <div>
+                            <label class="xy-label">ID</label>
+                            <input class="xy-input" x-model="sub.id" maxlength="40">
+                          </div>
+                          <div>
+                            <label class="xy-label">订阅名</label>
+                            <input class="xy-input" x-model="sub.label" maxlength="40">
+                          </div>
+                          <div>
+                            <label class="xy-label">价格</label>
+                            <input type="number" min="0" step="0.1" class="xy-input" x-model.number="sub.price_cny">
+                          </div>
+                          <div>
+                            <label class="xy-label">月积分</label>
+                            <input type="number" min="1" class="xy-input" x-model.number="sub.points">
+                          </div>
+                          <div>
+                            <label class="xy-label">周期</label>
+                            <input class="xy-input" x-model="sub.period" maxlength="12">
+                          </div>
+                          <div>
+                            <label class="xy-label">说明</label>
+                            <input class="xy-input" x-model="sub.description" maxlength="120">
+                          </div>
+                          <button type="button" @click="removeDepositSubscription(idx)" class="text-red-300 hover:text-red-200 text-sm mb-3">删除</button>
+                        </div>
+                      </template>
+                    </div>
+                  </div>
+                </section>
+
+                <div class="flex justify-end">
+                  <button type="submit" class="xy-btn xy-btn-primary min-w-36" :disabled="loading">
+                    <span x-show="!loading">保存运营配置</span>
+                    <span x-show="loading" class="xy-loading"></span>
+                  </button>
+                </div>
+              </form>
+            </template>
+          </div>
+
+          <!-- 对话扩展 -->
+          <div x-show="activeTab === 'plugins'">
+            <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+              <div>
+                <h1 class="text-2xl font-bold xy-gradient-text">对话扩展</h1>
+                <p class="text-sm text-slate-400 mt-1">导入标准扩展 zip，校验 manifest，并管理聊天页的 JS/CSS 运行时</p>
+              </div>
+              <button @click="loadTavoPlugins" class="xy-btn xy-btn-ghost text-sm" :disabled="loading">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                刷新
+              </button>
+            </div>
+
+            <div class="grid xl:grid-cols-[420px_1fr] gap-6">
+              <div class="xy-glass p-6">
+                <h2 class="font-semibold mb-2">导入扩展包</h2>
+                <p class="text-sm text-slate-400 mb-4">支持标准酒馆 UI 扩展 `.zip`；manifest.json 可位于根目录或单层发布目录。导入后默认停用。</p>
+                <label class="block rounded-xl border border-dashed border-violet-400/40 bg-violet-500/10 p-5 text-center cursor-pointer hover:bg-violet-500/15 transition">
+                  <input type="file" class="hidden" accept=".zip,application/zip" @change="onTavoPluginFileChange">
+                  <span class="block text-sm text-violet-200" x-text="tavoPluginUploading ? '正在上传并校验...' : '选择 .zip 扩展包'"></span>
+                  <span class="block text-xs text-slate-500 mt-2" x-text="tavoPluginFileName || '需要 display_name、author，以及 js 或 css 入口'"></span>
+                </label>
+                <div class="mt-4 rounded-xl bg-black/20 border border-white/10 p-4 text-xs text-slate-400 space-y-2">
+                  <div>启用后，聊天页会按 loading_order 加载 CSS 和 JavaScript，并调用 enable / activate 生命周期钩子。</div>
+                  <div>扩展代码与聊天页同源运行，请只安装已审计、可信的包；依赖特定私有源码的扩展可能不兼容。</div>
+                </div>
+              </div>
+
+              <div class="xy-glass p-6 min-w-0">
+                <div class="flex items-center justify-between mb-4">
+                  <h2 class="font-semibold">已导入扩展</h2>
+                  <span class="text-xs text-slate-500"><span x-text="tavoPlugins.length"></span> 个</span>
+                </div>
+                <template x-if="!tavoPlugins.length">
+                  <div class="rounded-xl border border-white/10 bg-white/5 p-8 text-center text-slate-500">暂无对话扩展</div>
+                </template>
+                <div class="space-y-3">
+                  <template x-for="plugin in tavoPlugins" :key="plugin.id">
+                    <div class="rounded-xl border border-white/10 bg-white/5 p-4">
+                      <div class="flex items-start justify-between gap-4">
+                        <div class="min-w-0">
+                          <div class="flex items-center gap-2 flex-wrap">
+                            <h3 class="font-semibold text-white truncate" x-text="plugin.display_name || plugin.name || plugin.id"></h3>
+                            <span class="text-[11px] px-2 py-0.5 rounded-full" :class="plugin.enabled ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-500/15 text-slate-400'" x-text="plugin.enabled ? '已启用' : '已停用'"></span>
+                            <code class="text-[11px] text-slate-500" x-text="plugin.version"></code>
+                          </div>
+                          <div class="text-xs text-slate-500 mt-1">
+                            <span x-text="plugin.id"></span>
+                            <span x-show="plugin.author"> · <span x-text="plugin.author"></span></span>
+                          </div>
+                          <p class="text-sm text-slate-400 mt-2 line-clamp-2" x-text="plugin.description || '无描述'"></p>
+                          <div class="flex gap-2 flex-wrap mt-3">
+                            <template x-for="badge in tavoPluginFeatureBadges(plugin)" :key="badge.key">
+                              <span class="text-[11px] px-2 py-1 rounded-full bg-violet-500/15 text-violet-200"><span x-text="badge.label"></span> <span x-text="badge.count"></span></span>
+                            </template>
+                            <span class="text-[11px] px-2 py-1 rounded-full bg-white/5 text-slate-400" x-show="!tavoPluginFeatureBadges(plugin).length">仅元数据</span>
+                          </div>
+                        </div>
+                        <div class="flex gap-2 shrink-0">
+                          <button class="xy-btn xy-btn-ghost text-xs" @click="showTavoPluginDetail(plugin)">查看</button>
+                          <button class="xy-btn text-xs" :class="plugin.enabled ? 'xy-btn-ghost' : 'xy-btn-primary'" @click="toggleTavoPlugin(plugin)" x-text="plugin.enabled ? '停用' : '启用'"></button>
+                          <button class="xy-btn xy-btn-ghost text-xs text-red-300" @click="deleteTavoPlugin(plugin)">删除</button>
+                        </div>
+                      </div>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </div>
+
+            <template x-if="tavoPluginDetail">
+              <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" @click.self="showTavoPluginDetail(null)">
+                <div class="xy-glass w-full max-w-5xl max-h-[88vh] overflow-y-auto p-6">
+                  <div class="flex items-start justify-between gap-4 mb-5">
+                    <div>
+                      <h2 class="text-xl font-bold xy-gradient-text" x-text="tavoPluginDetail.display_name || tavoPluginDetail.name"></h2>
+                      <p class="text-sm text-slate-400 mt-1"><span x-text="tavoPluginDetail.id"></span> · v<span x-text="tavoPluginDetail.version"></span></p>
+                    </div>
+                    <button class="xy-btn xy-btn-ghost text-sm" @click="showTavoPluginDetail(null)">关闭</button>
+                  </div>
+                  <div class="grid md:grid-cols-3 gap-4 mb-5 text-sm">
+                    <div class="rounded-xl bg-white/5 border border-white/10 p-4">
+                      <div class="text-xs text-slate-500 mb-1">文件名</div>
+                      <div class="text-slate-200 break-all" x-text="tavoPluginDetail.file_name"></div>
+                    </div>
+                    <div class="rounded-xl bg-white/5 border border-white/10 p-4">
+                      <div class="text-xs text-slate-500 mb-1">SHA-256</div>
+                      <code class="text-slate-300 break-all text-xs" x-text="tavoPluginDetail.file_sha256"></code>
+                    </div>
+                    <div class="rounded-xl bg-white/5 border border-white/10 p-4">
+                      <div class="text-xs text-slate-500 mb-1">更新时间</div>
+                      <div class="text-slate-200" x-text="formatTime(tavoPluginDetail.updated_at)"></div>
+                    </div>
+                  </div>
+                  <div class="grid lg:grid-cols-2 gap-4">
+                    <div>
+                      <h3 class="font-semibold mb-2">运行时入口</h3>
+                      <pre class="rounded-xl bg-black/40 border border-white/10 p-4 text-xs overflow-auto max-h-[420px]" x-text="prettyJson({ js: tavoPluginDetail.js, css: tavoPluginDetail.css, hooks: tavoPluginDetail.hooks, requires: tavoPluginDetail.requires, optional: tavoPluginDetail.optional })"></pre>
+                    </div>
+                    <div>
+                      <h3 class="font-semibold mb-2">Manifest</h3>
+                      <pre class="rounded-xl bg-black/40 border border-white/10 p-4 text-xs overflow-auto max-h-[420px]" x-text="prettyJson(tavoPluginDetail.manifest || {})"></pre>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </div>
+
+          <!-- 角色卡管理 -->
+          <div x-show="activeTab === 'apps'">
+            <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+              <div>
+                <h1 class="text-2xl font-bold xy-gradient-text">角色卡</h1>
+                <p class="text-sm text-slate-400 mt-1">上传、编辑、上下架和管理平台角色内容</p>
+              </div>
+              <div class="flex items-center gap-2">
+                <button @click="openBulkDialog" class="xy-btn xy-btn-ghost text-sm" :disabled="!selectedAppIds.length">
+                  批量编辑 <span x-show="selectedAppIds.length" x-text="selectedAppIds.length"></span>
+                </button>
+                <button @click="openImportDialog" class="xy-btn xy-btn-ghost text-sm">导入 JSON</button>
+                <button @click="createAppDialog" class="xy-btn xy-btn-primary text-sm">发布角色卡</button>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-2 flex-wrap mb-4">
+              <select x-model="appSource" @change="loadApps(1)" class="xy-input text-sm py-2 w-36">
+                <option value="admin">官方角色</option>
+                <option value="user">用户角色</option>
+                <option value="upstream">同步角色</option>
+                <option value="all">全部角色</option>
+              </select>
+              <select x-model="appOfficialFilter" @change="loadApps(1)" class="xy-input text-sm py-2 w-40">
+                <option value="all">全部推荐状态</option>
+                <option value="recommended">官推卡池</option>
+                <option value="not_recommended">非官推卡</option>
+              </select>
+              <input x-model="appSearch" @keydown.enter="loadApps(1)" class="xy-input text-sm w-64" placeholder="搜索角色名称/简介/ID">
+              <button @click="loadApps(1)" class="xy-btn xy-btn-ghost text-sm">查询</button>
+              <template x-if="selectedAppIds.length">
+                <button @click="clearAppSelection" class="xy-btn xy-btn-ghost text-xs py-1.5 px-3">
+                  已选 <span x-text="selectedAppIds.length"></span> 张，清空
+                </button>
+              </template>
+            </div>
+
+            <div class="xy-glass overflow-hidden">
+              <div class="overflow-x-auto">
+                <table class="xy-table">
+                  <thead>
+                    <tr>
+                      <th class="w-10">
+                        <input type="checkbox" class="accent-violet-500" :checked="currentAppsAllSelected()" @change="toggleSelectCurrentApps($event.target.checked)" aria-label="选择当前页角色卡">
+                      </th>
+                      <th>角色</th>
+                      <th>来源</th>
+                      <th>标签</th>
+                      <th>状态</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <template x-if="apps.length === 0 && !loading">
+                      <tr><td colspan="6" class="text-center text-slate-500 py-12">暂无角色卡</td></tr>
+                    </template>
+                    <template x-for="app in apps" :key="app.id">
+                      <tr>
+                        <td>
+                          <input type="checkbox" class="accent-violet-500" :checked="isAppSelected(app)" @change="toggleAppSelection(app)" :aria-label="`选择 ${app.name || app.id}`">
+                        </td>
+                        <td>
+                          <div class="flex items-center gap-3 min-w-72">
+                            <img :src="app.cover || app.icon || '/assets/img/apk/avatar.webp?v=20260901-persistent-pages'" class="w-12 h-12 rounded-lg object-cover bg-black/30" alt="" onerror="this.src='/assets/img/apk/avatar.webp?v=20260901-persistent-pages'">
+                            <div class="min-w-0">
+                              <div class="font-semibold truncate" x-text="app.name || '未命名角色'"></div>
+                              <code class="block text-[11px] text-violet-300/75 truncate" x-text="app.display_id ? ('ID: ' + app.display_id) : app.id"></code>
+                              <code class="block text-[10px] text-slate-600 truncate" x-show="app.display_id" x-text="app.id"></code>
+                              <div class="text-xs text-slate-500 truncate" x-text="app.summary || app.description || app.id"></div>
+                            </div>
+                          </div>
+                        </td>
+                        <td><span class="xy-badge xy-badge-purple" x-text="app.source || '-'"></span></td>
+                        <td class="max-w-xs">
+                          <div class="flex flex-wrap gap-1">
+                            <template x-for="tag in (app.tags || []).slice(0, 4)" :key="tag">
+                              <span class="xy-badge xy-badge-gray" x-text="tag"></span>
+                            </template>
+                          </div>
+                        </td>
+                        <td>
+                          <div class="flex flex-col gap-1">
+                            <span class="xy-badge" :class="app.is_public === false ? 'xy-badge-gray' : 'xy-badge-green'" x-text="app.is_public === false ? '私有' : '公开'"></span>
+                            <span class="xy-badge" :class="app.status === 'published' ? 'xy-badge-green' : 'xy-badge-yellow'" x-text="app.status || 'published'"></span>
+                            <span x-show="app.official_recommended" class="xy-badge xy-badge-purple">官推卡池</span>
+                          </div>
+                        </td>
+                        <td>
+                          <div class="flex items-center gap-3 text-xs flex-wrap min-w-56">
+                            <a class="text-violet-300 hover:text-white" :href="`/app/character.html?id=${encodeURIComponent(app.id)}`" target="_blank">预览</a>
+                            <button @click="editAppDialog(app)" class="text-violet-300 hover:text-white">编辑</button>
+                            <button @click="quickToggleAppPublic(app)" class="text-cyan-300 hover:text-cyan-100" x-text="app.is_public === false ? '公开' : '私有'"></button>
+                            <button @click="quickSetAppStatus(app, app.status === 'published' ? 'draft' : 'published')" class="text-amber-300 hover:text-amber-100" x-text="app.status === 'published' ? '下架' : '发布'"></button>
+                            <button @click="quickToggleOfficialRecommendation(app)" class="text-fuchsia-300 hover:text-fuchsia-100" x-text="app.official_recommended ? '移出官推' : '加入官推'"></button>
+                            <button @click="deleteApp(app)" class="text-red-300 hover:text-red-200">删除</button>
+                          </div>
+                        </td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+              <div class="flex items-center justify-between p-4 border-t border-white/5 text-sm">
+                <span class="text-slate-400">共 <span class="text-white" x-text="appTotal"></span> 条</span>
+                <div class="flex items-center gap-2">
+                  <button @click="loadApps(appPage - 1)" :disabled="appPage <= 1 || loading" class="xy-btn xy-btn-ghost text-xs py-1.5 px-3">上一页</button>
+                  <span class="text-slate-300 text-xs">第 <span x-text="appPage"></span> / <span x-text="Math.max(1, Math.ceil(appTotal / appLimit))"></span> 页</span>
+                  <button @click="loadApps(appPage + 1)" :disabled="appPage >= Math.ceil(appTotal / appLimit) || loading" class="xy-btn xy-btn-ghost text-xs py-1.5 px-3">下一页</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <!-- 日志详情弹窗 -->
+    <template x-if="logDetail">
+      <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur" @click.self="logDetail = null">
+        <div class="xy-glass max-w-3xl w-full max-h-[85vh] overflow-y-auto">
+          <div class="flex items-center justify-between p-5 border-b border-white/5 sticky top-0 bg-black/40 backdrop-blur">
+            <h3 class="font-semibold">请求详情 #<span x-text="logDetail.id"></span></h3>
+            <button @click="logDetail = null" class="text-slate-400 hover:text-white">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+          </div>
+          <div class="p-5 space-y-4 text-sm">
+            <div class="grid grid-cols-2 gap-4">
+              <div><div class="text-xs text-slate-400 mb-1">方法</div><span class="xy-badge" :class="methodBadge(logDetail.method)" x-text="logDetail.method"></span></div>
+              <div><div class="text-xs text-slate-400 mb-1">状态</div><span class="xy-badge" :class="statusBadge(logDetail.status)" x-text="logDetail.status"></span></div>
+              <div class="col-span-2"><div class="text-xs text-slate-400 mb-1">时间</div><span x-text="formatTime(logDetail.ts)"></span></div>
+              <div class="col-span-2"><div class="text-xs text-slate-400 mb-1">路径</div><code class="block px-3 py-2 rounded bg-black/40 text-violet-200 break-all" x-text="logDetail.path"></code></div>
+              <template x-if="logDetail.query"><div class="col-span-2"><div class="text-xs text-slate-400 mb-1">Query</div><code class="block px-3 py-2 rounded bg-black/40 text-violet-200 break-all" x-text="logDetail.query"></code></div></template>
+            </div>
+            <div>
+              <div class="text-xs text-slate-400 mb-1">请求头</div>
+              <pre class="px-3 py-2 rounded bg-black/40 text-xs text-slate-300 overflow-x-auto max-h-40" x-text="prettyJson(logDetail.headers)"></pre>
+            </div>
+            <template x-if="logDetail.body">
+              <div>
+                <div class="text-xs text-slate-400 mb-1">请求体</div>
+                <pre class="px-3 py-2 rounded bg-black/40 text-xs text-slate-300 overflow-x-auto max-h-60" x-text="prettyJson(logDetail.body)"></pre>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <!-- 调整积分弹窗 -->
+    <template x-if="pointsDialog">
+      <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur" @click.self="pointsDialog = null">
+        <div class="xy-glass max-w-md w-full p-6">
+          <h3 class="font-semibold mb-4">调整用户积分</h3>
+          <div class="text-sm text-slate-300 mb-4">
+            <div>用户：<span class="text-white" x-text="pointsDialog.name"></span></div>
+            <div class="text-xs text-slate-400" x-text="pointsDialog.email"></div>
+            <div class="mt-2">当前积分：<span class="xy-badge xy-badge-purple" x-text="pointsDialog.points"></span></div>
+          </div>
+          <label class="xy-label">变动数额（正数加，负数减）</label>
+          <input type="number" x-model.number="pointsDialog.delta" class="xy-input mb-4" placeholder="例如 100 或 -50">
+          <div class="flex gap-2">
+            <button @click="pointsDialog = null" class="xy-btn xy-btn-ghost flex-1">取消</button>
+            <button @click="confirmAdjustPoints" class="xy-btn xy-btn-primary flex-1" :disabled="loading || !pointsDialog.delta">
+              <span x-show="!loading">确认</span>
+              <span x-show="loading" class="xy-loading"></span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <!-- 角色卡编辑弹窗 -->
+    <template x-if="appDialog">
+      <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur" @click.self="appDialog = null">
+        <div class="xy-glass max-w-6xl w-full max-h-[90vh] overflow-y-auto">
+          <div class="flex items-center justify-between p-5 border-b border-white/5 sticky top-0 bg-black/40 backdrop-blur">
+            <h3 class="font-semibold" x-text="appDialog.id ? '编辑官方角色卡' : '发布官方角色卡'"></h3>
+            <button @click="appDialog = null" class="text-slate-400 hover:text-white">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+          </div>
+          <div class="p-6 grid lg:grid-cols-[1fr_260px] gap-5">
+            <div class="space-y-4">
+              <template x-if="appDialog.id">
+                <div class="rounded-lg border border-white/10 bg-white/5 p-3 text-xs text-slate-400">
+                  当前 ID：<code class="text-violet-200 break-all" x-text="appDialog.display_id || appDialog.id"></code><br>
+                  内部 ID：<code class="text-slate-400 break-all" x-text="appDialog.id"></code><br>
+                  当前来源：<span class="text-violet-200" x-text="appDialog.source"></span> · 管理员可直接修正同步角色、用户角色和官方角色。
+                </div>
+              </template>
+              <div>
+                <label class="xy-label">角色名称</label>
+                <input class="xy-input" x-model="appDialog.name" maxlength="64" placeholder="例如：星月向导">
+              </div>
+              <div>
+                <label class="xy-label">一句简介</label>
+                <input class="xy-input" x-model="appDialog.summary" maxlength="180" placeholder="展示在探索页的短简介">
+              </div>
+              <div>
+                <label class="xy-label">角色设定</label>
+                <textarea class="xy-input min-h-32" x-model="appDialog.description" placeholder="角色身份、性格、背景和互动方式"></textarea>
+              </div>
+              <div>
+                <label class="xy-label">开场白</label>
+                <textarea class="xy-input min-h-20" x-model="appDialog.opening_statement" placeholder="进入聊天时展示的第一句话"></textarea>
+              </div>
+              <div>
+                <label class="xy-label">系统提示词</label>
+                <textarea class="xy-input min-h-24" x-model="appDialog.pre_prompt" placeholder="更细的扮演规则和回复风格"></textarea>
+              </div>
+              <div class="grid md:grid-cols-2 gap-3">
+                <div>
+                  <label class="xy-label">角色性格 personality</label>
+                  <textarea class="xy-input min-h-24" x-model="appDialog.personality" spellcheck="false"></textarea>
+                </div>
+                <div>
+                  <label class="xy-label">场景 scenario</label>
+                  <textarea class="xy-input min-h-24" x-model="appDialog.scenario" spellcheck="false"></textarea>
+                </div>
+                <div>
+                  <label class="xy-label">对话示例 mes_example</label>
+                  <textarea class="xy-input min-h-28" x-model="appDialog.mes_example" spellcheck="false"></textarea>
+                </div>
+                <div>
+                  <label class="xy-label">历史后指令 post_history</label>
+                  <textarea class="xy-input min-h-28" x-model="appDialog.post_history_instructions" spellcheck="false"></textarea>
+                </div>
+              </div>
+              <div class="grid md:grid-cols-3 gap-3">
+                <div>
+                  <label class="xy-label">创作者 creator</label>
+                  <input class="xy-input" x-model="appDialog.creator">
+                </div>
+                <div>
+                  <label class="xy-label">版本 character_version</label>
+                  <input class="xy-input" x-model="appDialog.character_version">
+                </div>
+                <div>
+                  <label class="xy-label">备注 creator_notes</label>
+                  <input class="xy-input" x-model="appDialog.creator_notes">
+                </div>
+              </div>
+              <div class="rounded-xl border border-white/10 bg-black/20 p-4 space-y-4">
+                <div>
+                  <h4 class="text-sm font-semibold text-violet-100">原始字段编辑</h4>
+                  <p class="text-xs text-slate-500 mt-1">这些字段按 JSON 保存，可直接粘 Character Card / ST 里的世界书、Regex、扩展和快捷回复。</p>
+                </div>
+                <div>
+                  <label class="xy-label">备用开场 alternate_greetings（JSON 数组）</label>
+                  <textarea class="xy-input min-h-36 font-mono text-xs" x-model="appDialog.alternate_greetings_raw" spellcheck="false"></textarea>
+                </div>
+                <div>
+                  <label class="xy-label">世界书 world_info（JSON 数组 / entries）</label>
+                  <textarea class="xy-input min-h-56 font-mono text-xs" x-model="appDialog.world_info_raw" spellcheck="false"></textarea>
+                </div>
+                <div>
+                  <label class="xy-label">Regex / TavernHelper 脚本（JSON 数组）</label>
+                  <textarea class="xy-input min-h-56 font-mono text-xs" x-model="appDialog.regex_scripts_raw" spellcheck="false"></textarea>
+                </div>
+                <div class="grid md:grid-cols-2 gap-3">
+                  <div>
+                    <label class="xy-label">Prompt Blocks（JSON 数组）</label>
+                    <textarea class="xy-input min-h-44 font-mono text-xs" x-model="appDialog.prompt_blocks_raw" spellcheck="false"></textarea>
+                  </div>
+                  <div>
+                    <label class="xy-label">Quick Replies（JSON 数组）</label>
+                    <textarea class="xy-input min-h-44 font-mono text-xs" x-model="appDialog.quick_replies_raw" spellcheck="false"></textarea>
+                  </div>
+                  <div>
+                    <label class="xy-label">Extensions（JSON 对象）</label>
+                    <textarea class="xy-input min-h-44 font-mono text-xs" x-model="appDialog.extensions_raw" spellcheck="false"></textarea>
+                  </div>
+                  <div>
+                    <label class="xy-label">Sampling（JSON 对象）</label>
+                    <textarea class="xy-input min-h-44 font-mono text-xs" x-model="appDialog.sampling_raw" spellcheck="false"></textarea>
+                  </div>
+                </div>
+                <div>
+                  <div class="flex items-center justify-between gap-3 mb-2">
+                    <label class="xy-label mb-0">完整 JSON 视图 / 合并编辑</label>
+                    <label class="flex items-center gap-2 text-xs text-slate-400">
+                      <input type="checkbox" class="accent-violet-500" x-model="appDialog.merge_full_json">
+                      保存时合并完整 JSON
+                    </label>
+                  </div>
+                  <textarea class="xy-input min-h-72 font-mono text-xs" x-model="appDialog.full_json_raw" spellcheck="false"></textarea>
+                </div>
+              </div>
+              <div class="grid md:grid-cols-3 gap-3">
+                <div>
+                  <label class="xy-label">标签</label>
+                  <input class="xy-input" x-model="appDialog.tagsText" placeholder="恋爱，校园">
+                </div>
+                <div>
+                  <label class="xy-label">模型</label>
+                  <input class="xy-input" x-model="appDialog.llm_model" placeholder="留空使用默认模型">
+                </div>
+                <div>
+                  <label class="xy-label">排序权重</label>
+                  <input type="number" class="xy-input" x-model.number="appDialog.sort_weight">
+                </div>
+              </div>
+              <div class="flex items-center gap-5">
+                <label class="flex items-center gap-2 text-sm text-slate-300">
+                  <input type="checkbox" x-model="appDialog.is_public" class="accent-violet-500">
+                  发布到探索页
+                </label>
+                <label class="flex items-center gap-2 text-sm text-slate-300">
+                  <input type="checkbox" x-model="appDialog.official_recommended" class="accent-fuchsia-500">
+                  加入首页官推卡池
+                </label>
+                <select x-model="appDialog.status" class="xy-input text-sm py-2 w-36">
+                  <option value="published">published</option>
+                  <option value="draft">draft</option>
+                </select>
+              </div>
+            </div>
+            <aside class="space-y-3">
+              <div class="aspect-[4/5] rounded-lg overflow-hidden bg-black/30 border border-white/10">
+                <img x-show="appDialog.cover_url" :src="appDialog.cover_url" class="w-full h-full object-cover" alt="">
+                <div x-show="!appDialog.cover_url" class="w-full h-full flex items-center justify-center text-xs text-slate-500">角色封面</div>
+              </div>
+              <input class="xy-input text-sm" x-model="appDialog.cover_url" placeholder="封面 URL">
+              <label class="xy-btn xy-btn-ghost w-full justify-center cursor-pointer text-sm">
+                <span x-show="!appCoverUploading">上传封面</span>
+                <span x-show="appCoverUploading" class="xy-loading"></span>
+                <input type="file" class="hidden" accept="image/*" @change="onAppCoverChange">
+              </label>
+              <div class="flex gap-2">
+                <button @click="appDialog = null" class="xy-btn xy-btn-ghost flex-1">取消</button>
+                <button @click="saveAppDialog" class="xy-btn xy-btn-primary flex-1" :disabled="loading">
+                  <span x-show="!loading">保存</span>
+                  <span x-show="loading" class="xy-loading"></span>
+                </button>
+              </div>
+            </aside>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <!-- 角色卡批量编辑弹窗 -->
+    <template x-if="appBulkDialog && appBulkForm">
+      <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur" @click.self="appBulkDialog = false">
+        <div class="xy-glass max-w-5xl w-full max-h-[90vh] overflow-y-auto">
+          <div class="flex items-center justify-between p-5 border-b border-white/5 sticky top-0 bg-black/40 backdrop-blur">
+            <div>
+              <h3 class="font-semibold">批量编辑角色卡</h3>
+              <p class="text-xs text-slate-400 mt-1">当前选中 <span class="text-violet-200" x-text="selectedAppIds.length"></span> 张角色卡</p>
+            </div>
+            <button @click="appBulkDialog = false" class="text-slate-400 hover:text-white">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+          </div>
+          <div class="p-6 grid lg:grid-cols-[1fr_300px] gap-5">
+            <div class="space-y-5">
+              <div class="grid md:grid-cols-[180px_1fr] gap-3">
+                <div>
+                  <label class="xy-label">标签处理</label>
+                  <select x-model="appBulkForm.tags_mode" class="xy-input">
+                    <option value="none">不修改标签</option>
+                    <option value="replace">替换为</option>
+                    <option value="append">追加</option>
+                    <option value="remove">移除</option>
+                  </select>
+                </div>
+                <div x-show="appBulkForm.tags_mode !== 'none'">
+                  <label class="xy-label">标签</label>
+                  <input class="xy-input" x-model="appBulkForm.tagsText" placeholder="恋爱，校园，治愈">
+                </div>
+              </div>
+
+              <div class="rounded-lg border border-white/10 bg-white/5 p-4 space-y-3">
+                <label class="flex items-center gap-2 text-sm text-slate-300">
+                  <input type="checkbox" x-model="appBulkForm.summary_enabled" class="accent-violet-500">
+                  覆盖一句简介
+                </label>
+                <input class="xy-input" x-model="appBulkForm.summary" :disabled="!appBulkForm.summary_enabled" maxlength="180" placeholder="批量写入新的短简介">
+              </div>
+
+              <div class="rounded-lg border border-white/10 bg-white/5 p-4 space-y-3">
+                <label class="flex items-center gap-2 text-sm text-slate-300">
+                  <input type="checkbox" x-model="appBulkForm.description_enabled" class="accent-violet-500">
+                  覆盖角色设定
+                </label>
+                <textarea class="xy-input min-h-32" x-model="appBulkForm.description" :disabled="!appBulkForm.description_enabled" placeholder="批量写入新的角色设定/简介正文"></textarea>
+              </div>
+
+              <div class="rounded-lg border border-white/10 bg-white/5 p-4 space-y-3">
+                <div class="grid md:grid-cols-[180px_1fr] gap-3">
+                  <div>
+                    <label class="xy-label">世界书处理</label>
+                    <select x-model="appBulkForm.world_mode" class="xy-input">
+                      <option value="none">不修改世界书</option>
+                      <option value="replace">整体替换</option>
+                      <option value="append">追加条目</option>
+                      <option value="merge">按名称/ID 合并</option>
+                    </select>
+                  </div>
+                  <div class="text-xs text-slate-400 leading-6">
+                    支持世界书数组、Character Book <code class="text-violet-200">entries</code>，或 Character Card V2 的 <code class="text-violet-200">data.character_book.entries</code>。
+                  </div>
+                </div>
+                <textarea class="xy-input min-h-56 font-mono text-xs" x-model="appBulkForm.worldRaw" :disabled="appBulkForm.world_mode === 'none'" spellcheck="false" placeholder='[
+  {
+    "name": "地点设定",
+    "keys": ["图书馆"],
+    "content": "图书馆相关世界书内容...",
+    "position": "system",
+    "priority": 100
+  }
+]'></textarea>
+              </div>
+            </div>
+            <aside class="space-y-4">
+              <div class="rounded-lg border border-amber-400/20 bg-amber-500/10 p-4 text-xs text-amber-100/90 leading-6">
+                批量操作只会影响已勾选角色卡。简介、角色设定和世界书替换会覆盖原内容，请先确认选择范围。
+              </div>
+              <button @click="submitBulkUpdate" class="xy-btn xy-btn-primary w-full justify-center" :disabled="loading">
+                <span x-show="!loading">提交批量修改</span>
+                <span x-show="loading" class="xy-loading"></span>
+              </button>
+              <button @click="appBulkDialog = false" class="xy-btn xy-btn-ghost w-full justify-center">关闭</button>
+              <template x-if="appBulkResult">
+                <div class="space-y-3">
+                  <div class="rounded-lg border border-emerald-400/20 bg-emerald-500/10 p-4">
+                    <div class="text-sm text-emerald-100 font-semibold">更新 <span x-text="appBulkResult.updated || 0"></span> / <span x-text="appBulkResult.requested || 0"></span> 张</div>
+                    <div class="text-xs text-slate-400 mt-1">接口已返回批量处理结果。</div>
+                  </div>
+                  <template x-if="(appBulkResult.not_found || []).length">
+                    <div class="rounded-lg border border-amber-400/20 bg-amber-500/10 p-4">
+                      <div class="text-sm text-amber-100 font-semibold mb-2">未找到 <span x-text="appBulkResult.not_found.length"></span> 张</div>
+                      <div class="text-xs text-amber-100/80 break-all" x-text="appBulkResult.not_found.join(', ')"></div>
+                    </div>
+                  </template>
+                  <template x-if="(appBulkResult.errors || []).length">
+                    <div class="rounded-lg border border-rose-400/20 bg-rose-500/10 p-4">
+                      <div class="text-sm text-rose-100 font-semibold mb-2">失败 <span x-text="appBulkResult.error_count || 0"></span> 条</div>
+                      <div class="space-y-2 max-h-48 overflow-y-auto">
+                        <template x-for="err in appBulkResult.errors" :key="err.id">
+                          <div class="text-xs text-rose-100/80">
+                            <span x-text="err.id"></span>
+                            <span x-text="err.message"></span>
+                          </div>
+                        </template>
+                      </div>
+                    </div>
+                  </template>
+                </div>
+              </template>
+            </aside>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <!-- 角色卡导入弹窗 -->
+    <template x-if="appImportDialog">
+      <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur" @click.self="appImportDialog = false">
+        <div class="xy-glass max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+          <div class="flex items-center justify-between p-5 border-b border-white/5 sticky top-0 bg-black/40 backdrop-blur">
+            <h3 class="font-semibold">导入角色卡 JSON</h3>
+            <button @click="appImportDialog = false" class="text-slate-400 hover:text-white">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+          </div>
+          <div class="p-6 grid lg:grid-cols-[1fr_280px] gap-5">
+            <div class="space-y-4">
+              <div class="rounded-lg border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
+                支持单个对象、数组，或包含 <code class="text-violet-200">items/list/cards/apps</code> 的 JSON。至少需要 <code class="text-violet-200">name</code> 字段。
+              </div>
+              <label class="xy-btn xy-btn-ghost w-fit cursor-pointer text-sm">
+                选择 JSON 文件
+                <input type="file" class="hidden" accept=".json,application/json" @change="onAppImportFileChange">
+              </label>
+              <div x-show="appImportFileName" class="text-xs text-slate-400">已读取：<span class="text-violet-200" x-text="appImportFileName"></span></div>
+              <textarea class="xy-input min-h-[360px] font-mono text-xs" x-model="appImportRaw" spellcheck="false" placeholder='[
+  {
+    "name": "星月向导",
+    "summary": "温柔的陪伴型角色",
+    "description": "角色设定...",
+    "tags": ["陪伴", "治愈"],
+    "opening_statement": "晚上好，今天想聊些什么？"
+  }
+]'></textarea>
+            </div>
+            <aside class="space-y-4">
+              <button @click="submitAppImport" class="xy-btn xy-btn-primary w-full justify-center" :disabled="loading">
+                <span x-show="!loading">导入为官方角色</span>
+                <span x-show="loading" class="xy-loading"></span>
+              </button>
+              <template x-if="appImportResult">
+                <div class="space-y-3">
+                  <div class="rounded-lg border border-emerald-400/20 bg-emerald-500/10 p-4">
+                    <div class="text-sm text-emerald-100 font-semibold">成功 <span x-text="appImportResult.count || 0"></span> 条</div>
+                    <div class="text-xs text-slate-400 mt-1">导入后会出现在官方角色列表，可继续编辑上下架。</div>
+                  </div>
+                  <template x-if="(appImportResult.errors || []).length">
+                    <div class="rounded-lg border border-rose-400/20 bg-rose-500/10 p-4">
+                      <div class="text-sm text-rose-100 font-semibold mb-2">失败 <span x-text="appImportResult.error_count || 0"></span> 条</div>
+                      <div class="space-y-2 max-h-48 overflow-y-auto">
+                        <template x-for="err in appImportResult.errors" :key="err.index">
+                          <div class="text-xs text-rose-100/80">
+                            #<span x-text="err.index"></span>
+                            <span x-text="err.name || ''"></span>
+                            <span x-text="err.message"></span>
+                          </div>
+                        </template>
+                      </div>
+                    </div>
+                  </template>
+                </div>
+              </template>
+            </aside>
+          </div>
+        </div>
+      </div>
+    </template>
+  </main>
+</body>
+</html>

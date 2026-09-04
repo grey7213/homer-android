@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>历史会话 · 惑梦（Homer）</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/img/favicon-32.png?v=20260901-persistent-pages">
+  <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
+  <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
+  <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
+  <script type="module" src="/app/assets/js/hub-pages.js?v=20260902-conversation-routing"></script>
+  <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
+</head>
+<body class="min-h-screen">
+  <div class="xy-stars-bg"></div>
+
+  <div class="app-shell" x-data="historiesPage()" x-cloak>
+    <aside class="app-sidebar" data-app-sidebar></aside>
+    <main class="app-main">
+      <header class="app-topbar"><h1 x-text="appNavText('histories', '历史会话')">历史会话</h1><div class="grow"></div><a href="/app/explore.html" class="xy-btn xy-btn-primary text-sm" x-text="emptyText('histories_cta_text', '＋ 新对话')">＋ 新对话</a></header>
+      <section class="app-page-pad max-w-5xl mx-auto">
+        <div class="list-panel">
+          <template x-if="!loading && conversations.length === 0">
+            <div class="p-10 text-center text-violet-200/70">
+              <div x-text="emptyText('histories_empty_title', '还没有历史会话')">还没有历史会话</div>
+              <a href="/app/explore.html" class="xy-link mt-2 inline-flex" x-text="emptyText('histories_empty_hint', '去探索选个角色吧')">去探索选个角色吧</a>
+            </div>
+          </template>
+          <template x-for="c in conversations" :key="c.id">
+            <div class="list-row history-row" x-data="{ open: false }" :class="{ 'is-menu-open': open }" @click.away="open = false">
+              <a class="history-row__main flex items-center gap-4 min-w-0 text-inherit no-underline" :href="conversationHref(c)">
+                <img :src="c.app_icon || '/assets/img/apk/avatar.webp?v=20260901-persistent-pages'" alt="" onerror="this.src='/assets/img/apk/avatar.webp?v=20260901-persistent-pages'">
+                <div class="min-w-0">
+                  <div class="title truncate" x-text="conversationTitle(c)"></div>
+                  <div class="meta truncate" x-text="conversationPreview(c)"></div>
+                  <div class="history-row__tags" x-show="archiveLabel(c) || userTagList(c).length">
+                    <span class="history-row__tag" x-show="archiveLabel(c)" x-text="archiveLabel(c)"></span>
+                    <template x-for="tag in userTagList(c)" :key="tag">
+                      <span class="history-row__tag" x-text="tag"></span>
+                    </template>
+                  </div>
+                </div>
+              </a>
+              <div class="row-actions justify-end">
+                <button type="button" class="history-more-btn" :class="{ 'is-open': open }" @click.stop="open = !open" aria-label="更多操作" title="更多">
+                  <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>
+                </button>
+                <div class="history-more-pop" x-show="open" x-transition.origin.top.right @click.stop>
+                  <button type="button" class="history-more-item" :class="{ 'is-active': c.favorited }" @click="toggleFavorite(c, $event); open = false" :disabled="favoritingId === c.id" x-text="favoritingId === c.id ? '处理中' : favoriteLabel(c)">收藏</button>
+                  <button type="button" class="history-more-item" @click="copyConversation(c, $event); open = false" :disabled="copyingId === c.id" x-text="copyingId === c.id ? chatText('copying_text', '复制中') : chatText('copy_text', '复制')">复制</button>
+                  <button type="button" class="history-more-item is-danger" @click="deleteConversation(c, $event); open = false" :disabled="deletingId === c.id" x-text="deletingId === c.id ? chatText('deleting_text', '删除中') : chatText('delete_text', '删除')">删除</button>
+                </div>
+              </div>
+            </div>
+          </template>
+        </div>
+      </section>
+    </main>
+    <nav class="app-bottom-nav" data-app-bottom-nav></nav>
+  </div>
+</body>
+</html>

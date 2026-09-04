@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>我的</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/img/favicon-32.png?v=20260901-persistent-pages">
+  <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
+  <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
+  <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
+  <script type="module" src="/app/assets/js/me.js?v=20260901-persistent-pages"></script>
+  <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
+</head>
+<body class="min-h-screen profile-center-page">
+  <div class="app-shell" x-data="mePage()" x-cloak>
+    <aside class="app-sidebar" data-app-sidebar></aside>
+    <main class="app-main">
+      <header class="app-topbar"><h1>我的</h1><div class="grow"></div><button type="button" class="theme-switch-button" data-shell-action="theme" title="切换明暗模式" aria-label="切换明暗模式"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.4 15.2A8 8 0 118.8 3.6a6.5 6.5 0 0011.6 11.6z"/></svg></button><button @click="doLogout" class="profile-logout">退出登录</button></header>
+      <template x-if="toast"><div class="xy-toast" :class="`xy-toast-${toast.type}`" x-text="toast.message"></div></template>
+
+      <div class="profile-center">
+        <section class="profile-identity-card">
+          <label class="profile-avatar" :class="uploadingAvatar ? 'is-loading' : ''" title="更换头像">
+            <img :src="profileAvatar()" @error="onAvatarError" alt="头像">
+            <input type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/avif" @change="onAvatarChange">
+            <span><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8h4l2-3h6l2 3h4v11H3V8zm9 3a3 3 0 100 6 3 3 0 000-6z"/></svg></span>
+          </label>
+          <div class="profile-identity-main">
+            <h2 x-text="user?.name || dashboardText('unnamed_user', '未命名用户')"></h2>
+            <p x-text="user?.email || '惑梦（Homer）用户'"></p>
+            <small>ID：<span x-text="profileDisplayId() || user?.id?.slice(0, 12) || '-' "></span></small>
+          </div>
+          <a href="#profile-settings" class="profile-edit-link" @click.prevent="$refs.settingsPanel.open=true; $nextTick(() => $refs.settingsPanel.scrollIntoView({behavior:'smooth',block:'start'}))">编辑资料</a>
+        </section>
+
+        <a class="profile-wallet-card" href="/app/rewards.html">
+          <div><span>积分余额</span><strong x-text="Number(points || 0).toLocaleString('zh-CN')"></strong></div>
+          <div class="profile-wallet-breakdown"><span>免费 <b x-text="balance.free_points.toLocaleString('zh-CN')"></b></span><span>充值 <b x-text="balance.paid_points.toLocaleString('zh-CN')"></b></span><span>奖励 <b x-text="balance.reward_points.toLocaleString('zh-CN')"></b></span></div>
+          <em>在线充值 <b>›</b></em>
+        </a>
+
+        <nav class="profile-shortcuts" aria-label="个人中心快捷入口">
+          <a href="/app/my-apps.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5"/></svg><span>我的投稿</span><small>角色与草稿</small></a>
+          <a href="/app/rewards.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 19V9m5 10V5m5 14v-7m5 7V3"/></svg><span>收益</span><small>奖励与积分</small></a>
+          <a href="/app/workshop.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v14m7-7H5"/></svg><span>管理</span><small>创作工坊</small></a>
+        </nav>
+
+        <details class="profile-settings" id="profile-settings" x-ref="settingsPanel">
+          <summary><span><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15.5A3.5 3.5 0 1112 8a3.5 3.5 0 010 7.5zM19 12a7 7 0 01-.1 1.2l2 1.6-2 3.4-2.5-1a7 7 0 01-2.1 1.2L14 21h-4l-.4-2.6a7 7 0 01-2.1-1.2l-2.5 1-2-3.4 2-1.6A7 7 0 015 12c0-.4 0-.8.1-1.2l-2-1.6 2-3.4 2.5 1a7 7 0 012.1-1.2L10 3h4l.4 2.6a7 7 0 012.1 1.2l2.5-1 2 3.4-2 1.6c.1.4.1.8.1 1.2z"/></svg>设置</span><b>›</b></summary>
+          <div class="profile-settings__body">
+            <section class="profile-setting-section">
+              <h3>个人资料</h3>
+              <div class="profile-form-grid"><label>展示 ID<input class="xy-input" x-model="profileForm.display_id" maxlength="32" placeholder="xy_user_001"></label><label>头像 URL<input class="xy-input" x-model="profileForm.avatar_url" placeholder="https://..."></label></div>
+              <div class="profile-setting-actions"><button class="xy-btn xy-btn-primary" @click="saveProfile" :disabled="savingProfile || uploadingAvatar">保存资料</button><button class="xy-btn xy-btn-ghost" @click="clearAvatar">恢复默认头像</button><a class="xy-btn xy-btn-ghost" href="/dashboard.html">完整账户</a></div>
+            </section>
+            <section class="profile-setting-section">
+              <h3>我的人设</h3><p>聊天时角色会用这份信息认识你。</p>
+              <label>人设名称<input class="xy-input" x-model="persona.name" maxlength="60" placeholder="例如：旅人、小明"></label>
+              <label>人设描述<textarea class="xy-input" x-model="persona.description" maxlength="4000" placeholder="简单介绍你的身份与偏好"></textarea></label>
+              <button class="xy-btn xy-btn-primary" @click="savePersona" :disabled="savingPersona">保存人设</button>
+            </section>
+            <section class="profile-setting-section profile-account-info"><h3>账户信息</h3><p>注册时间：<span x-text="formatDate(user?.created_at)"></span></p><p>内部 ID：<code x-text="user?.id || '-'"></code></p><p>网页端与 APP 使用同一账号、积分和角色库。</p></section>
+          </div>
+        </details>
+
+        <section class="profile-secondary-grid">
+          <a href="/app/farm.html"><span>惑梦农场</span><small>种植收获 · 每日奖励</small><b>›</b></a>
+          <a href="/app/favorites.html"><span>我的收藏</span><small>查看收藏角色</small><b>›</b></a>
+        </section>
+      </div>
+    </main>
+    <nav class="app-bottom-nav" data-app-bottom-nav></nav>
+  </div>
+</body>
+</html>

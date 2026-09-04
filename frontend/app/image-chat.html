@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>图片聊天 · 惑梦（Homer）</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/img/favicon-32.png?v=20260901-persistent-pages">
+  <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
+  <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
+  <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
+  <script type="module" src="/app/assets/js/hub-pages.js?v=20260812-license-removal"></script>
+  <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
+</head>
+<body class="min-h-screen">
+  <div class="xy-stars-bg"></div>
+
+  <div class="app-shell" x-data="imageChatPage()" x-cloak>
+    <aside class="app-sidebar" data-app-sidebar></aside>
+    <main class="app-main">
+      <header class="app-topbar"><h1 x-text="appNavText('image', '图片聊天')">图片聊天</h1><div class="grow"></div><span class="xy-badge xy-badge-purple" x-text="emptyText('image_status_badge', '图片模型')">图片模型</span></header>
+      <section class="app-page-pad max-w-5xl mx-auto grid lg:grid-cols-[.9fr_1.1fr] gap-5">
+        <div class="form-panel space-y-4">
+          <label class="drop-zone cursor-pointer">
+            <input type="file" accept="image/*" class="hidden" @change="pickFile">
+            <span x-text="previewName || emptyText('image_drop_text', '点击选择图片，或只输入提示词进行对话')"></span>
+          </label>
+          <textarea class="xy-input min-h-[140px] w-full" x-model="prompt" :placeholder="emptyText('image_prompt_placeholder', '描述你想让星月分析或生成的画面...')"></textarea>
+          <button class="xy-btn xy-btn-primary w-full justify-center" @click="send" :disabled="sending || (!prompt.trim() && !filename)">
+            <span x-show="!sending" x-text="emptyText('image_send_button', '发送图片对话')">发送图片对话</span><span x-show="sending" class="xy-loading"></span>
+          </button>
+        </div>
+        <div class="list-panel">
+          <template x-if="replies.length === 0"><div class="p-8 text-violet-200/70" x-text="emptyText('image_empty_text', '输入提示词后，这里会显示图片模型返回的图像。')">输入提示词后，这里会显示图片模型返回的图像。</div></template>
+          <template x-for="r in replies" :key="r.created_at">
+            <div class="list-row !grid-cols-[1fr]">
+              <div class="space-y-3">
+                <div class="title" x-text="emptyText('image_reply_title', '图片回复')">图片回复</div>
+                <template x-if="r.image_url">
+                  <img :src="r.image_url" alt="图片模型生成结果" class="w-full rounded-xl border border-white/10 bg-black/30 object-contain max-h-[620px]">
+                </template>
+                <template x-if="!r.image_url && r.images?.length">
+                  <div class="grid sm:grid-cols-2 gap-3">
+                    <template x-for="img in r.images" :key="img.url">
+                      <img :src="img.url" alt="图片模型生成结果" class="w-full rounded-xl border border-white/10 bg-black/30 object-contain max-h-[360px]">
+                    </template>
+                  </div>
+                </template>
+                <div class="meta whitespace-pre-line" x-text="r.reply"></div>
+                <div class="meta" x-show="r.model" x-text="'模型：' + r.model"></div>
+              </div>
+            </div>
+          </template>
+        </div>
+      </section>
+    </main>
+    <nav class="app-bottom-nav" data-app-bottom-nav></nav>
+  </div>
+</body>
+</html>

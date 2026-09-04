@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>登录 · 惑梦（Homer）</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/img/favicon-32.png?v=20260901-persistent-pages">
+  <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
+  <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
+  <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
+  <script type="module" src="/app/assets/js/login.js?v=20260812-license-removal"></script>
+  <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
+</head>
+<body class="min-h-screen bg-[#0a0420]">
+  <div class="xy-stars-bg"></div>
+
+  <div class="min-h-screen flex items-center justify-center px-6 py-12 relative" x-data="loginPage()" x-cloak>
+    <template x-if="toast">
+      <div class="xy-toast" :class="`xy-toast-${toast.type}`" x-text="toast.message"></div>
+    </template>
+
+    <div class="absolute -top-20 -right-20 w-96 h-96 rounded-full bg-violet-600/20 blur-3xl pointer-events-none"></div>
+    <div class="absolute -bottom-20 -left-20 w-96 h-96 rounded-full bg-fuchsia-600/15 blur-3xl pointer-events-none"></div>
+
+    <div class="w-full max-w-md relative">
+      <!-- LOGO + 标题 -->
+      <div class="text-center mb-10">
+        <img src="/assets/img/logo-256.png?v=20260901-persistent-pages" alt="惑梦（Homer）" class="w-20 h-20 mx-auto mb-4 drop-shadow-[0_0_24px_rgba(168,85,247,0.6)]">
+        <h1 class="xy-cinema-title text-4xl mb-2">惑梦（Homer）</h1>
+        <p class="text-slate-400 text-sm" x-text="authText('brand_subtitle', '让想象 · 照进二次元')">让想象 · 照进二次元</p>
+      </div>
+
+      <div class="xy-glass p-2 mb-6 flex">
+        <button @click="view='login'" class="flex-1 py-2.5 rounded-xl text-sm font-medium transition" :class="view==='login' ? 'bg-violet-500/30 text-white' : 'text-slate-400 hover:text-white'" x-text="authText('login_tab_label', '登录')">登录</button>
+        <button @click="view='register'" class="flex-1 py-2.5 rounded-xl text-sm font-medium transition" :class="view==='register' ? 'bg-violet-500/30 text-white' : 'text-slate-400 hover:text-white'" x-text="authText('register_tab_label', '注册')">注册</button>
+        <button @click="openReset()" class="flex-1 py-2.5 rounded-xl text-sm font-medium transition" :class="view==='reset' ? 'bg-violet-500/30 text-white' : 'text-slate-400 hover:text-white'" x-text="authText('reset_tab_label', '重置密码')">重置密码</button>
+      </div>
+
+      <!-- 登录 -->
+      <div x-show="view==='login'" class="xy-glass p-7">
+        <form @submit.prevent="doLogin" class="space-y-4">
+          <div>
+            <label class="xy-label" x-text="authText('email_label', '邮箱')">邮箱</label>
+            <input type="email" x-model="loginForm.email" class="xy-input" :placeholder="authText('email_placeholder', 'you@example.com')" required autocomplete="email">
+          </div>
+          <div>
+            <label class="xy-label" x-text="authText('password_label', '密码')">密码</label>
+            <input type="password" x-model="loginForm.password" class="xy-input" :placeholder="authText('login_password_placeholder', '请输入密码')" required minlength="6" autocomplete="current-password">
+          </div>
+          <div class="flex justify-end -mt-1">
+            <button type="button" class="xy-link text-xs" @click="openReset()" x-text="authText('forgot_password_text', '忘记密码？')">忘记密码？</button>
+          </div>
+          <button type="submit" class="xy-btn xy-btn-primary w-full" :disabled="loading">
+            <span x-show="!loading" x-text="authText('login_button_text', '进入 惑梦（Homer）')">进入 惑梦（Homer）</span>
+            <span x-show="loading" class="xy-loading"></span>
+          </button>
+        </form>
+        <p class="text-xs text-slate-500 mt-5 text-center" x-text="authText('login_hint', '用 APP 注册过的账号也可以直接登录')">用 APP 注册过的账号也可以直接登录</p>
+      </div>
+
+      <!-- 注册 -->
+      <div x-show="view==='register'" class="xy-glass p-7">
+        <form @submit.prevent="doRegister" class="space-y-4">
+          <div>
+            <label class="xy-label" x-text="authText('email_label', '邮箱')">邮箱</label>
+            <input type="email" x-model="registerForm.email" class="xy-input" :placeholder="authText('email_placeholder', 'you@example.com')" required>
+          </div>
+          <div>
+            <label class="xy-label" x-text="authText('code_label', '验证码')">验证码</label>
+            <div class="flex gap-2">
+              <input type="text" x-model="registerForm.code" class="xy-input flex-1" :placeholder="authText('code_placeholder', '6 位验证码')" required pattern="\d{6}">
+              <button type="button" @click="sendCode" class="xy-btn xy-btn-ghost text-sm whitespace-nowrap" :disabled="codeCountdown > 0 || sendingCode">
+                <span x-show="!sendingCode && codeCountdown===0" x-text="authText('send_code_button_text', '发送')">发送</span>
+                <span x-show="sendingCode" class="xy-loading"></span>
+                <span x-show="codeCountdown>0" x-text="`${codeCountdown}s`"></span>
+              </button>
+            </div>
+          </div>
+          <div>
+            <label class="xy-label" x-text="authText('nickname_label', '昵称')">昵称</label>
+            <input type="text" x-model="registerForm.name" class="xy-input" :placeholder="authText('nickname_placeholder', '给自己起个名字')" required maxlength="32">
+          </div>
+          <div>
+            <label class="xy-label" x-text="authText('password_label', '密码')">密码</label>
+            <input type="password" x-model="registerForm.password" class="xy-input" :placeholder="authText('register_password_placeholder', '至少 8 位')" required minlength="8">
+          </div>
+          <button type="submit" class="xy-btn xy-btn-primary w-full" :disabled="loading">
+            <span x-show="!loading" x-text="authText('register_button_text', '完成注册')">完成注册</span>
+            <span x-show="loading" class="xy-loading"></span>
+          </button>
+        </form>
+        <p class="text-xs text-slate-500 mt-4 text-center" x-text="authText('register_hint_points', '注册后将自动获得 2500 惑梦币，约 50 次角色回复')">注册后将自动获得 2500 惑梦币，约 50 次角色回复</p>
+      </div>
+
+      <!-- 重置密码 -->
+      <div x-show="view==='reset'" class="xy-glass p-7">
+        <div class="mb-5">
+          <h2 class="text-white text-lg font-semibold" x-text="authText('reset_title', '重置密码')">重置密码</h2>
+          <p class="text-xs text-slate-400 mt-1" x-text="authText('reset_subtitle', '输入注册邮箱，使用邮件验证码设置新密码。')">输入注册邮箱，使用邮件验证码设置新密码。</p>
+        </div>
+        <form @submit.prevent="doResetPassword" class="space-y-4">
+          <div>
+            <label class="xy-label" x-text="authText('email_label', '邮箱')">邮箱</label>
+            <input type="email" x-model="resetForm.email" class="xy-input" :placeholder="authText('email_placeholder', 'you@example.com')" required autocomplete="email">
+            <p class="text-xs text-slate-500 mt-2" x-text="authText('reset_email_hint', '验证码只会发送到已注册邮箱')">验证码只会发送到已注册邮箱</p>
+          </div>
+          <div>
+            <label class="xy-label" x-text="authText('code_label', '验证码')">验证码</label>
+            <div class="flex gap-2">
+              <input type="text" x-model="resetForm.code" class="xy-input flex-1" :placeholder="authText('code_placeholder', '6 位验证码')" required pattern="\d{6}">
+              <button type="button" @click="sendResetCode" class="xy-btn xy-btn-ghost text-sm whitespace-nowrap" :disabled="resetCodeCountdown > 0 || sendingResetCode">
+                <span x-show="!sendingResetCode && resetCodeCountdown===0" x-text="authText('send_code_button_text', '发送')">发送</span>
+                <span x-show="sendingResetCode" class="xy-loading"></span>
+                <span x-show="resetCodeCountdown>0" x-text="`${resetCodeCountdown}s`"></span>
+              </button>
+            </div>
+          </div>
+          <div>
+            <label class="xy-label" x-text="authText('password_label', '密码')">密码</label>
+            <input type="password" x-model="resetForm.password" class="xy-input" :placeholder="authText('reset_password_placeholder', '输入新密码，至少 8 位')" required minlength="8" autocomplete="new-password">
+          </div>
+          <button type="submit" class="xy-btn xy-btn-primary w-full" :disabled="loading">
+            <span x-show="!loading" x-text="authText('reset_button_text', '重置并登录')">重置并登录</span>
+            <span x-show="loading" class="xy-loading"></span>
+          </button>
+        </form>
+      </div>
+
+      <p class="text-center text-xs text-slate-500 mt-6">
+        <a href="/" class="xy-link" x-text="authText('home_link_text', '返回首页')">返回首页</a>
+      </p>
+    </div>
+  </div>
+</body>
+</html>

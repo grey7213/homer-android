@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>创作工坊 · 惑梦（Homer）</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/img/favicon-32.png?v=20260901-persistent-pages">
+  <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
+  <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
+  <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
+  <script type="module" src="/app/assets/js/hub-pages.js?v=20260812-license-removal"></script>
+  <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
+  <style>
+    .ws-create-mask { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 18px; background: rgba(7, 8, 15, .66); backdrop-filter: blur(8px); }
+    .ws-create-dialog { width: min(560px, 100%); max-height: calc(100dvh - 36px); overflow: auto; border: 1px solid rgba(255,255,255,.13); border-radius: 22px; background: rgba(24, 21, 37, .97); box-shadow: 0 28px 90px rgba(0,0,0,.48); }
+    .ws-create-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; padding: 20px 20px 14px; }
+    .ws-create-head h2 { margin: 0; color: #fff; font-size: 18px; font-weight: 800; }
+    .ws-create-head p { margin: 5px 0 0; color: rgba(237,233,254,.62); font-size: 12px; }
+    .ws-create-close { width: 34px; height: 34px; flex: 0 0 auto; border: 0; border-radius: 10px; color: rgba(255,255,255,.7); background: rgba(255,255,255,.07); cursor: pointer; }
+    .ws-create-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 4px 20px 20px; }
+    .ws-create-option { display: flex; align-items: center; gap: 13px; min-height: 90px; padding: 15px; border: 1px solid rgba(255,255,255,.1); border-radius: 16px; color: #fff; background: rgba(255,255,255,.045); text-decoration: none; transition: .16s ease; }
+    .ws-create-option:hover { border-color: rgba(251,113,133,.55); background: rgba(251,113,133,.1); transform: translateY(-1px); }
+    .ws-create-option__icon { display: grid; place-items: center; width: 42px; height: 42px; flex: 0 0 auto; border-radius: 13px; background: rgba(255,255,255,.08); font-size: 21px; }
+    .ws-create-option strong, .ws-create-option small { display: block; }
+    .ws-create-option strong { font-size: 14px; }
+    .ws-create-option small { margin-top: 4px; color: rgba(237,233,254,.58); font-size: 11px; line-height: 1.45; }
+    @media (max-width: 560px) { .ws-create-grid { grid-template-columns: 1fr; } .ws-create-option { min-height: 76px; } }
+  </style>
+</head>
+<body class="min-h-screen hub-page hub-page--workshop">
+  <div class="xy-stars-bg"></div>
+  <div class="xy-meteor"></div>
+
+  <div class="app-shell" x-data="workshopPage()" x-cloak>
+    <aside class="app-sidebar" data-app-sidebar></aside>
+    <main class="app-main">
+      <header class="app-topbar" x-data="{ createMenuOpen: false }" @keydown.escape.window="createMenuOpen = false">
+        <h1 x-text="appNavText('workshop', '创作工坊')">创作工坊</h1>
+        <div class="grow"></div>
+        <button type="button" class="xy-btn xy-btn-primary text-sm" @click="createMenuOpen = true">＋ 新建</button>
+        <template x-teleport="body">
+          <div class="ws-create-mask" x-show="createMenuOpen" x-transition.opacity @click.self="createMenuOpen = false" role="presentation">
+            <section class="ws-create-dialog" role="dialog" aria-modal="true" aria-labelledby="ws-create-title">
+              <div class="ws-create-head">
+                <div><h2 id="ws-create-title">新建作品</h2><p>选择你要发布到惑梦的内容类型。</p></div>
+                <button type="button" class="ws-create-close" @click="createMenuOpen = false" aria-label="关闭">×</button>
+              </div>
+              <div class="ws-create-grid">
+                <a class="ws-create-option" href="/app/create.html"><span class="ws-create-option__icon">◉</span><span><strong>新建角色</strong><small>创建完整角色卡，可选择报名当前赛事。</small></span></a>
+                <a class="ws-create-option" href="/app/community.html?tab=mod&amp;new=1"><span class="ws-create-option__icon">◇</span><span><strong>新建 Mod</strong><small>以世界书条目组成可收藏的扩展。</small></span></a>
+                <a class="ws-create-option" href="/app/community.html?tab=ui_template&amp;new=1"><span class="ws-create-option__icon">▣</span><span><strong>新建 UI 模板</strong><small>发布界面模板并提供隔离的静态演示。</small></span></a>
+                <a class="ws-create-option" href="/app/community.html?tab=preset&amp;new=1"><span class="ws-create-option__icon">✦</span><span><strong>新建预设</strong><small>发布提示词预设，公开页仅展示条目名。</small></span></a>
+              </div>
+            </section>
+          </div>
+        </template>
+      </header>
+
+      <div class="hub-loading-skeleton app-page-pad max-w-6xl mx-auto" x-show="!ready" aria-label="正在加载创作工坊">
+        <div class="hub-skeleton hub-skeleton--hero"></div>
+        <div class="hub-skeleton-grid"><i></i><i></i><i></i><i></i></div>
+        <div class="hub-skeleton-grid hub-skeleton-grid--wide"><i></i><i></i></div>
+      </div>
+
+      <section class="app-page-pad max-w-6xl mx-auto ws-page" x-show="ready" x-transition.opacity>
+
+        <!-- 紧凑标题 + 实时统计条 -->
+        <div class="ws-headline">
+          <div class="ws-headline__lead">
+            <div class="ws-headline__eyebrow" x-text="emptyText('workshop_eyebrow', '创作者工作台')">创作者工作台</div>
+            <h2 class="ws-headline__title" x-text="emptyText('workshop_title', '把设定交给你，其余交给站点。')">把设定交给你，其余交给站点。</h2>
+            <p class="ws-headline__copy" x-text="emptyText('workshop_copy', '填写设定、开场白和封面即可发布；模型 API 由站点后台统一配置，不必操心额度和 Key。')">填写设定、开场白和封面即可发布；模型 API 由站点后台统一配置，不必操心额度和 Key。</p>
+          </div>
+          <dl class="ws-stats">
+            <div class="ws-stat">
+              <dt x-text="emptyText('workshop_stat_mine', '我的角色')">我的角色</dt>
+              <dd x-text="myTotal"></dd>
+            </div>
+            <div class="ws-stat">
+              <dt x-text="emptyText('workshop_stat_public', '已公开')">已公开</dt>
+              <dd x-text="publicCount"></dd>
+            </div>
+            <div class="ws-stat">
+              <dt x-text="emptyText('workshop_stat_library', '角色库')">角色库</dt>
+              <dd x-text="libraryTotal"></dd>
+            </div>
+          </dl>
+        </div>
+
+        <!-- 细行快捷导航（统一样式，图标引导，取代四彩卡） -->
+        <nav class="ws-quicknav" aria-label="创作入口">
+          <a class="ws-navitem" href="/app/create.html">
+            <span class="ws-navitem__ico" aria-hidden="true">＋</span>
+            <span class="ws-navitem__text"><strong x-text="emptyText('workshop_create_title', '新建角色')">新建角色</strong><em x-text="emptyText('workshop_create_copy', '从零捏一张角色卡')">从零捏一张角色卡</em></span>
+          </a>
+          <a class="ws-navitem" href="/app/my-apps.html">
+            <span class="ws-navitem__ico" aria-hidden="true">◉</span>
+            <span class="ws-navitem__text"><strong x-text="emptyText('workshop_my_roles_title', '我的角色')">我的角色</strong><em x-text="emptyText('workshop_my_roles_copy', '编辑公开状态与设定')">编辑公开状态与设定</em></span>
+          </a>
+          <a class="ws-navitem" href="/admin.html">
+            <span class="ws-navitem__ico" aria-hidden="true">✦</span>
+            <span class="ws-navitem__text"><strong x-text="emptyText('workshop_official_title', '官方角色')">官方角色</strong><em x-text="emptyText('workshop_official_copy', '管理员发布与维护')">管理员发布与维护</em></span>
+          </a>
+          <a class="ws-navitem" href="/app/explore.html">
+            <span class="ws-navitem__ico" aria-hidden="true">▦</span>
+            <span class="ws-navitem__text"><strong x-text="emptyText('workshop_library_title', '角色库')">角色库</strong><em x-text="syncedLibraryText()"></em></span>
+          </a>
+          <a class="ws-navitem" href="/app/data-merge.html">
+            <span class="ws-navitem__ico" aria-hidden="true">⇄</span>
+            <span class="ws-navitem__text"><strong x-text="emptyText('workshop_merge_title', '惑梦数据合并')">惑梦数据合并</strong><em x-text="emptyText('workshop_merge_copy', '合并世界书 / 正则并导出')">合并世界书 / 正则并导出</em></span>
+          </a>
+          <a class="ws-navitem" href="/app/community.html?tab=mod">
+            <span class="ws-navitem__ico" aria-hidden="true">◇</span>
+            <span class="ws-navitem__text"><strong>Mod</strong><em>世界书扩展社区</em></span>
+          </a>
+          <a class="ws-navitem" href="/app/community.html?tab=ui_template">
+            <span class="ws-navitem__ico" aria-hidden="true">▣</span>
+            <span class="ws-navitem__text"><strong>UI 模板</strong><em>查看模板与安全演示</em></span>
+          </a>
+          <a class="ws-navitem" href="/app/community.html?tab=preset">
+            <span class="ws-navitem__ico" aria-hidden="true">✦</span>
+            <span class="ws-navitem__text"><strong>预设</strong><em>提示词预设社区</em></span>
+          </a>
+          <a class="ws-navitem" href="/app/community.html?tab=contests">
+            <span class="ws-navitem__ico" aria-hidden="true">♛</span>
+            <span class="ws-navitem__text"><strong>当前赛事</strong><em>参赛角色与实时票数</em></span>
+          </a>
+        </nav>
+
+
+        <!-- 两栏：主区=我的角色卡片网格；右侧窄栏=比赛 + 排行榜 -->
+        <div class="ws-grid">
+          <div class="ws-main">
+            <div class="ws-section-head">
+              <h3 x-text="emptyText('workshop_my_section', '我的角色')">我的角色</h3>
+              <a class="xy-link text-sm" href="/app/my-apps.html" x-show="myApps.length" x-text="emptyText('workshop_manage_all', '管理全部 →')">管理全部 →</a>
+            </div>
+
+            <template x-if="myApps.length === 0">
+              <div class="ws-empty">
+                <div class="ws-empty__ico" aria-hidden="true">＋</div>
+                <p x-text="emptyText('workshop_empty_title', '你还没有创建过角色')">你还没有创建过角色</p>
+                <a href="/app/create.html" class="xy-btn xy-btn-primary text-sm" x-text="emptyText('my_apps_cta_text', '马上去创建')">马上去创建</a>
+              </div>
+            </template>
+
+            <div class="ws-cards" x-show="myApps.length">
+              <template x-for="app in myApps" :key="app.id">
+                <a class="ws-card" :href="`/app/create.html?id=${encodeURIComponent(app.id)}`">
+                  <div class="ws-card__cover">
+                    <img :src="app.cover || app.icon || '/assets/img/apk/avatar.webp?v=20260901-persistent-pages'" alt="" onerror="this.src='/assets/img/apk/avatar.webp?v=20260901-persistent-pages'">
+                    <span class="ws-card__badge" :class="app.is_public !== false ? 'is-public' : 'is-private'"
+                          x-text="app.is_public !== false ? emptyText('workshop_badge_public','公开') : emptyText('workshop_badge_private','私密')"></span>
+                  </div>
+                  <div class="ws-card__body">
+                    <div class="ws-card__name" x-text="app.name || myText('unnamed_role', '未命名角色')"></div>
+                    <div class="ws-card__desc" x-text="app.summary || app.description || myText('summary_fallback', '自建角色')"></div>
+                  </div>
+                </a>
+              </template>
+              <a class="ws-card ws-card--add" href="/app/create.html">
+                <span class="ws-card--add__ico" aria-hidden="true">＋</span>
+                <span x-text="emptyText('workshop_add_more', '再建一张')">再建一张</span>
+              </a>
+            </div>
+          </div>
+
+          <aside class="ws-side">
+            <section class="ws-panel ws-contest">
+              <div class="ws-panel__eyebrow" x-text="creatorContest?.period || emptyText('creator_contest_period', '2026-07')">2026-07</div>
+              <h3 x-text="creatorContest?.title || emptyText('creator_contest_title', '本期创作者比赛')">本期创作者比赛</h3>
+              <p x-text="creatorContest?.description || emptyText('creator_contest_copy', '每两周统计公开角色的聊天量、收藏和点赞，优质创作者会进入展示榜。')"></p>
+              <div class="ws-tags">
+                <span x-text="creatorContest?.status || emptyText('creator_contest_status', '长期开放')"></span>
+                <span x-show="contestMetricText()" x-text="contestMetricText()"></span>
+              </div>
+              <div class="ws-contest__reward" x-text="creatorContest?.reward || emptyText('creator_contest_reward', '奖励：榜单展示、站内推荐位和后续积分激励。')"></div>
+            </section>
+
+            <section class="ws-panel ws-board">
+              <div class="ws-panel__head">
+                <h3 x-text="emptyText('creator_leaderboard_title', '创作者排行榜')">创作者排行榜</h3>
+                <span class="ws-board__count" x-show="creatorLeaderboard.length"
+                      x-text="`${creatorLeaderboard.length} 位`"></span>
+              </div>
+              <template x-if="creatorLeaderboard.length === 0">
+                <div class="ws-board__empty" x-text="emptyText('creator_leaderboard_empty', '还没有公开用户角色，先发布一张角色卡吧。')">还没有公开用户角色，先发布一张角色卡吧。</div>
+              </template>
+              <ol class="ws-board__list" x-show="creatorLeaderboard.length">
+                <template x-for="(row, i) in creatorLeaderboard" :key="row.user_id || row.rank">
+                  <li class="ws-board__row">
+                    <span class="ws-medal" :class="medalClass(i)" x-text="row.rank || (i + 1)"></span>
+                    <div class="ws-board__main">
+                      <div class="ws-board__name" x-text="creatorName(row)"></div>
+                      <div class="ws-board__meta" x-text="`${row.role_count || 0} 张 · ${row.like_count || 0} 赞 · ${row.favorite_count || 0} 收藏`"></div>
+                    </div>
+                    <span class="ws-board__score" x-text="creatorScore(row)"></span>
+                  </li>
+                </template>
+              </ol>
+            </section>
+          </aside>
+        </div>
+
+      </section>
+    </main>
+    <nav class="app-bottom-nav" data-app-bottom-nav></nav>
+  </div>
+</body>
+</html>

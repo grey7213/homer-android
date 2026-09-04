@@ -1,0 +1,8 @@
+User-agent: *
+Disallow: /admin.html
+Disallow: /dashboard.html
+Disallow: /console/
+Disallow: /admin/
+Disallow: /go/
+
+Sitemap: https://patcher.villainy.top/

@@ -1,0 +1,1379 @@
+/* 惑梦（Homer） 自定义样式 - 深色星空主题 */
+
+:root {
+  --xy-primary: #8b5cf6;
+  --xy-primary-light: #a78bfa;
+  --xy-primary-dark: #6d28d9;
+  --xy-bg-darkest: #0a0814;
+  --xy-bg-dark: #110d22;
+  --xy-bg-card: rgba(30, 22, 62, 0.55);
+  --xy-border: rgba(139, 92, 246, 0.18);
+  --xy-text: #e9e7f5;
+  --xy-text-dim: #9ca0c0;
+  --xy-success: #10b981;
+  --xy-danger: #ef4444;
+  --xy-warning: #f59e0b;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body {
+  background: var(--xy-bg-darkest);
+  color: var(--xy-text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* 星空背景 */
+.xy-stars-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  background:
+    radial-gradient(ellipse 80% 60% at 20% 0%, rgba(139, 92, 246, 0.32), transparent 70%),
+    radial-gradient(ellipse 60% 50% at 80% 20%, rgba(99, 102, 241, 0.22), transparent 70%),
+    radial-gradient(ellipse 70% 60% at 50% 100%, rgba(168, 85, 247, 0.18), transparent 70%),
+    linear-gradient(180deg, #0a0814 0%, #0e0a1f 50%, #0a0814 100%);
+}
+
+.xy-stars-bg::before,
+.xy-stars-bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(1px 1px at 25% 30%, white, transparent),
+    radial-gradient(1px 1px at 50% 70%, white, transparent),
+    radial-gradient(2px 2px at 80% 20%, rgba(255,255,255,.7), transparent),
+    radial-gradient(1px 1px at 15% 80%, white, transparent),
+    radial-gradient(1px 1px at 70% 90%, white, transparent),
+    radial-gradient(1.5px 1.5px at 90% 50%, rgba(255,255,255,.8), transparent),
+    radial-gradient(1px 1px at 35% 60%, white, transparent),
+    radial-gradient(2px 2px at 60% 35%, rgba(255,255,255,.7), transparent);
+  background-size: 600px 600px;
+  background-repeat: repeat;
+  opacity: 0.5;
+  animation: xy-twinkle 8s ease-in-out infinite;
+}
+
+.xy-stars-bg::after {
+  background-size: 800px 800px;
+  background-position: 200px 200px;
+  animation-duration: 12s;
+  animation-delay: -4s;
+}
+
+@keyframes xy-twinkle {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.8; }
+}
+
+/* 流星动画 */
+@keyframes xy-shooting {
+  0% { transform: translate3d(0, 0, 0) rotate(-30deg); opacity: 0; }
+  10% { opacity: 1; }
+  100% { transform: translate3d(-600px, 600px, 0) rotate(-30deg); opacity: 0; }
+}
+
+.xy-meteor {
+  position: fixed;
+  top: 10%;
+  right: 10%;
+  width: 2px;
+  height: 80px;
+  background: linear-gradient(180deg, transparent, white, transparent);
+  pointer-events: none;
+  z-index: -1;
+  animation: xy-shooting 6s linear infinite;
+  animation-delay: 2s;
+}
+
+.xy-meteor:nth-child(2) {
+  top: 40%;
+  right: 30%;
+  animation-delay: 5s;
+  animation-duration: 8s;
+}
+
+/* 玻璃态卡片 */
+.xy-glass {
+  background: var(--xy-bg-card);
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  border: 1px solid var(--xy-border);
+  border-radius: 16px;
+}
+
+.xy-glass-hover {
+  transition: transform .3s ease, border-color .3s ease, box-shadow .3s ease;
+}
+
+.xy-glass-hover:hover {
+  transform: translateY(-4px);
+  border-color: rgba(139, 92, 246, 0.45);
+  box-shadow: 0 18px 50px -12px rgba(139, 92, 246, 0.45);
+}
+
+/* 渐变文字 */
+.xy-gradient-text {
+  background: linear-gradient(135deg, #c4b5fd 0%, #f0abfc 50%, #93c5fd 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+/* 主按钮 */
+.xy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  border-radius: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: all .25s ease;
+  text-decoration: none;
+}
+
+.xy-btn-primary {
+  background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+  color: white;
+  box-shadow: 0 8px 22px -6px rgba(139, 92, 246, 0.55);
+}
+
+.xy-btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 32px -6px rgba(139, 92, 246, 0.7);
+}
+
+.xy-btn-primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.xy-btn-ghost {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--xy-text);
+  border: 1px solid var(--xy-border);
+}
+
+.xy-btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(139, 92, 246, 0.4);
+}
+
+.xy-btn-danger {
+  background: rgba(239, 68, 68, 0.15);
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+}
+
+.xy-btn-danger:hover {
+  background: rgba(239, 68, 68, 0.25);
+}
+
+/* 输入框 */
+.xy-input {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--xy-border);
+  border-radius: 10px;
+  color: var(--xy-text);
+  font-size: 14px;
+  transition: border-color .2s, background .2s;
+}
+
+.xy-input::placeholder {
+  color: var(--xy-text-dim);
+}
+
+.xy-input:focus {
+  outline: none;
+  border-color: var(--xy-primary-light);
+  background: rgba(255, 255, 255, 0.07);
+  box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.12);
+}
+
+select.xy-input {
+  color-scheme: dark;
+  background-color: rgba(35, 27, 62, 0.96);
+}
+
+select.xy-input option {
+  background: #211936;
+  color: #f4f1ff;
+}
+
+select.xy-input option:checked,
+select.xy-input option:hover {
+  background: #5b3fd6;
+  color: #ffffff;
+}
+
+.xy-label {
+  display: block;
+  font-size: 13px;
+  margin-bottom: 6px;
+  color: var(--xy-text-dim);
+  font-weight: 500;
+}
+
+/* 表格 */
+.xy-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.xy-table th {
+  text-align: left;
+  padding: 12px 14px;
+  font-weight: 600;
+  color: var(--xy-text-dim);
+  border-bottom: 1px solid var(--xy-border);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.xy-table td {
+  padding: 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.xy-table tr:hover td {
+  background: rgba(139, 92, 246, 0.06);
+}
+
+.xy-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.xy-badge-green { background: rgba(16, 185, 129, 0.15); color: #6ee7b7; }
+.xy-badge-yellow { background: rgba(245, 158, 11, 0.15); color: #fcd34d; }
+.xy-badge-red { background: rgba(239, 68, 68, 0.15); color: #fca5a5; }
+.xy-badge-blue { background: rgba(59, 130, 246, 0.15); color: #93c5fd; }
+.xy-badge-purple { background: rgba(139, 92, 246, 0.18); color: #c4b5fd; }
+.xy-badge-gray { background: rgba(148, 163, 184, 0.12); color: #cbd5e1; }
+
+/* Toast */
+.xy-toast {
+  position: fixed;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  padding: 12px 20px;
+  border-radius: 10px;
+  font-size: 14px;
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--xy-border);
+  animation: xy-toast-in .3s ease;
+  max-width: 90%;
+}
+
+@keyframes xy-toast-in {
+  from { opacity: 0; transform: translate(-50%, -10px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+.xy-toast-success { background: rgba(16, 185, 129, 0.2); color: #6ee7b7; border-color: rgba(16, 185, 129, 0.5); }
+.xy-toast-error { background: rgba(239, 68, 68, 0.2); color: #fca5a5; border-color: rgba(239, 68, 68, 0.5); }
+.xy-toast-info { background: rgba(59, 130, 246, 0.2); color: #93c5fd; border-color: rgba(59, 130, 246, 0.5); }
+
+/* 浮动月亮装饰 */
+.xy-moon {
+  position: absolute;
+  width: 240px;
+  height: 240px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, #f5d0fe 0%, #c4b5fd 40%, #6366f1 100%);
+  filter: blur(2px);
+  opacity: 0.18;
+  pointer-events: none;
+}
+
+/* 加载动画 */
+.xy-loading {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 6px;
+  background: url('/assets/img/brand/pull-refresh-active-64.png?v=20260901-persistent-pages') center / contain no-repeat;
+  animation: xy-loader-breathe .9s ease-in-out infinite;
+}
+
+@keyframes xy-loader-breathe {
+  0%, 100% { opacity: .72; transform: translateY(1px) scale(.94); }
+  50% { opacity: 1; transform: translateY(-1px) scale(1); }
+}
+
+/* 链接 */
+.xy-link {
+  color: var(--xy-primary-light);
+  text-decoration: none;
+  transition: color .2s;
+}
+
+.xy-link:hover {
+  color: #d8b4fe;
+  text-decoration: underline;
+}
+
+/* Alpine 状态 */
+[x-cloak] { display: none !important; }
+
+/* 移动端 */
+@media (max-width: 640px) {
+  .xy-table { font-size: 12px; }
+  .xy-table td, .xy-table th { padding: 8px 10px; }
+}
+
+/* ===========================================================
+   ✨ Hero 电影级视觉 (Cinematic) — v2 升级
+   =========================================================== */
+
+/* Hero 容器：多层背景叠合 */
+.xy-cinema {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  min-height: 100vh;
+}
+
+/* Layer 1: 背景图 + ken-burns 缓推 */
+.xy-cinema__bg {
+  position: absolute;
+  inset: -4%;
+  z-index: -5;
+  background-image: url('/assets/img/hero-bg-desktop.jpg');
+  background-size: cover;
+  background-position: center 38%;
+  background-repeat: no-repeat;
+  will-change: transform;
+  animation: xy-kenburns 30s ease-in-out infinite alternate;
+}
+
+@media (max-width: 768px) {
+  .xy-cinema__bg {
+    background-image: url('/assets/img/hero-bg-mobile.jpg');
+    background-position: center 30%;
+  }
+}
+
+@keyframes xy-kenburns {
+  0%   { transform: scale(1.0)  translate3d(0, 0, 0); }
+  100% { transform: scale(1.08) translate3d(-1.2%, -0.8%, 0); }
+}
+
+/* Layer 2: 紫色 bloom 光晕（屏幕中上方） */
+.xy-cinema__glow {
+  position: absolute;
+  inset: 0;
+  z-index: -4;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 65% 40% at 50% 30%, rgba(167, 139, 250, 0.28), transparent 70%),
+    radial-gradient(ellipse 50% 60% at 85% 18%, rgba(244, 114, 182, 0.18), transparent 65%),
+    radial-gradient(ellipse 80% 45% at 50% 85%, rgba(99, 102, 241, 0.22), transparent 70%);
+  mix-blend-mode: screen;
+}
+
+/* Layer 3: 暗角 vignette + 上下黑色渐隐（让文字浮出） */
+.xy-cinema__vignette {
+  position: absolute;
+  inset: 0;
+  z-index: -3;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(8, 4, 24, 0.6) 0%, transparent 18%, transparent 60%, rgba(8, 4, 24, 0.85) 100%),
+    radial-gradient(ellipse 100% 80% at 50% 50%, transparent 40%, rgba(8, 4, 24, 0.55) 100%);
+}
+
+/* Layer 4: 噪点 (film grain) */
+.xy-cinema__grain {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  opacity: 0.06;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)' opacity='0.5'/></svg>");
+  background-size: 200px 200px;
+  animation: xy-grain 1.2s steps(6) infinite;
+}
+
+@keyframes xy-grain {
+  0%   { transform: translate(0, 0); }
+  20%  { transform: translate(-3%, 2%); }
+  40%  { transform: translate(2%, -3%); }
+  60%  { transform: translate(-2%, -2%); }
+  80%  { transform: translate(3%, 1%); }
+  100% { transform: translate(0, 0); }
+}
+
+/* Layer 5: 浮动粒子 */
+.xy-cinema__particles {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.xy-cinema__particle {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 0 6px 1px rgba(244, 114, 182, 0.6);
+  opacity: 0;
+  animation: xy-float-up 12s linear infinite;
+}
+
+@keyframes xy-float-up {
+  0%   { transform: translateY(20px); opacity: 0; }
+  10%  { opacity: 0.85; }
+  90%  { opacity: 0.6; }
+  100% { transform: translateY(-110vh); opacity: 0; }
+}
+
+/* ===========================================================
+   ✨ 电影级标题：核心白 + 紫色 outer glow 立体感
+   =========================================================== */
+.xy-cinema-title {
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: #fff;
+  text-shadow:
+    0 0 12px rgba(255, 255, 255, 0.35),
+    0 0 28px rgba(196, 181, 253, 0.55),
+    0 0 60px rgba(168, 85, 247, 0.45),
+    0 4px 20px rgba(0, 0, 0, 0.6);
+  position: relative;
+}
+
+.xy-cinema-title::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -12px;
+  width: 60px;
+  height: 2px;
+  transform: translateX(-50%);
+  background: linear-gradient(90deg, transparent, #f0abfc, transparent);
+  filter: blur(1px);
+  opacity: 0.7;
+}
+
+.xy-cinema-subtitle {
+  color: rgba(232, 226, 255, 0.78);
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.6);
+}
+
+/* 顶栏标语 chip */
+.xy-status-chip {
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(196, 181, 253, 0.3);
+  box-shadow:
+    0 4px 24px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+/* ===========================================================
+   ✨ 主 CTA 霓虹光晕按钮
+   =========================================================== */
+.xy-cta-primary {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 1rem 2.25rem;
+  font-size: 16px;
+  font-weight: 700;
+  color: white;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #8b5cf6 0%, #a855f7 50%, #ec4899 100%);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow:
+    0 8px 32px -8px rgba(168, 85, 247, 0.7),
+    0 0 0 1px rgba(255, 255, 255, 0.06) inset,
+    0 1px 0 rgba(255, 255, 255, 0.2) inset;
+  transition: transform .3s ease, box-shadow .3s ease;
+  cursor: pointer;
+  text-decoration: none;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.xy-cta-primary::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  z-index: -1;
+  background: linear-gradient(135deg, #8b5cf6, #ec4899, #06b6d4);
+  border-radius: 16px;
+  filter: blur(14px);
+  opacity: 0.55;
+  transition: opacity .3s, filter .3s;
+}
+
+.xy-cta-primary::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -120%;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.35), transparent);
+  transform: skewX(-20deg);
+  transition: left .8s cubic-bezier(.2, .8, .2, 1);
+}
+
+.xy-cta-primary:hover {
+  transform: translateY(-3px);
+  box-shadow:
+    0 14px 44px -8px rgba(236, 72, 153, 0.8),
+    0 0 0 1px rgba(255, 255, 255, 0.12) inset;
+}
+
+.xy-cta-primary:hover::before { opacity: 0.85; filter: blur(20px); }
+.xy-cta-primary:hover::after  { left: 130%; }
+
+/* 次 CTA：低调文字链接，避免和主按钮竞争 */
+.xy-cta-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 15px;
+  color: rgba(232, 226, 255, 0.85);
+  padding: 1rem 1.5rem;
+  border-radius: 12px;
+  border: 1px solid rgba(196, 181, 253, 0.25);
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(10px);
+  transition: all .25s ease;
+  text-decoration: none;
+}
+
+.xy-cta-secondary:hover {
+  border-color: rgba(196, 181, 253, 0.55);
+  background: rgba(255, 255, 255, 0.08);
+  transform: translateY(-2px);
+}
+
+/* ===========================================================
+   ✨ 产品预览：手机 mockup 卡片
+   =========================================================== */
+.xy-mockup {
+  position: relative;
+  width: 240px;
+  aspect-ratio: 9 / 19;
+  border-radius: 32px;
+  background: linear-gradient(160deg, #1a1230 0%, #0a0420 100%);
+  border: 1px solid rgba(196, 181, 253, 0.18);
+  box-shadow:
+    0 30px 60px -20px rgba(0, 0, 0, 0.7),
+    0 0 0 1px rgba(0, 0, 0, 0.6),
+    inset 0 0 30px rgba(168, 85, 247, 0.08);
+  padding: 10px;
+  flex-shrink: 0;
+  transition: transform .5s ease, box-shadow .5s ease;
+}
+
+.xy-mockup::before {
+  content: '';
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 80px;
+  height: 16px;
+  background: #000;
+  border-radius: 12px;
+  z-index: 3;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.4);
+}
+
+.xy-mockup__screen {
+  width: 100%;
+  height: 100%;
+  border-radius: 22px;
+  overflow: hidden;
+  position: relative;
+  background: linear-gradient(180deg, #1e1340 0%, #0d0625 100%);
+}
+
+.xy-mockup__screen img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top center;
+}
+
+/* 卡片底部 caption（悬浮在屏幕底端） */
+.xy-mockup__caption {
+  position: absolute;
+  left: 50%;
+  bottom: -36px;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  padding: 5px 12px;
+  font-size: 11px;
+  color: rgba(232, 226, 255, 0.85);
+  background: rgba(20, 14, 40, 0.75);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(196, 181, 253, 0.2);
+  border-radius: 999px;
+  opacity: 0;
+  transition: opacity .4s, transform .4s;
+}
+
+.xy-mockup__caption .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.xy-mockup-stack {
+  perspective: 1400px;
+  display: flex;
+  gap: -40px;
+  justify-content: center;
+  padding-bottom: 60px;  /* 为 caption 让出空间 */
+}
+
+.xy-mockup-stack > * + * {
+  margin-left: -60px;
+}
+
+.xy-mockup-stack > *:nth-child(1) {
+  transform: rotateY(14deg) translateZ(-30px) translateX(20px);
+  opacity: 0.85;
+}
+
+.xy-mockup-stack > *:nth-child(2) {
+  transform: translateZ(20px);
+  z-index: 5;
+  box-shadow:
+    0 40px 80px -20px rgba(168, 85, 247, 0.4),
+    0 30px 60px -20px rgba(0, 0, 0, 0.7);
+}
+
+/* 中间卡片的 caption 默认显示 */
+.xy-mockup-stack > *:nth-child(2) .xy-mockup__caption {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.xy-mockup-stack > *:nth-child(3) {
+  transform: rotateY(-14deg) translateZ(-30px) translateX(-20px);
+  opacity: 0.85;
+}
+
+.xy-mockup-stack > *:hover {
+  transform: translateZ(40px) scale(1.03);
+  z-index: 10;
+  opacity: 1;
+}
+
+/* 任意 mockup 悬停时，显示对应 caption */
+.xy-mockup:hover .xy-mockup__caption {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* 移动端单卡片 caption 默认显示 */
+.md\:hidden .xy-mockup .xy-mockup__caption {
+  opacity: 1;
+}
+
+/* 信任栏分隔点 */
+.xy-trust-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  justify-content: center;
+  color: rgba(232, 226, 255, 0.65);
+  font-size: 13px;
+}
+
+.xy-trust-row span.dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgba(196, 181, 253, 0.5);
+}
+
+/* 滚动指示器 */
+.xy-scroll-hint {
+  position: absolute;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 26px;
+  height: 42px;
+  border: 2px solid rgba(196, 181, 253, 0.45);
+  border-radius: 14px;
+  pointer-events: none;
+}
+
+.xy-scroll-hint::before {
+  content: '';
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  width: 3px;
+  height: 8px;
+  background: rgba(196, 181, 253, 0.85);
+  border-radius: 2px;
+  transform: translateX(-50%);
+  animation: xy-scroll-dot 2s ease-in-out infinite;
+}
+
+@keyframes xy-scroll-dot {
+  0%, 100% { transform: translate(-50%, 0); opacity: 0.85; }
+  50%      { transform: translate(-50%, 14px); opacity: 0.2; }
+}
+
+/* 减少动画 (a11y) */
+@media (prefers-reduced-motion: reduce) {
+  .xy-cinema__bg,
+  .xy-cinema__grain,
+  .xy-cinema__particle,
+  .xy-scroll-hint::before {
+    animation: none !important;
+  }
+}
+
+/* ===========================================================
+   ✨ 首屏入场动画 (Hero Entrance Choreography)
+   思路：每个元素从 18px 下方淡入，按视觉重要性依次错峰
+   =========================================================== */
+
+/* 默认状态：隐藏 + 下方 */
+.xy-fade-up {
+  opacity: 0;
+  transform: translateY(18px);
+  filter: blur(6px);
+  will-change: opacity, transform, filter;
+  animation: xy-fade-up 1.1s cubic-bezier(.2, .8, .2, 1) forwards;
+}
+
+@keyframes xy-fade-up {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+/* 错峰延迟：用 data-delay 属性控制，CSS 选择器覆盖 inline style */
+.xy-fade-up[data-delay="0"]   { animation-delay: 0.05s; }
+.xy-fade-up[data-delay="1"]   { animation-delay: 0.25s; }
+.xy-fade-up[data-delay="2"]   { animation-delay: 0.55s; }
+.xy-fade-up[data-delay="3"]   { animation-delay: 0.80s; }
+.xy-fade-up[data-delay="4"]   { animation-delay: 1.10s; }
+.xy-fade-up[data-delay="5"]   { animation-delay: 1.40s; }
+.xy-fade-up[data-delay="6"]   { animation-delay: 1.70s; }
+
+/* 主标题特殊：稍长动画 + 不模糊（让光晕清晰先出现） */
+.xy-cinema-title.xy-fade-up {
+  animation-duration: 1.4s;
+  filter: none;
+  transform: translateY(28px) scale(0.96);
+}
+
+@keyframes xy-fade-up-title {
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.xy-cinema-title.xy-fade-up {
+  animation-name: xy-fade-up-title;
+}
+
+/* 标题底部分隔线：从短到长展开 */
+.xy-cinema-title::after {
+  width: 0;
+  animation: xy-line-grow 1s 1.6s cubic-bezier(.2, .8, .2, 1) forwards;
+}
+
+@keyframes xy-line-grow {
+  to { width: 60px; }
+}
+
+/* CTA 按钮：稍微缩放进入，配合主按钮的霓虹光晕 */
+.xy-cta-primary.xy-fade-up,
+.xy-cta-secondary.xy-fade-up {
+  transform: translateY(18px) scale(0.94);
+  filter: none;
+}
+
+@keyframes xy-cta-rise {
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.xy-cta-primary.xy-fade-up,
+.xy-cta-secondary.xy-fade-up {
+  animation-name: xy-cta-rise;
+  animation-duration: 0.9s;
+}
+
+/* 主按钮入场后的微浮动（呼吸感 - 引导点击） */
+@keyframes xy-cta-breath {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-3px); }
+}
+
+.xy-cta-primary {
+  animation-name: xy-cta-rise, xy-cta-breath;
+  animation-duration: 0.9s, 3.6s;
+  animation-delay: 1.40s, 2.4s;
+  animation-iteration-count: 1, infinite;
+  animation-timing-function: cubic-bezier(.2, .8, .2, 1), ease-in-out;
+  animation-fill-mode: forwards, both;
+}
+
+/* 滚动指示器：最后浮起 + 自带循环 */
+.xy-scroll-hint {
+  opacity: 0;
+  animation: xy-scroll-hint-fade 0.8s 2s ease-out forwards;
+}
+
+@keyframes xy-scroll-hint-fade {
+  to { opacity: 1; }
+}
+
+/* 滚动触发动画：用纯 CSS scroll-driven 动画做产品预览的入场 */
+@supports (animation-timeline: view()) {
+  .xy-mockup-stack > * {
+    animation: xy-mockup-rise linear both;
+    animation-timeline: view();
+    animation-range: entry 0% entry 60%;
+  }
+  @keyframes xy-mockup-rise {
+    from {
+      opacity: 0;
+      filter: blur(8px);
+    }
+    to {
+      opacity: var(--xy-mockup-opacity, 1);
+      filter: blur(0);
+    }
+  }
+  /* 保留 stack 自己的 transform - 用变量协调 */
+  .xy-mockup-stack > *:nth-child(1),
+  .xy-mockup-stack > *:nth-child(3) {
+    --xy-mockup-opacity: 0.85;
+  }
+}
+
+/* 不支持 scroll-driven 的浏览器（Safari/Firefox），用 IntersectionObserver 兜底 */
+.xy-fade-on-scroll {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.8s cubic-bezier(.2, .8, .2, 1), transform 0.8s cubic-bezier(.2, .8, .2, 1);
+}
+
+.xy-fade-on-scroll.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* 减少动画 - a11y 兜底 */
+@media (prefers-reduced-motion: reduce) {
+  .xy-fade-up,
+  .xy-cta-primary,
+  .xy-scroll-hint,
+  .xy-fade-on-scroll {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
+    transition: none !important;
+  }
+}
+
+/* ===========================================================
+   Fengyue clone UI skin - shared public/admin/dashboard
+   =========================================================== */
+:root {
+  --fy-bg: #f3ede3;
+  --fy-panel: #ffffff;
+  --fy-panel-2: #faf6ef;
+  --fy-banner: #fdf3d8;
+  --fy-text: #2b2b2b;
+  --fy-text-soft: #6b6b6b;
+  --fy-text-mute: #9a9a9a;
+  --fy-accent: #ef9a5f;
+  --fy-accent-2: #e8834e;
+  --fy-accent-soft: #fbe6d3;
+  --fy-border: #ece5d8;
+  --fy-star: #f5b940;
+  --fy-shadow: 0 2px 12px rgba(0, 0, 0, .06);
+  --fy-shadow-hover: 0 8px 22px rgba(0, 0, 0, .12);
+  --xy-primary: var(--fy-accent-2);
+  --xy-primary-light: var(--fy-accent);
+  --xy-primary-dark: #c96b37;
+  --xy-bg-darkest: var(--fy-bg);
+  --xy-bg-dark: var(--fy-panel-2);
+  --xy-bg-card: var(--fy-panel);
+  --xy-border: var(--fy-border);
+  --xy-text: var(--fy-text);
+  --xy-text-dim: var(--fy-text-soft);
+  --xy-success: #10b981;
+  --xy-danger: #d9534f;
+  --xy-warning: #b8860b;
+}
+
+[data-theme="dark"] {
+  --fy-bg: #1d1b18;
+  --fy-panel: #262320;
+  --fy-panel-2: #2c2925;
+  --fy-banner: #33301a;
+  --fy-text: #ece7de;
+  --fy-text-soft: #b7b0a4;
+  --fy-text-mute: #877f72;
+  --fy-accent-soft: #3a2f24;
+  --fy-border: #37332d;
+  --fy-shadow: 0 2px 12px rgba(0, 0, 0, .4);
+  --fy-shadow-hover: 0 8px 22px rgba(0, 0, 0, .48);
+}
+
+html,
+body {
+  background: var(--fy-bg) !important;
+  color: var(--fy-text) !important;
+  letter-spacing: 0;
+}
+
+body {
+  background-image: none !important;
+}
+
+.xy-stars-bg,
+.xy-stars-bg::before,
+.xy-stars-bg::after,
+.xy-meteor,
+.xy-moon,
+.xy-cinema__bg,
+.xy-cinema__glow,
+.xy-cinema__vignette,
+.xy-cinema__grain,
+.xy-cinema__particles,
+[class*="blur-3xl"] {
+  display: none !important;
+  animation: none !important;
+}
+
+/* Tailwind-heavy pages load Tailwind before custom.css. These late overrides
+   keep text and surfaces readable after switching to the warm skin. */
+.text-white,
+.text-violet-50,
+.text-violet-100,
+.text-violet-200,
+.text-slate-100,
+.text-slate-200,
+.text-slate-300,
+[class*="text-white"],
+[class*="text-violet-100"],
+[class*="text-violet-200"],
+[class*="text-slate-200"],
+[class*="text-slate-300"] {
+  color: var(--fy-text) !important;
+  -webkit-text-fill-color: currentColor !important;
+}
+
+.text-slate-400,
+.text-slate-500,
+.text-violet-300,
+.text-violet-400,
+[class*="text-slate-400"],
+[class*="text-slate-500"],
+[class*="text-violet-300"],
+[class*="text-violet-400"] {
+  color: var(--fy-text-soft) !important;
+  -webkit-text-fill-color: currentColor !important;
+}
+
+.text-fuchsia-300,
+.text-pink-300,
+.text-amber-300,
+.text-cyan-300,
+.text-blue-300,
+.text-emerald-300,
+.text-emerald-400,
+[class*="text-fuchsia"],
+[class*="text-pink"],
+[class*="text-amber"],
+[class*="text-cyan"],
+[class*="text-blue"],
+[class*="text-emerald"] {
+  color: var(--fy-accent-2) !important;
+  -webkit-text-fill-color: currentColor !important;
+}
+
+[class*="bg-black/"],
+[class*="bg-white/"],
+[class*="bg-violet-"],
+[class*="bg-fuchsia-"],
+[class*="bg-rose-"],
+[class*="bg-cyan-"],
+[class*="bg-emerald-"],
+[class*="bg-amber-"],
+[class*="bg-blue-"] {
+  background: var(--fy-panel-2) !important;
+}
+
+[class*="border-white/"],
+[class*="border-violet-"],
+[class*="border-fuchsia-"],
+[class*="border-rose-"],
+[class*="border-cyan-"],
+[class*="border-emerald-"],
+[class*="border-amber-"] {
+  border-color: var(--fy-border) !important;
+}
+
+code,
+pre {
+  color: var(--fy-text) !important;
+}
+
+.xy-gradient-text,
+.xy-cinema-title {
+  background: none !important;
+  color: var(--fy-text) !important;
+  -webkit-text-fill-color: currentColor !important;
+  text-shadow: none !important;
+}
+
+img[alt="惑梦（Homer）"] {
+  filter: none !important;
+}
+
+.xy-cinema-title::after {
+  background: var(--fy-accent-2) !important;
+  filter: none !important;
+}
+
+.xy-glass {
+  background: var(--fy-panel) !important;
+  border: 1px solid var(--fy-border) !important;
+  border-radius: 14px !important;
+  box-shadow: var(--fy-shadow) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  color: var(--fy-text) !important;
+}
+
+.xy-glass-hover:hover {
+  transform: translateY(-3px);
+  border-color: var(--fy-accent) !important;
+  box-shadow: var(--fy-shadow-hover) !important;
+}
+
+.xy-btn,
+.xy-cta-primary,
+.xy-cta-secondary {
+  border-radius: 999px;
+  box-shadow: none !important;
+  letter-spacing: 0;
+}
+
+.xy-btn-primary,
+.xy-cta-primary {
+  background: var(--fy-accent-2) !important;
+  border-color: var(--fy-accent-2) !important;
+  color: #fff !important;
+  -webkit-text-fill-color: #fff !important;
+}
+
+.xy-btn-primary:hover,
+.xy-cta-primary:hover {
+  background: var(--fy-accent) !important;
+  transform: translateY(-1px);
+}
+
+.xy-btn-ghost,
+.xy-cta-secondary {
+  background: var(--fy-panel) !important;
+  color: var(--fy-text-soft) !important;
+  border: 1px solid var(--fy-border) !important;
+}
+
+.xy-btn-ghost:hover,
+.xy-cta-secondary:hover {
+  background: var(--fy-accent-soft) !important;
+  color: var(--fy-accent-2) !important;
+  border-color: var(--fy-accent) !important;
+}
+
+.xy-btn-danger {
+  background: #fff6f3 !important;
+  border: 1px solid #f2c5be !important;
+  color: #d9534f !important;
+}
+
+.xy-input,
+select.xy-input,
+textarea.xy-input {
+  background: var(--fy-panel-2) !important;
+  border: 1px solid var(--fy-border) !important;
+  border-radius: 10px !important;
+  color: var(--fy-text) !important;
+  color-scheme: light !important;
+  box-shadow: none !important;
+}
+
+.xy-input::placeholder,
+textarea.xy-input::placeholder {
+  color: var(--fy-text-mute) !important;
+}
+
+.xy-input:focus,
+select.xy-input:focus,
+textarea.xy-input:focus {
+  background: #fff !important;
+  border-color: var(--fy-accent) !important;
+  box-shadow: 0 0 0 3px rgba(239, 154, 95, .16) !important;
+}
+
+select.xy-input option {
+  background: var(--fy-panel);
+  color: var(--fy-text);
+}
+
+.xy-label,
+.xy-table th {
+  color: var(--fy-text-soft) !important;
+}
+
+.xy-link {
+  color: var(--fy-accent-2) !important;
+}
+
+.xy-link:hover {
+  color: #c96b37 !important;
+}
+
+.xy-loading {
+  border-color: rgba(232, 131, 78, .25) !important;
+  border-top-color: var(--fy-accent-2) !important;
+}
+
+.xy-toast {
+  background: var(--fy-panel) !important;
+  border-color: var(--fy-border) !important;
+  color: var(--fy-text) !important;
+  box-shadow: var(--fy-shadow-hover);
+}
+
+.xy-toast-success { color: #14845f !important; border-color: rgba(16, 185, 129, .35) !important; }
+.xy-toast-error { color: #b6403a !important; border-color: rgba(217, 83, 79, .35) !important; }
+.xy-toast-info { color: var(--fy-accent-2) !important; border-color: rgba(232, 131, 78, .35) !important; }
+
+.xy-badge-purple,
+.xy-badge-blue,
+.xy-badge-green,
+.xy-badge-yellow,
+.xy-badge-gray,
+.xy-badge-red {
+  background: var(--fy-accent-soft) !important;
+  color: var(--fy-accent-2) !important;
+}
+
+.xy-table th {
+  background: var(--fy-panel-2) !important;
+  border-bottom: 1px solid var(--fy-border) !important;
+}
+
+.xy-table td {
+  border-bottom: 1px solid var(--fy-border) !important;
+}
+
+.xy-table tr:hover td {
+  background: var(--fy-panel-2) !important;
+}
+
+/* Public home: keep the first viewport, but replace the cinematic dark shell
+   with the clone-style warm product surface. */
+.xy-cinema {
+  min-height: 92vh;
+  background:
+    linear-gradient(180deg, rgba(253, 243, 216, .9), rgba(243, 237, 227, .98)),
+    var(--fy-bg) !important;
+  color: var(--fy-text);
+}
+
+.xy-status-chip {
+  background: var(--fy-banner) !important;
+  border: 1px solid #f5dfaa !important;
+  color: #9a6719 !important;
+  box-shadow: none !important;
+}
+
+.xy-cinema-subtitle {
+  color: var(--fy-text-soft) !important;
+  text-shadow: none !important;
+}
+
+.xy-trust-row {
+  color: var(--fy-text-soft) !important;
+}
+
+.xy-trust-row span.dot {
+  background: var(--fy-border) !important;
+}
+
+.xy-scroll-hint {
+  display: none !important;
+}
+
+.xy-mockup {
+  background: var(--fy-panel);
+  border: 1px solid var(--fy-border);
+  box-shadow: var(--fy-shadow-hover);
+}
+
+.xy-mockup__screen {
+  background: var(--fy-panel-2);
+}
+
+.xy-mockup__caption {
+  background: var(--fy-panel);
+  border: 1px solid var(--fy-border);
+  color: var(--fy-text);
+}
+
+nav.fixed:not(.xy-global-topbar):not(.xy-admin-mobilebar),
+.fixed.top-0.inset-x-0:not(.xy-global-topbar):not(.xy-admin-mobilebar),
+.md\:hidden.fixed:not(.xy-admin-mobilebar) {
+  background: rgba(255, 255, 255, .88) !important;
+  border-color: var(--fy-border) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 1px 12px rgba(0,0,0,.04);
+}
+
+footer {
+  border-color: var(--fy-border) !important;
+  background: var(--fy-panel);
+}
+
+/* Admin/dashboard dense operations UI. */
+aside.hidden.md\:flex,
+aside.md\:flex {
+  background: var(--fy-panel) !important;
+  border-color: var(--fy-border) !important;
+  box-shadow: var(--fy-shadow);
+}
+
+aside.hidden.md\:flex button,
+aside.md\:flex button {
+  color: var(--fy-text-soft) !important;
+}
+
+aside.hidden.md\:flex button:hover,
+aside.md\:flex button:hover,
+aside.hidden.md\:flex button[class*="bg-violet"],
+aside.md\:flex button[class*="bg-violet"] {
+  background: var(--fy-accent-soft) !important;
+  color: var(--fy-accent-2) !important;
+}
+
+.fixed.inset-0,
+[class*="bg-black/70"] {
+  background: rgba(43, 43, 43, .45) !important;
+}
+
+.rounded-lg,
+.rounded-xl,
+.rounded-2xl {
+  border-radius: 12px;
+}
+
+@media (max-width: 768px) {
+  .xy-cinema {
+    min-height: 88vh;
+    padding-top: 7rem !important;
+    padding-bottom: 4rem !important;
+  }
+}
+/* Software-wide top bar treatment: an opaque-enough upper edge for legibility
+   that fades into the page instead of becoming a solid card. */
+.xy-global-topbar {
+  background: linear-gradient(180deg, rgba(10, 4, 32, .78) 0%, rgba(10, 4, 32, .52) 58%, rgba(10, 4, 32, .14) 100%) !important;
+  border-color: rgba(196, 181, 253, .14) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(132%);
+  backdrop-filter: blur(16px) saturate(132%);
+  box-shadow: 0 10px 28px rgba(3, 2, 12, .12);
+}
+
+/* 下载区：原先压着一层 Tailwind 的紫→洋红→蓝渐变（from-violet-600/20
+   via-fuchsia-500/10 to-blue-500/20）。那是深紫星空主题时代的配色，站点
+   2026-07 换成暖米浅色皮肤后，冷色渐变在暖底上显得突兀，而 cloak 层只
+   中和了 bg-* 纯色类、没管 gradient 工具类。这里改用品牌暖橙做极浅的
+   底纹，保留「下载区比周围亮一点」的视觉重点，但与整站同谱。 */
+.xy-download-wash {
+  background: linear-gradient(
+    135deg,
+    rgba(239, 154, 95, .10) 0%,
+    rgba(245, 185, 64, .05) 45%,
+    rgba(232, 131, 78, .09) 100%
+  );
+  pointer-events: none;
+}
+
+/* logo 的紫色外发光同理，换成暖调，并压低强度 —— 浅底上不需要星空时代
+   那么重的光晕。 */
+.xy-download-logo {
+  filter: drop-shadow(0 6px 18px rgba(232, 131, 78, .28));
+}
+
+/* 兵底：只中和「铺满整块的冷色渐变遮罩」，也就是 absolute + inset-0 那种
+   会大面积透到暖底上的用法。刻意不用宽泛的 [class*="from-violet-"] ——
+   功能卡那 6 个 14x14 图标底也用同一批工具类（from-violet-500/30 等），
+   它们是 6 种不同色调的浅色小方块，是有意的设计，一刀切会把它们压成同一
+   个橙色。 */
+[class*="absolute"][class*="inset-0"][class*="from-violet-"],
+[class*="absolute"][class*="inset-0"][class*="from-fuchsia-"],
+[class*="absolute"][class*="inset-0"][class*="from-purple-"],
+[class*="absolute"][class*="inset-0"][class*="via-fuchsia-"],
+[class*="absolute"][class*="inset-0"][class*="to-blue-"],
+[class*="absolute"][class*="inset-0"][class*="to-indigo-"] {
+  background-image: linear-gradient(
+    135deg,
+    rgba(239, 154, 95, .10) 0%,
+    rgba(232, 131, 78, .07) 100%
+  ) !important;
+}

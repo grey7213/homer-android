@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>探索 · 惑梦（Homer）</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/img/favicon-32.png?v=20260901-persistent-pages">
+  <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
+  <link rel="preload" as="script" href="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1">
+  <link rel="modulepreload" href="/assets/js/api.js?v=20260717-handoff-merge">
+  <link rel="modulepreload" href="/app/assets/js/app-core.js?v=20260717-handoff-merge">
+  <link rel="modulepreload" href="/app/assets/js/layout.js?v=20260901-persistent-pages">
+  <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
+  <script type="module" src="/app/assets/js/explore.js?v=20260901-persistent-pages"></script>
+  <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
+</head>
+<body class="min-h-screen">
+  <div class="xy-stars-bg"></div>
+  <div class="xy-meteor"></div>
+
+  <div class="app-shell" x-data="explorePage()" x-cloak>
+    <aside class="app-sidebar" data-app-sidebar></aside>
+    <main class="app-main">
+      <header class="app-topbar">
+        <h1 x-text="appHomeText('explore_topbar_title', '探索')">探索</h1>
+      </header>
+
+      <div class="home-search-row">
+        <label class="home-search-box" :aria-label="homeSearchPlaceholder()">
+          <svg class="home-search-box__icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M11 17a6 6 0 100-12 6 6 0 000 12z"/></svg>
+          <input type="text" x-model="searchKeyword" @keydown.enter="searchOrJump(true)" :placeholder="homeSearchPlaceholder()">
+        </label>
+        <button class="home-icon-btn home-search-action" type="button" @click="searchOrJump(true)" :title="appHomeText('search_button_title', '搜索')">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M11 17a6 6 0 100-12 6 6 0 000 12z"/></svg>
+        </button>
+        <button class="home-icon-btn" type="button" @click="togglePictureless" :class="{ 'is-active': pictureless }" :title="pictureless ? appHomeText('pictureless_on', '无图模式已开') : appHomeText('pictureless_off', '无图模式')">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3l18 18M10.58 10.58A2 2 0 0012 14a2 2 0 001.42-.58M9.88 4.24A10.85 10.85 0 0112 4c5 0 9 4 10 8a11.79 11.79 0 01-3.1 4.82M6.61 6.61A11.79 11.79 0 002 12c1 4 5 8 10 8 1.23 0 2.4-.24 3.47-.68"/></svg>
+        </button>
+        <button class="home-icon-btn" type="button" data-shell-action="theme" :title="appHomeText('theme_button_title', '夜间模式')">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12.79A9 9 0 1111.21 3a7 7 0 009.79 9.79z"/></svg>
+        </button>
+        <button class="home-icon-btn" type="button" @click="toggleAdvancedSearch" :class="{ 'is-active': advancedOpen }" :title="appHomeText('advanced_filter_title', '高级搜索')" :aria-expanded="advancedOpen.toString()" aria-controls="advanced-search-panel">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M7 12h10M10 18h4"/></svg>
+        </button>
+      </div>
+
+      <div id="advanced-search-panel" class="advanced-search-panel" x-show="advancedOpen" x-transition>
+        <div class="advanced-search-grid">
+          <label class="advanced-search-field">
+            <span x-text="appHomeText('advanced_keyword_label', '关键词')">关键词</span>
+            <input class="xy-input" type="text" x-model="advancedForm.keyword" @keydown.enter.prevent="applyAdvancedSearch" :placeholder="homeSearchPlaceholder()">
+          </label>
+          <label class="advanced-search-field">
+            <span x-text="appHomeText('advanced_category_label', '分类')">分类</span>
+            <select class="xy-input" x-model="advancedForm.category">
+              <template x-for="cat in categories" :key="cat.key">
+                <option :value="cat.key" x-text="cat.label"></option>
+              </template>
+            </select>
+          </label>
+          <label class="advanced-search-field">
+            <span x-text="appHomeText('advanced_rank_label', '榜单')">榜单</span>
+            <select class="xy-input" x-model="advancedForm.rank">
+              <template x-for="rank in rankOptions" :key="rank.key">
+                <option :value="rank.key" x-text="rank.label"></option>
+              </template>
+            </select>
+          </label>
+          <label class="advanced-search-field">
+            <span x-text="appHomeText('advanced_sort_label', '排序')">排序</span>
+            <select class="xy-input" x-model="advancedForm.sort">
+              <template x-for="sort in sortOptions" :key="sort.key">
+                <option :value="sort.key" x-text="sort.label"></option>
+              </template>
+            </select>
+          </label>
+          <label class="advanced-search-field">
+            <span x-text="appHomeText('advanced_zone_label', '内容区')">内容区</span>
+            <select class="xy-input" x-model="advancedForm.zone">
+              <template x-for="zone in zoneOptions" :key="zone.key"><option :value="zone.key" x-text="zone.label"></option></template>
+            </select>
+          </label>
+          <label class="advanced-search-field">
+            <span x-text="appHomeText('advanced_page_size_label', '每页数量')">每页数量</span>
+            <select class="xy-input" x-model.number="advancedForm.pageSize">
+              <option :value="12">12</option>
+              <option :value="24">24</option>
+              <option :value="36">36</option>
+            </select>
+          </label>
+          <label class="advanced-search-toggle">
+            <input type="checkbox" x-model="advancedForm.pictureless">
+            <span x-text="appHomeText('advanced_pictureless_label', '无图模式')">无图模式</span>
+          </label>
+        </div>
+        <div class="advanced-search-actions">
+          <button type="button" class="xy-btn xy-btn-primary text-sm" @click="applyAdvancedSearch" x-text="appHomeText('advanced_apply_text', '应用搜索')">应用搜索</button>
+          <button type="button" class="xy-btn xy-btn-ghost text-sm" @click="resetAdvancedSearch" x-text="appHomeText('advanced_reset_text', '重置')">重置</button>
+        </div>
+      </div>
+
+      <div class="toolbar-line">
+        <div class="segmented">
+          <template x-for="zone in zoneOptions" :key="zone.key"><button :class="{ 'is-active': activeZone === zone.key }" @click="setZone(zone.key)" x-text="zone.label"></button></template>
+        </div>
+        <div class="segmented">
+          <template x-for="rank in rankOptions" :key="rank.key">
+            <button :class="{ 'is-active': activeRank === rank.key }" @click="setRank(rank.key)" x-text="rank.label"></button>
+          </template>
+        </div>
+        <div class="segmented">
+          <template x-for="sort in sortOptions" :key="sort.key">
+            <button :class="{ 'is-active': activeSort === sort.key }" @click="setSort(sort.key)" x-text="sort.label"></button>
+          </template>
+        </div>
+        <button type="button" class="xy-btn xy-btn-primary text-sm" @click="shuffleRandom" :disabled="loading" title="使用新随机种子重新展示角色">换一批</button>
+      </div>
+
+      <div class="chip-row">
+        <template x-for="cat in categories" :key="cat.key">
+          <button class="chip" :class="{ 'is-active': activeCategory === cat.key }" @click="setCategory(cat.key)" x-text="cat.label"></button>
+        </template>
+      </div>
+
+      <div x-show="loading && cards.length === 0" class="flex items-center justify-center py-24"><div class="xy-loading"></div></div>
+      <div x-show="!loading && cards.length === 0" class="flex flex-col items-center justify-center py-24 text-violet-200/70">
+        <img src="/assets/img/apk/empty_view.webp?v=20260901-persistent-pages" class="w-32 opacity-60 mb-4" alt="">
+        <p class="text-sm" x-text="emptyText('explore_no_results', '没有找到匹配的角色')">没有找到匹配的角色</p>
+      </div>
+
+      <section class="home-section" x-show="featuredCards().length > 0">
+        <div class="home-section-title" x-text="appHomeText('featured_title', '官方每周推荐')">官方每周推荐</div>
+        <div class="featured-grid">
+          <template x-for="card in featuredCards()" :key="`featured-${card.id}`">
+            <article class="feature-card" :class="{ 'is-pictureless': pictureless || card.pictureless }">
+              <a class="feature-card__link" :href="`/app/character.html?id=${encodeURIComponent(card.id)}`" @click="rememberBrowsePosition(card)">
+                <div class="feature-card__cover">
+                  <img class="feature-card__img" :src="card.cover || card.icon || '/assets/img/apk/avatar.webp?v=20260901-persistent-pages'" :alt="card.name" loading="lazy" referrerpolicy="no-referrer" onerror="this.src='/assets/img/apk/avatar.webp?v=20260901-persistent-pages'">
+                  <span class="feature-card__badge" x-text="appHomeText('featured_badge', '官方推荐')">官方推荐</span>
+                  <p class="feature-card__summary" x-text="card.description || appHomeText('card_summary_fallback', '点击查看角色设定')"></p>
+                </div>
+                <div class="feature-card__body">
+                  <h2 class="feature-card__title" x-text="card.name"></h2>
+                  <p class="feature-card__desc" x-text="card.description || appHomeText('card_summary_fallback', '点击查看角色设定')"></p>
+                  <div class="card-capabilities" aria-label="角色能力">
+                    <span class="capability-badge" :class="card.hasOpening ? 'is-on capability-badge--opening' : 'is-off'"><b x-text="card.hasOpening ? '✓' : '—'"></b>开场</span>
+                    <span class="capability-badge" :class="card.hasWorldInfo ? 'is-on capability-badge--world' : 'is-off'"><b x-text="card.hasWorldInfo ? '✓' : '—'"></b>世界书</span>
+                    <span class="capability-badge" :class="card.hasRegex ? 'is-on capability-badge--regex' : 'is-off'"><b x-text="card.hasRegex ? '✓' : '—'"></b>正则</span>
+                  </div>
+                  <code class="card-id-chip" x-text="`ID: ${card.displayId || card.id}`"></code>
+                  <div class="feature-card__meta">
+                    <span x-text="card.author || appHomeText('official_author', '惑梦（Homer）官方')"></span>
+                    <span class="feature-card__stats" x-show="card.likeCount || card.playersCount">
+                      <span x-show="card.likeCount" x-text="`♥ ${card.likeCount}`"></span>
+                      <span x-show="card.playersCount" x-text="`对话 ${card.playersCount}`"></span>
+                    </span>
+                  </div>
+                  <div class="feature-card__tags">
+                    <template x-for="t in (card.tags || []).slice(0, 4)" :key="t"><span x-text="t"></span></template>
+                  </div>
+                </div>
+              </a>
+              <button class="char-card__fav feature-card__fav" :class="{ 'is-active': card.favorited }" @click="toggleFavorite(card, $event)" :aria-label="appHomeText('favorite_label', '收藏')">♥</button>
+            </article>
+          </template>
+        </div>
+      </section>
+
+      <section class="home-section" x-show="recommendedCards().length > 0">
+        <div class="home-section-title" x-text="appHomeText('recommended_title', '为你推荐')">为你推荐</div>
+        <div class="char-grid home-recommend-grid">
+        <template x-for="card in recommendedCards()" :key="card.id">
+          <article class="char-card" :class="{ 'is-pictureless': pictureless || card.pictureless }">
+            <a class="char-card__link" :href="`/app/character.html?id=${encodeURIComponent(card.id)}`" @click="rememberBrowsePosition(card)">
+              <div class="char-card__cover">
+                <img class="char-card__img" :src="card.cover || card.icon || '/assets/img/apk/avatar.webp?v=20260901-persistent-pages'" :alt="card.name" loading="lazy" referrerpolicy="no-referrer" onerror="this.src='/assets/img/apk/avatar.webp?v=20260901-persistent-pages'">
+                <div class="char-card__overlay"></div>
+                <div class="char-card__tags">
+                  <template x-for="t in (card.tags || []).slice(0, 2)" :key="t"><span class="char-card__tag" x-text="t"></span></template>
+                </div>
+              </div>
+              <div class="char-card__body">
+                <div class="char-card__author" x-text="card.author || '惑梦（Homer）官方'"></div>
+                <code class="card-id-chip card-id-chip--compact" x-text="`ID: ${card.displayId || card.id}`"></code>
+                <div class="char-card__name" x-text="card.name"></div>
+                <div class="char-card__desc" x-text="card.description || '点击查看角色设定'"></div>
+                <div class="card-capabilities card-capabilities--compact" aria-label="角色能力">
+                  <span class="capability-badge" :class="card.hasOpening ? 'is-on capability-badge--opening' : 'is-off'"><b x-text="card.hasOpening ? '✓' : '—'"></b>开场</span>
+                  <span class="capability-badge" :class="card.hasWorldInfo ? 'is-on capability-badge--world' : 'is-off'"><b x-text="card.hasWorldInfo ? '✓' : '—'"></b>世界书</span>
+                  <span class="capability-badge" :class="card.hasRegex ? 'is-on capability-badge--regex' : 'is-off'"><b x-text="card.hasRegex ? '✓' : '—'"></b>正则</span>
+                </div>
+              </div>
+            </a>
+            <button class="char-card__fav" :class="{ 'is-active': card.favorited }" @click="toggleFavorite(card, $event)" :aria-label="appHomeText('favorite_label', '收藏')">♥</button>
+          </article>
+        </template>
+        </div>
+      </section>
+
+      <div x-show="cards.length > 0" class="home-load-more">
+        <button @click="loadMore" class="xy-btn xy-btn-ghost text-sm" :disabled="loading || !hasMore" :aria-busy="loading.toString()">
+          <span x-show="!loading && hasMore" x-text="appHomeText('load_more_text', '加载更多')">加载更多</span>
+          <span x-show="!hasMore" x-text="appHomeText('end_text', '已经到底啦 ✦')">已经到底啦 ✦</span>
+          <span x-show="loading" class="xy-loading"></span>
+        </button>
+      </div>
+    </main>
+    <nav class="app-bottom-nav" data-app-bottom-nav></nav>
+  </div>
+</body>
+</html>

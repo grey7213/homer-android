@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>惑梦数据合并</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/img/favicon-32.png?v=20260901-persistent-pages">
+  <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
+  <style>
+    :root {
+      --dm-bg: #0f0a1a;
+      --dm-panel: #180f28;
+      --dm-panel-2: #211636;
+      --dm-border: rgba(255, 255, 255, .12);
+      --dm-text: #f4eefc;
+      --dm-muted: #b6a8d0;
+      --dm-accent: #b984ff;
+      --dm-accent-2: #7c5cff;
+      --dm-danger: #ff6b8b;
+      --dm-ok: #6ce0a5;
+      color-scheme: dark;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      background: radial-gradient(120% 120% at 50% 0%, #1a1030 0%, var(--dm-bg) 60%);
+      color: var(--dm-text);
+      font-family: "Inter", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+      line-height: 1.6;
+      -webkit-text-size-adjust: 100%;
+    }
+    a { color: var(--dm-accent); }
+    .dm-wrap { max-width: 1080px; margin: 0 auto; padding: 20px 16px 80px; }
+    .dm-top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 6px; }
+    .dm-back { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border: 1px solid var(--dm-border); border-radius: 999px; color: var(--dm-text); text-decoration: none; font-size: 13px; background: rgba(255, 255, 255, .04); }
+    .dm-back:hover { border-color: var(--dm-accent); }
+    h1 { margin: 8px 0 2px; font-size: 22px; letter-spacing: .5px; }
+    .dm-sub { margin: 0 0 18px; color: var(--dm-muted); font-size: 13.5px; }
+    .dm-card { border: 1px solid var(--dm-border); border-radius: 18px; background: linear-gradient(160deg, var(--dm-panel), var(--dm-panel-2)); box-shadow: 0 16px 42px rgba(0, 0, 0, .32); padding: 18px; margin-bottom: 18px; }
+    .dm-card__title { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; font-size: 15px; font-weight: 700; }
+    .dm-card__title .dm-step { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; font-size: 12px; color: #fff; background: linear-gradient(135deg, var(--dm-accent-2), var(--dm-accent)); }
+    .dm-drop { display: grid; place-items: center; gap: 6px; padding: 28px 16px; border: 2px dashed var(--dm-border); border-radius: 14px; text-align: center; cursor: pointer; transition: border-color .2s, background .2s; }
+    .dm-drop:hover, .dm-drop.is-drag { border-color: var(--dm-accent); background: rgba(185, 132, 255, .08); }
+    .dm-drop__hint { color: var(--dm-muted); font-size: 12.5px; }
+    .dm-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border: 1px solid var(--dm-border); border-radius: 10px; color: var(--dm-text); background: rgba(255, 255, 255, .05); font: inherit; font-size: 13px; cursor: pointer; transition: .18s; }
+    .dm-btn:hover { border-color: var(--dm-accent); }
+    .dm-btn:disabled { opacity: .45; cursor: not-allowed; }
+    .dm-btn--primary { border: 0; color: #fff; background: linear-gradient(135deg, var(--dm-accent-2), var(--dm-accent)); box-shadow: 0 8px 22px rgba(124, 92, 255, .4); }
+    .dm-btn--ghost { background: transparent; }
+    .dm-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 14px; }
+    .dm-spacer { flex: 1 1 auto; }
+    .dm-file { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid var(--dm-border); border-radius: 12px; margin-bottom: 8px; background: rgba(255, 255, 255, .03); }
+    .dm-file__meta { min-width: 0; }
+    .dm-file__name { font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .dm-file__desc { font-size: 12px; color: var(--dm-muted); }
+    .dm-tag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; margin-left: 6px; }
+    .dm-tag--world { color: #cbb3ff; background: rgba(124, 92, 255, .18); }
+    .dm-tag--regex { color: #9fe6c4; background: rgba(108, 224, 165, .16); }
+    .dm-tag--bad { color: var(--dm-danger); background: rgba(255, 107, 139, .16); }
+    .dm-group { border: 1px solid var(--dm-border); border-radius: 12px; margin-bottom: 10px; overflow: hidden; }
+    .dm-group__head { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: rgba(255, 255, 255, .04); cursor: pointer; }
+    .dm-group__head:hover { background: rgba(255, 255, 255, .07); }
+    .dm-group__caret { transition: transform .18s; color: var(--dm-muted); }
+    .dm-group.is-open .dm-group__caret { transform: rotate(90deg); }
+    .dm-group__title { font-size: 13.5px; font-weight: 600; flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .dm-group__count { font-size: 12px; color: var(--dm-muted); }
+    .dm-group__body { display: none; padding: 4px 8px 8px; }
+    .dm-group.is-open .dm-group__body { display: block; }
+    .dm-entry { display: flex; align-items: flex-start; gap: 10px; padding: 7px 8px; border-radius: 8px; }
+    .dm-entry:hover { background: rgba(255, 255, 255, .04); }
+    .dm-entry label { flex: 1 1 auto; min-width: 0; cursor: pointer; }
+    .dm-entry__name { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .dm-entry__desc { font-size: 11.5px; color: var(--dm-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    input[type=checkbox] { width: 16px; height: 16px; margin-top: 3px; accent-color: var(--dm-accent); cursor: pointer; flex: 0 0 auto; }
+    .dm-groupsel { display: flex; align-items: center; gap: 8px; }
+    .dm-empty { padding: 26px 12px; text-align: center; color: var(--dm-muted); font-size: 13px; }
+    .dm-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .dm-field { display: flex; flex-direction: column; gap: 5px; }
+    .dm-field label { font-size: 12px; color: var(--dm-muted); }
+    .dm-input, .dm-select { padding: 8px 10px; border: 1px solid var(--dm-border); border-radius: 10px; background: rgba(255, 255, 255, .05); color: var(--dm-text); font: inherit; font-size: 13px; }
+    .dm-input:focus, .dm-select:focus { outline: none; border-color: var(--dm-accent); }
+    .dm-summary { font-size: 13px; color: var(--dm-muted); }
+    .dm-summary b { color: var(--dm-text); }
+    .dm-toast { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(20px); padding: 10px 18px; border-radius: 12px; background: rgba(20, 14, 31, .96); border: 1px solid var(--dm-border); color: var(--dm-text); font-size: 13px; box-shadow: 0 12px 32px rgba(0, 0, 0, .4); opacity: 0; pointer-events: none; transition: .25s; z-index: 50; }
+    .dm-toast.is-show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    .dm-toast.is-error { border-color: var(--dm-danger); }
+    @media (max-width: 640px) {
+      .dm-wrap { padding: 14px 12px 70px; }
+      .dm-file { flex-direction: column; align-items: stretch; }
+    }
+  </style>
+</head>
+<body>
+  <main class="dm-wrap">
+    <div class="dm-top">
+      <a class="dm-back" href="/app/workshop.html">← 返回工坊</a>
+    </div>
+    <h1>惑梦数据合并</h1>
+    <p class="dm-sub">把多份世界书 / 正则文件导入，勾选要保留的条目，一键合并导出为单个文件。全部处理都在你的浏览器本地完成，不会上传服务器。</p>
+
+    <section class="dm-card">
+      <h2 class="dm-card__title"><span class="dm-step">1</span> 导入文件</h2>
+      <div id="drop" class="dm-drop" tabindex="0" role="button" aria-label="点击或拖拽上传文件">
+        <div style="font-size:26px">📁</div>
+        <div>点击选择，或把文件拖拽到这里</div>
+        <div class="dm-drop__hint">支持 SillyTavern 世界书（含 entries）与正则（含 findRegex）的 .json 文件，可多选</div>
+      </div>
+      <input id="fileInput" type="file" accept=".json,application/json" multiple hidden>
+      <div id="fileList" style="margin-top:14px"></div>
+    </section>
+
+    <section class="dm-card">
+      <h2 class="dm-card__title"><span class="dm-step">2</span> 选择要保留的条目</h2>
+      <div class="dm-actions" style="margin-top:0;margin-bottom:12px">
+        <button class="dm-btn dm-btn--ghost" id="selectAll" type="button">全选</button>
+        <button class="dm-btn dm-btn--ghost" id="selectNone" type="button">全不选</button>
+        <button class="dm-btn dm-btn--ghost" id="expandAll" type="button">展开全部</button>
+        <button class="dm-btn dm-btn--ghost" id="collapseAll" type="button">折叠全部</button>
+        <div class="dm-spacer"></div>
+        <span class="dm-summary" id="selCount">已选 0 条</span>
+      </div>
+      <div id="tree"><div class="dm-empty">还没有导入任何文件</div></div>
+    </section>
+
+    <section class="dm-card">
+      <h2 class="dm-card__title"><span class="dm-step">3</span> 合并导出</h2>
+      <div class="dm-row" style="align-items:flex-end">
+        <div class="dm-field" style="flex:1 1 220px">
+          <label for="outName">导出文件名</label>
+          <input class="dm-input" id="outName" type="text" value="merged" spellcheck="false">
+        </div>
+        <div class="dm-field">
+          <label for="outType">合并类型</label>
+          <select class="dm-select" id="outType">
+            <option value="auto">自动（按所选条目类型分别导出）</option>
+            <option value="worldbook">仅世界书</option>
+            <option value="regex">仅正则</option>
+          </select>
+        </div>
+        <div class="dm-field dm-groupsel">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+            <input type="checkbox" id="dedup" checked> 去重（同名/同规则）
+          </label>
+        </div>
+      </div>
+      <div class="dm-actions">
+        <button class="dm-btn dm-btn--primary" id="exportBtn" type="button" disabled>合并并导出</button>
+        <span class="dm-summary" id="exportHint"></span>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="dm-toast" role="status" aria-live="polite"></div>
+
+  <script>
+    (() => {
+      'use strict';
+      const $ = (id) => document.getElementById(id);
+      const state = {
+        files: [], // { id, name, type: 'worldbook'|'regex'|'unknown', entries: [ { key, name, desc, raw } ], meta }
+        expanded: new Set(),
+      };
+      let fileSeq = 0;
+      let entrySeq = 0;
+
+      function toast(msg, isError) {
+        const el = $('toast');
+        el.textContent = msg;
+        el.classList.toggle('is-error', !!isError);
+        el.classList.add('is-show');
+        clearTimeout(el._t);
+        el._t = setTimeout(() => el.classList.remove('is-show'), 2600);
+      }
+
+      function truncate(text, n) {
+        const s = String(text == null ? '' : text).replace(/\s+/g, ' ').trim();
+        return s.length > n ? s.slice(0, n) + '…' : s;
+      }
+
+      // 世界书 entries 可能是对象映射或数组，统一成数组并保留原始对象。
+      function parseWorldbook(data) {
+        const raw = data.entries;
+        const list = [];
+        if (Array.isArray(raw)) {
+          raw.forEach((item, i) => list.push(normalizeWorldEntry(item, i)));
+        } else if (raw && typeof raw === 'object') {
+          Object.keys(raw).forEach((key) => list.push(normalizeWorldEntry(raw[key], key)));
+        }
+        return list;
+      }
+
+      function normalizeWorldEntry(item, key) {
+        const obj = (item && typeof item === 'object') ? item : {};
+        const keys = Array.isArray(obj.key) ? obj.key : (Array.isArray(obj.keys) ? obj.keys : []);
+        const name = obj.comment || obj.name || (keys.length ? keys.join(', ') : `条目 ${key}`);
+        return {
+          id: `e${++entrySeq}`,
+          origKey: key,
+          name: truncate(name, 60) || `条目 ${key}`,
+          desc: truncate(obj.content || obj.entry || '', 90),
+          raw: obj,
+        };
+      }
+
+      function parseRegex(data) {
+        const arr = Array.isArray(data) ? data : (Array.isArray(data.regex) ? data.regex : [data]);
+        return arr.filter(x => x && typeof x === 'object').map((item) => ({
+          id: `e${++entrySeq}`,
+          origKey: item.id || item.scriptName || '',
+          name: truncate(item.scriptName || item.name || '未命名正则', 60),
+          desc: truncate(`查找: ${item.findRegex || ''}`, 90),
+          raw: item,
+        }));
+      }
+
+      function detectType(data) {
+        if (data && typeof data === 'object' && !Array.isArray(data) && data.entries) return 'worldbook';
+        if (Array.isArray(data) && data.some(x => x && typeof x === 'object' && 'findRegex' in x)) return 'regex';
+        if (data && typeof data === 'object' && 'findRegex' in data) return 'regex';
+        if (data && typeof data === 'object' && Array.isArray(data.regex)) return 'regex';
+        return 'unknown';
+      }
+
+      async function addFiles(fileHandles) {
+        for (const fh of fileHandles) {
+          if (!/\.json$/i.test(fh.name)) { toast(`已跳过非 JSON 文件：${fh.name}`, true); continue; }
+          try {
+            const text = await fh.text();
+            const data = JSON.parse(text);
+            const type = detectType(data);
+            let entries = [];
+            if (type === 'worldbook') entries = parseWorldbook(data);
+            else if (type === 'regex') entries = parseRegex(data);
+            const fileId = `f${++fileSeq}`;
+            state.files.push({ id: fileId, name: fh.name, type, entries, meta: data });
+            state.expanded.add(fileId);
+            if (type === 'unknown') toast(`无法识别文件类型：${fh.name}`, true);
+          } catch (err) {
+            toast(`解析失败：${fh.name}（${err.message}）`, true);
+          }
+        }
+        render();
+      }
+
+      function removeFile(fileId) {
+        state.files = state.files.filter(f => f.id !== fileId);
+        state.expanded.delete(fileId);
+        render();
+      }
+
+      function typeTag(type) {
+        if (type === 'worldbook') return '<span class="dm-tag dm-tag--world">世界书</span>';
+        if (type === 'regex') return '<span class="dm-tag dm-tag--regex">正则</span>';
+        return '<span class="dm-tag dm-tag--bad">未识别</span>';
+      }
+
+      function renderFileList() {
+        const box = $('fileList');
+        if (!state.files.length) { box.innerHTML = ''; return; }
+        box.innerHTML = state.files.map(f => `
+          <div class="dm-file">
+            <div class="dm-file__meta">
+              <div class="dm-file__name">${escapeHtml(f.name)} ${typeTag(f.type)}</div>
+              <div class="dm-file__desc">${f.type === 'unknown' ? '不支持的格式' : f.entries.length + ' 个条目'}</div>
+            </div>
+            <button class="dm-btn dm-btn--ghost" type="button" data-remove="${f.id}">移除</button>
+          </div>
+        `).join('');
+        box.querySelectorAll('[data-remove]').forEach(btn => {
+          btn.addEventListener('click', () => removeFile(btn.dataset.remove));
+        });
+      }
+
+      function renderTree() {
+        const tree = $('tree');
+        const usable = state.files.filter(f => f.type !== 'unknown' && f.entries.length);
+        if (!usable.length) {
+          tree.innerHTML = '<div class="dm-empty">还没有可合并的条目，先在上方导入世界书或正则文件</div>';
+          return;
+        }
+        tree.innerHTML = usable.map(f => {
+          const open = state.expanded.has(f.id);
+          const entries = f.entries.map(e => `
+            <div class="dm-entry">
+              <input type="checkbox" data-entry="${e.id}" data-file="${f.id}" ${e._checked === false ? '' : 'checked'}>
+              <label for="" data-toggle="${e.id}">
+                <div class="dm-entry__name">${escapeHtml(e.name)}</div>
+                ${e.desc ? `<div class="dm-entry__desc">${escapeHtml(e.desc)}</div>` : ''}
+              </label>
+            </div>
+          `).join('');
+          return `
+            <div class="dm-group ${open ? 'is-open' : ''}" data-group="${f.id}">
+              <div class="dm-group__head">
+                <input type="checkbox" data-groupcheck="${f.id}" title="全选此文件">
+                <span class="dm-group__caret" data-caret="${f.id}">▶</span>
+                <span class="dm-group__title" data-caret="${f.id}">${escapeHtml(f.name)} ${typeTag(f.type)}</span>
+                <span class="dm-group__count">${f.entries.length} 条</span>
+              </div>
+              <div class="dm-group__body">${entries}</div>
+            </div>
+          `;
+        }).join('');
+
+        tree.querySelectorAll('[data-caret]').forEach(el => {
+          el.addEventListener('click', () => {
+            const id = el.dataset.caret;
+            if (state.expanded.has(id)) state.expanded.delete(id); else state.expanded.add(id);
+            renderTree();
+          });
+        });
+        tree.querySelectorAll('[data-entry]').forEach(cb => {
+          cb.addEventListener('change', () => {
+            const entry = findEntry(cb.dataset.file, cb.dataset.entry);
+            if (entry) entry._checked = cb.checked;
+            syncGroupChecks();
+            updateCount();
+          });
+        });
+        tree.querySelectorAll('[data-groupcheck]').forEach(cb => {
+          cb.addEventListener('change', () => {
+            const file = state.files.find(f => f.id === cb.dataset.groupcheck);
+            if (!file) return;
+            file.entries.forEach(e => { e._checked = cb.checked; });
+            renderTree();
+            updateCount();
+          });
+        });
+        syncGroupChecks();
+      }
+
+      function syncGroupChecks() {
+        document.querySelectorAll('[data-groupcheck]').forEach(cb => {
+          const file = state.files.find(f => f.id === cb.dataset.groupcheck);
+          if (!file) return;
+          const total = file.entries.length;
+          const checked = file.entries.filter(e => e._checked !== false).length;
+          cb.checked = checked === total && total > 0;
+          cb.indeterminate = checked > 0 && checked < total;
+        });
+      }
+
+      function findEntry(fileId, entryId) {
+        const file = state.files.find(f => f.id === fileId);
+        return file ? file.entries.find(e => e.id === entryId) : null;
+      }
+
+      function selectedEntries() {
+        const out = [];
+        state.files.forEach(f => {
+          if (f.type === 'unknown') return;
+          f.entries.forEach(e => { if (e._checked !== false) out.push({ file: f, entry: e }); });
+        });
+        return out;
+      }
+
+      function updateCount() {
+        const sel = selectedEntries();
+        $('selCount').textContent = `已选 ${sel.length} 条`;
+        const worlds = sel.filter(s => s.file.type === 'worldbook').length;
+        const regs = sel.filter(s => s.file.type === 'regex').length;
+        $('exportHint').textContent = sel.length ? `世界书 ${worlds} 条 · 正则 ${regs} 条` : '';
+        $('exportBtn').disabled = sel.length === 0;
+      }
+
+      function render() {
+        renderFileList();
+        renderTree();
+        updateCount();
+      }
+
+      function setAll(checked) {
+        state.files.forEach(f => f.entries.forEach(e => { e._checked = checked; }));
+        renderTree();
+        updateCount();
+      }
+
+      // 合并世界书：把所选条目重新编号进 entries 映射。
+      function buildWorldbook(sel, dedup) {
+        const entries = {};
+        const seen = new Set();
+        let idx = 0;
+        sel.forEach(({ entry }) => {
+          const raw = { ...entry.raw };
+          if (dedup) {
+            const sig = JSON.stringify([raw.comment || raw.name || '', raw.key || raw.keys || [], raw.content || raw.entry || '']);
+            if (seen.has(sig)) return;
+            seen.add(sig);
+          }
+          if ('uid' in raw) raw.uid = idx;
+          entries[String(idx)] = raw;
+          idx += 1;
+        });
+        return { entries };
+      }
+
+      function buildRegex(sel, dedup) {
+        const out = [];
+        const seen = new Set();
+        sel.forEach(({ entry }) => {
+          const raw = { ...entry.raw };
+          if (dedup) {
+            const sig = JSON.stringify([raw.scriptName || raw.name || '', raw.findRegex || '', raw.replaceString || '']);
+            if (seen.has(sig)) return;
+            seen.add(sig);
+          }
+          out.push(raw);
+        });
+        return out;
+      }
+
+      function download(filename, dataObj) {
+        const blob = new Blob([JSON.stringify(dataObj, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1500);
+      }
+
+      function doExport() {
+        const sel = selectedEntries();
+        if (!sel.length) { toast('还没有选择任何条目', true); return; }
+        const mode = $('outType').value;
+        const dedup = $('dedup').checked;
+        const base = ($('outName').value || 'merged').trim().replace(/[\\/:*?"<>|]/g, '_') || 'merged';
+        const worldSel = sel.filter(s => s.file.type === 'worldbook');
+        const regexSel = sel.filter(s => s.file.type === 'regex');
+        let exported = 0;
+
+        if ((mode === 'auto' || mode === 'worldbook') && worldSel.length) {
+          download(`${base}-世界书.json`, buildWorldbook(worldSel, dedup));
+          exported += 1;
+        }
+        if ((mode === 'auto' || mode === 'regex') && regexSel.length) {
+          download(`${base}-正则.json`, buildRegex(regexSel, dedup));
+          exported += 1;
+        }
+        if (mode === 'worldbook' && !worldSel.length) { toast('所选条目里没有世界书', true); return; }
+        if (mode === 'regex' && !regexSel.length) { toast('所选条目里没有正则', true); return; }
+        if (exported) toast(`已导出 ${exported} 个文件`);
+      }
+
+      function escapeHtml(v) {
+        return String(v == null ? '' : v)
+          .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+      }
+
+      // --- 事件绑定 ---
+      const drop = $('drop');
+      const fileInput = $('fileInput');
+      drop.addEventListener('click', () => fileInput.click());
+      drop.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); } });
+      fileInput.addEventListener('change', () => { addFiles([...fileInput.files]); fileInput.value = ''; });
+      ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('is-drag'); }));
+      ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove('is-drag'); }));
+      drop.addEventListener('drop', (e) => { if (e.dataTransfer?.files?.length) addFiles([...e.dataTransfer.files]); });
+
+      $('selectAll').addEventListener('click', () => setAll(true));
+      $('selectNone').addEventListener('click', () => setAll(false));
+      $('expandAll').addEventListener('click', () => { state.files.forEach(f => state.expanded.add(f.id)); renderTree(); });
+      $('collapseAll').addEventListener('click', () => { state.expanded.clear(); renderTree(); });
+      $('exportBtn').addEventListener('click', doExport);
+
+      render();
+    })();
+  </script>
+</body>
+</html>

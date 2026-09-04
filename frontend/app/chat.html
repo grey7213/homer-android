@@ -1,0 +1,800 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <title>对话 · 惑梦</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/img/favicon-32.png?v=20260901-persistent-pages">
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: Inter, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+      background: #f3ede3;
+      color: #2b2b2b;
+    }
+    * { box-sizing: border-box; }
+    html, body { width: 100%; min-height: 100%; margin: 0; }
+    body {
+      min-height: 100dvh;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 16% 8%, rgba(239, 154, 95, .18), transparent 31rem),
+        radial-gradient(circle at 88% 90%, rgba(129, 53, 78, .10), transparent 32rem),
+        linear-gradient(145deg, #f7f2e9, #f0e7da 58%, #f7f4ee);
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      opacity: .28;
+      background-image:
+        linear-gradient(rgba(91, 65, 44, .025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(91, 65, 44, .025) 1px, transparent 1px);
+      background-size: 28px 28px;
+      mask-image: radial-gradient(circle, #000 20%, transparent 78%);
+    }
+    .dialogue-host {
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+      overflow: hidden;
+      background: #090806;
+    }
+    .dialogue-frame {
+      width: 100%;
+      height: 100%;
+      display: block;
+      border: 0;
+      opacity: 0;
+      background: #090806;
+      transition: opacity .28s ease;
+    }
+    body.is-ready .dialogue-frame { opacity: 1; }
+    .launcher {
+      position: fixed;
+      inset: 0;
+      z-index: 3;
+      display: grid;
+      place-items: center;
+      padding: 1rem;
+      background:
+        radial-gradient(circle at 50% 44%, rgba(179, 121, 55, .1), transparent 26rem),
+        rgba(9, 8, 6, .96);
+      transition: opacity .24s ease, visibility .24s ease;
+    }
+    body.is-ready .launcher {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+    .conversation-preview { display: none; }
+    body.has-preview .launcher {
+      display: block;
+      padding: 0;
+      background: #f7f5f2;
+    }
+    body.has-preview .launcher-card { display: none; }
+    body.has-preview .conversation-preview {
+      width: min(58rem, 100%);
+      height: 100dvh;
+      margin: 0 auto;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      background: #faf9f7;
+      box-shadow: 0 0 4rem rgba(64, 46, 32, .12);
+      text-align: left;
+    }
+    .preview-header {
+      min-height: 4.25rem;
+      padding: max(.7rem, env(safe-area-inset-top)) 1rem .7rem;
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+      border-bottom: 1px solid #e9e3da;
+      background: rgba(255,255,255,.92);
+    }
+    .preview-back {
+      width: 2.5rem;
+      min-height: 2.5rem;
+      padding: 0;
+      flex: 0 0 auto;
+      border: 0;
+      border-radius: 999px;
+      background: #f3eee7;
+      color: #5b4c40;
+      font-size: 1.35rem;
+    }
+    .preview-avatar {
+      width: 2.7rem;
+      height: 2.7rem;
+      flex: 0 0 auto;
+      border-radius: 50%;
+      object-fit: cover;
+      background: #eee7dc;
+      box-shadow: 0 0 0 1px #e3d9cc;
+    }
+    .preview-heading { min-width: 0; flex: 1; }
+    .preview-heading h2 {
+      margin: 0;
+      overflow: hidden;
+      color: #28231f;
+      font-size: 1rem;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .preview-heading p {
+      margin: .2rem 0 0;
+      color: #94877a;
+      font-size: .7rem;
+    }
+    .preview-messages {
+      padding: 1.15rem clamp(.8rem, 3vw, 1.5rem) 2rem;
+      overflow: auto;
+      overscroll-behavior: contain;
+      scrollbar-gutter: stable;
+    }
+    .preview-message {
+      width: fit-content;
+      max-width: min(78%, 42rem);
+      margin: .55rem 0;
+      padding: .72rem .9rem;
+      border-radius: 1rem 1rem 1rem .28rem;
+      background: #fff;
+      color: #37302a;
+      box-shadow: 0 .3rem 1rem rgba(75, 55, 38, .07);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      font-size: .9rem;
+      line-height: 1.65;
+    }
+    .preview-message.is-user {
+      margin-left: auto;
+      margin-right: 0;
+      border-radius: 1rem 1rem .28rem 1rem;
+      background: #e8834e;
+      color: #fff;
+    }
+    .preview-empty {
+      margin: 18vh auto 0;
+      color: #9a8d7c;
+      text-align: center;
+      font-size: .86rem;
+    }
+    .preview-composer {
+      padding: .7rem max(1rem, env(safe-area-inset-right)) max(.75rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: .6rem;
+      border-top: 1px solid #e9e3da;
+      background: rgba(255,255,255,.94);
+    }
+    .preview-composer textarea {
+      min-height: 2.75rem;
+      max-height: 8rem;
+      padding: .72rem .85rem;
+      resize: none;
+      border: 1px solid #ddd3c6;
+      border-radius: .85rem;
+      outline: none;
+      background: #f8f5f0;
+      color: #302922;
+      font: inherit;
+      font-size: .9rem;
+      line-height: 1.4;
+    }
+    .preview-composer textarea:focus { border-color: #e8834e; box-shadow: 0 0 0 3px rgba(232,131,78,.12); }
+    .preview-composer button { min-width: 4.4rem; padding: 0 .85rem; }
+    .launcher-card {
+      width: min(31rem, calc(100vw - 2rem));
+      padding: clamp(1.5rem, 5vw, 2.4rem);
+      border: 1px solid #ece5d8;
+      border-radius: 1.4rem;
+      background: rgba(255, 255, 255, .91);
+      box-shadow: 0 1.4rem 4rem rgba(76, 55, 38, .13), inset 0 1px rgba(255,255,255,.8);
+      backdrop-filter: blur(24px);
+      text-align: center;
+    }
+    .launcher-visual {
+      width: 104px;
+      height: 156px;
+      margin: 0 auto 1rem;
+      display: block;
+      border: 1px solid rgba(110, 91, 126, .12);
+      border-radius: 24px;
+      background: #ebe6ef;
+      object-fit: cover;
+      box-shadow: 0 12px 28px rgba(76, 55, 88, .14);
+    }
+    .seal {
+      width: 4.35rem;
+      height: 4.35rem;
+      margin: 0 auto 1.15rem;
+      display: grid;
+      place-items: center;
+      border: 1px solid rgba(232, 131, 78, .34);
+      border-radius: 1.15rem;
+      background: linear-gradient(145deg, #ffe6cf, #ef9a5f);
+      color: #6f263e;
+      font-family: "STKaiti", "KaiTi", serif;
+      font-size: 2rem;
+      font-weight: 900;
+      box-shadow: 0 0 0 .4rem rgba(232, 131, 78, .07), 0 .8rem 2.2rem rgba(137, 63, 44, .16);
+      animation: breathe 1.8s ease-in-out infinite;
+    }
+    @keyframes breathe {
+      50% { transform: translateY(-3px); box-shadow: 0 0 0 .55rem rgba(232, 131, 78, .1), 0 1rem 2.7rem rgba(137, 63, 44, .2); }
+    }
+    .eyebrow {
+      margin: 0 0 .55rem;
+      color: #e8834e;
+      font-size: .7rem;
+      font-weight: 800;
+      letter-spacing: .2em;
+      text-transform: uppercase;
+    }
+    h1 { margin: 0; color: #2b2b2b; font-size: clamp(1.35rem, 5vw, 1.8rem); letter-spacing: .03em; }
+    #launcher-detail {
+      min-height: 3.2rem;
+      margin: .9rem auto 0;
+      color: #6b6b6b;
+      font-size: .9rem;
+      line-height: 1.75;
+    }
+    .progress {
+      height: 3px;
+      margin: 1.4rem 0 0;
+      overflow: hidden;
+      border-radius: 999px;
+      background: #f3ede3;
+    }
+    .progress::after {
+      content: "";
+      display: block;
+      width: 45%;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, transparent, #e8834e, transparent);
+      animation: travel 1.25s ease-in-out infinite;
+    }
+    @keyframes travel { from { transform: translateX(-110%); } to { transform: translateX(330%); } }
+    .actions {
+      display: none;
+      gap: .65rem;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-top: 1.35rem;
+    }
+    body.is-error .actions { display: flex; }
+    body.is-error .progress { display: none; }
+    body.is-error .seal { animation: none; filter: saturate(.72); }
+    button, a {
+      min-height: 2.55rem;
+      padding: 0 1rem;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid #e5d9c8;
+      border-radius: .75rem;
+      background: #faf6ef;
+      color: #4c3d33;
+      font: inherit;
+      font-size: .82rem;
+      font-weight: 750;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    button { border-color: #e8834e; background: #e8834e; color: #fff; }
+    button:hover, a:hover { filter: brightness(1.04); transform: translateY(-1px); }
+    .foot { margin: 1.4rem 0 0; color: #9a8d7c; font-size: .68rem; letter-spacing: .08em; }
+    @media (prefers-color-scheme: dark) {
+      :root { color-scheme: dark; background: #1d1b18; color: #ece7de; }
+      body { background: radial-gradient(circle at 18% 10%, rgba(232,131,78,.14), transparent 30rem), linear-gradient(145deg, #171411, #211d19 55%, #141210); }
+      main { border-color: #37332d; background: rgba(38,35,32,.93); box-shadow: 0 2rem 5rem rgba(0,0,0,.42); }
+      h1 { color: #ece7de; }
+      #launcher-detail { color: #b7b0a4; }
+      .progress { background: #37332d; }
+      a { border-color: #484037; background: #2c2925; color: #ece7de; }
+      body.has-preview .launcher, body.has-preview .conversation-preview { background: #171513; }
+      .preview-header, .preview-composer { border-color: #38322c; background: rgba(32,29,26,.96); }
+      .preview-back, .preview-composer textarea { border-color: #494138; background: #292521; color: #eee8de; }
+      .preview-heading h2 { color: #f1ece4; }
+      .preview-heading p, .preview-empty { color: #aaa095; }
+      .preview-message { background: #292521; color: #eee8de; box-shadow: none; }
+      .preview-message.is-user { background: #b85e39; color: #fff; }
+    }
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .seal, .progress::after { animation: none; }
+      button:hover, a:hover { transform: none; }
+      .dialogue-frame, .launcher { transition: none; }
+    }
+    /* Keep the instant history preview visually identical to the measured
+       Tavo shell so the full dialogue runtime can take over without a theme
+       jump after its heavier card/extension initialization. */
+    body.has-preview .conversation-preview {
+      width: 100%;
+      max-width: none;
+      margin: 0;
+      grid-template-columns: 304px minmax(0, 1fr);
+      grid-template-rows: minmax(0, 1fr);
+      background: #222;
+      box-shadow: none;
+    }
+    .preview-sidebar {
+      display: flex;
+      min-width: 0;
+      flex-direction: column;
+      border-right: 1px solid #e8e7e7;
+      background: #eeeded;
+      color: #555;
+    }
+    .preview-site-nav {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      padding: 16px 14px 20px;
+    }
+    .preview-site-nav a {
+      min-height: 54px;
+      padding: 8px 10px;
+      gap: 8px;
+      justify-content: flex-start;
+      border: 1px solid #e1e0e0;
+      border-radius: 13px;
+      color: #555;
+      background: #f5f4f4;
+      font-size: 13px;
+    }
+    .preview-site-nav i {
+      width: 32px;
+      height: 32px;
+      display: grid;
+      place-items: center;
+      border-radius: 11px;
+      color: #f47a1f;
+      background: rgba(244, 122, 31, .1);
+      font-style: normal;
+      font-size: 17px;
+    }
+    .preview-history-title {
+      min-height: 58px;
+      padding: 0 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-top: 1px solid #e8e7e7;
+      color: #555;
+      font-size: 14px;
+      font-weight: 750;
+    }
+    .preview-history-title span {
+      min-width: 22px;
+      height: 22px;
+      padding: 0 6px;
+      display: grid;
+      place-items: center;
+      border-radius: 999px;
+      color: #aaa;
+      background: #e3e2e2;
+      font-size: 11px;
+    }
+    .preview-history-item {
+      min-height: 66px;
+      padding: 8px 18px;
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      background: #efe3da;
+    }
+    .preview-history-avatar {
+      width: 42px;
+      height: 42px;
+      flex: 0 0 auto;
+      border: 1px solid rgba(255,255,255,.7);
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background: #ddd;
+      background-position: center;
+      background-size: cover;
+      color: #fff;
+      font-weight: 800;
+    }
+    .preview-history-copy { min-width: 0; }
+    .preview-history-copy strong,
+    .preview-history-copy small {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .preview-history-copy strong { color: #f47a1f; font-size: 14px; }
+    .preview-history-copy small { margin-top: 4px; color: #a3a2a4; font-size: 10px; }
+    .preview-stage {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      background:
+        linear-gradient(102deg, transparent 0 61%, rgba(95,76,76,.11) 61% 84%, transparent 84%),
+        linear-gradient(145deg, #1b1c1d, #222 58%, #1c1c1d);
+    }
+    body.has-preview .preview-header {
+      min-height: 68px;
+      padding: max(8px, env(safe-area-inset-top)) 14px 4px;
+      display: grid;
+      grid-template-columns: 48px minmax(0, 1fr) 48px;
+      border: 0;
+      background: linear-gradient(180deg, rgba(20,20,21,.48), transparent);
+    }
+    body.has-preview .preview-back {
+      width: 48px;
+      min-height: 48px;
+      padding: 0;
+      display: grid;
+      place-items: center;
+      border: 0;
+      border-radius: 12px;
+      color: #fff;
+      background: transparent;
+      font-size: 25px;
+      font-weight: 400;
+    }
+    body.has-preview .preview-heading { text-align: center; }
+    body.has-preview .preview-heading h2 { color: #fff; font-size: 17px; }
+    body.has-preview .preview-heading p,
+    body.has-preview .preview-avatar { display: none; }
+    body.has-preview .preview-messages {
+      padding: 8px 20px 24px;
+      scrollbar-color: rgba(255,255,255,.18) transparent;
+    }
+    body.has-preview .preview-message {
+      width: fit-content;
+      max-width: min(78%, 760px);
+      margin: 8px auto 8px 0;
+      padding: 12px 16px;
+      border-radius: 12px;
+      color: #fff;
+      background: #4c4c4d;
+      box-shadow: none;
+      font-size: 16px;
+      line-height: 1.55;
+    }
+    body.has-preview .preview-message.is-user {
+      margin-right: 0;
+      margin-left: auto;
+      border-radius: 12px;
+      color: #fff;
+      background: #29485f;
+    }
+    body.has-preview .preview-empty { color: rgba(255,255,255,.58); }
+    body.has-preview .preview-composer {
+      min-height: 54px;
+      margin: 0 10px max(14px, env(safe-area-inset-bottom));
+      padding: 0 7px;
+      grid-template-columns: 42px minmax(0, 1fr) 42px;
+      gap: 4px;
+      border: 0;
+      border-radius: 27px;
+      background: #656668;
+    }
+    body.has-preview .preview-composer::before {
+      content: "+";
+      display: grid;
+      place-items: center;
+      color: rgba(255,255,255,.9);
+      font-size: 32px;
+      font-weight: 300;
+    }
+    body.has-preview .preview-composer textarea {
+      min-height: 52px;
+      padding: 14px 8px;
+      border: 0;
+      border-radius: 0;
+      color: #fff;
+      background: transparent;
+      font-size: 16px;
+    }
+    body.has-preview .preview-composer textarea::placeholder { color: rgba(255,255,255,.48); }
+    body.has-preview .preview-composer textarea:focus { border: 0; box-shadow: none; }
+    body.has-preview .preview-composer button {
+      width: 42px;
+      min-width: 42px;
+      min-height: 42px;
+      padding: 0;
+      align-self: center;
+      overflow: hidden;
+      border: 0;
+      border-radius: 50%;
+      color: #66676a;
+      background: #f4f4f4;
+      font-size: 0;
+    }
+    body.has-preview .preview-composer button::before { content: "↑"; font-size: 27px; line-height: 1; }
+    @media (max-width: 760px) {
+      body.has-preview .conversation-preview { grid-template-columns: minmax(0, 1fr); }
+      .preview-sidebar { display: none; }
+      body.has-preview .preview-header {
+        min-height: 62px;
+        padding-inline: 8px;
+        grid-template-columns: 44px minmax(0, 1fr) 44px;
+      }
+      body.has-preview .preview-back { width: 44px; min-height: 44px; }
+      body.has-preview .preview-messages { padding: 4px 10px 20px 42px; }
+      body.has-preview .preview-message { max-width: 88%; padding: 10px 13px; font-size: 15px; }
+      body.has-preview .preview-composer { margin: 0 8px max(8px, env(safe-area-inset-bottom)); }
+    }
+    /* The shell below is the real first-frame UI. It remains fully operable
+       while the dialogue engine starts behind it; no placeholder controls. */
+    body.has-preview .conversation-preview {
+      position: relative;
+      grid-template-columns: minmax(0, 1fr);
+    }
+    body.has-preview .preview-header {
+      background: transparent;
+      box-shadow: none;
+      backdrop-filter: none;
+    }
+    .preview-network-banner {
+      position: absolute;
+      top: calc(68px + max(8px, env(safe-area-inset-top)));
+      right: 12px;
+      z-index: 8;
+      width: min(330px, calc(100% - 24px));
+      padding: 10px;
+      display: none;
+      align-items: center;
+      gap: 10px;
+      border: 1px solid rgba(151, 130, 166, .22);
+      border-radius: 16px;
+      background: rgba(246, 243, 248, .95);
+      color: #4a3f50;
+      box-shadow: 0 12px 30px rgba(20, 15, 23, .24);
+    }
+    body.is-error .preview-network-banner { display: flex; }
+    .preview-network-banner img { width: 62px; height: 62px; flex: 0 0 auto; border-radius: 13px; object-fit: cover; }
+    .preview-network-banner div { min-width: 0; flex: 1; }
+    .preview-network-banner strong { display: block; font-size: 13px; }
+    .preview-network-banner small { display: block; margin-top: 3px; overflow-wrap: anywhere; color: #776a7d; font-size: 10px; line-height: 1.45; }
+    .preview-network-banner button { min-height: 34px; padding: 0 10px; flex: 0 0 auto; border-color: rgba(118, 93, 132, .2); background: #fff; color: #5a4564; }
+    body.has-preview .preview-heading h2,
+    body.has-preview .preview-heading p { display: none; }
+    .preview-menu-button,
+    .preview-settings-button {
+      width: 48px;
+      min-height: 48px;
+      padding: 0;
+      display: grid;
+      place-items: center;
+      border: 0;
+      border-radius: 12px;
+      color: #fff;
+      background: transparent;
+      font-size: 25px;
+    }
+    .preview-menu-button { align-content: center; gap: 5px; }
+    .preview-menu-button span { width: 23px; height: 2px; border-radius: 2px; background: currentColor; }
+    .preview-menu-button:active,
+    .preview-settings-button:active { background: rgba(255,255,255,.12); }
+    .preview-sidebar,
+    .preview-settings-drawer {
+      position: fixed;
+      top: 0;
+      bottom: 0;
+      z-index: 15;
+      width: min(320px, 88vw);
+      overflow: hidden;
+      transition: transform 180ms ease;
+      box-shadow: 0 1rem 3rem rgba(0,0,0,.28);
+    }
+    .preview-sidebar {
+      left: 0;
+      display: flex;
+      transform: translateX(-102%);
+    }
+    .preview-settings-drawer {
+      right: 0;
+      display: flex;
+      flex-direction: column;
+      transform: translateX(102%);
+      border-left: 1px solid #393939;
+      background: #232323;
+      color: #f5f5f5;
+    }
+    body.shell-left-open .preview-sidebar { transform: translateX(0); }
+    body.shell-right-open .preview-settings-drawer { transform: translateX(0); }
+    .preview-drawer-head {
+      min-height: 70px;
+      padding: max(12px, env(safe-area-inset-top)) 16px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border-bottom: 1px solid rgba(255,255,255,.09);
+    }
+    .preview-sidebar .preview-drawer-head { color: #555; border-color: #dedbda; }
+    .preview-drawer-head strong { font-size: 17px; }
+    .preview-drawer-close {
+      width: 44px;
+      min-height: 44px;
+      padding: 0;
+      border: 0;
+      border-radius: 12px;
+      background: transparent;
+      color: inherit;
+      font-size: 27px;
+    }
+    .preview-history { min-height: 0; flex: 1; overflow-y: auto; }
+    .preview-history-list { display: grid; }
+    .preview-history-button {
+      width: 100%;
+      min-height: 66px;
+      padding: 8px 18px;
+      display: grid;
+      grid-template-columns: 42px minmax(0,1fr);
+      align-items: center;
+      gap: 11px;
+      border: 0;
+      border-radius: 0;
+      color: #555;
+      background: transparent;
+      text-align: left;
+    }
+    .preview-history-button.is-active { background: #efe3da; }
+    .preview-history-button .preview-history-avatar { grid-row: 1 / span 2; }
+    .preview-history-button strong,
+    .preview-history-button small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .preview-history-button strong { color: #d8671e; font-size: 14px; }
+    .preview-history-button small { color: #9a9798; font-size: 10px; }
+    .preview-setting-list { padding: 10px; display: grid; gap: 8px; }
+    .preview-setting-row {
+      width: 100%;
+      min-height: 62px;
+      padding: 10px 12px;
+      display: grid;
+      grid-template-columns: 38px minmax(0,1fr) 18px;
+      align-items: center;
+      gap: 10px;
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 13px;
+      background: #2d2d2e;
+      color: #f5f5f5;
+      text-align: left;
+      text-decoration: none;
+    }
+    .preview-setting-row__icon { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 11px; background: rgba(244,122,31,.14); color: #f58a3b; }
+    .preview-setting-row__copy { min-width: 0; }
+    .preview-setting-row__copy strong,
+    .preview-setting-row__copy small { display: block; }
+    .preview-setting-row__copy strong { font-size: 14px; }
+    .preview-setting-row__copy small { margin-top: 3px; overflow: hidden; color: #aaa; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+    .preview-privacy-note { margin: auto 16px max(16px,env(safe-area-inset-bottom)); color: #999; font-size: 11px; line-height: 1.7; }
+    .preview-scrim { position: fixed; inset: 0; z-index: 14; border: 0; border-radius: 0; background: rgba(0,0,0,.48); }
+    .preview-scrim[hidden] { display: none; }
+    .preview-toast { position: fixed; left: 50%; bottom: calc(78px + env(safe-area-inset-bottom)); z-index: 20; max-width: min(88vw,420px); padding: 9px 14px; transform: translateX(-50%); border-radius: 999px; background: rgba(20,20,20,.9); color: #fff; font-size: 12px; pointer-events: none; }
+    .preview-toast[hidden] { display: none; }
+    .preview-model-dialog { width: min(520px,calc(100vw - 24px)); padding: 0; border: 1px solid #3d3d3e; border-radius: 18px; background: #252526; color: #f5f5f5; }
+    .preview-model-dialog::backdrop { background: rgba(0,0,0,.58); }
+    .preview-model-form { padding: 18px; display: grid; gap: 14px; }
+    .preview-model-form header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .preview-model-form h2 { margin: 0; font-size: 19px; }
+    .preview-model-form label { display: grid; gap: 7px; color: #ddd; font-size: 13px; }
+    .preview-model-form select,
+    .preview-model-form input[type="number"] { min-height: 42px; border: 1px solid #4b4b4c; border-radius: 10px; background: #1d1d1e; color: #fff; }
+    .preview-range-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .preview-range-head input { width: 84px; padding: 0 9px; }
+    .preview-model-actions { display: flex; justify-content: flex-end; gap: 8px; }
+    .preview-model-actions button { min-height: 42px; }
+    .preview-message.is-pending { opacity: .72; }
+    @media (max-width: 760px) {
+      .preview-menu-button,
+      .preview-settings-button { width: 44px; min-height: 44px; }
+    }
+  </style>
+</head>
+<body class="has-preview">
+  <main class="dialogue-host" aria-label="惑梦对话">
+    <iframe
+      id="dialogue-frame"
+      class="dialogue-frame"
+      title="惑梦对话"
+      name="homer-dialogue-module"
+      sandbox="allow-scripts allow-same-origin allow-forms allow-downloads allow-modals allow-popups allow-popups-to-escape-sandbox"
+      allow="autoplay; clipboard-read; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+      referrerpolicy="same-origin"
+    ></iframe>
+  </main>
+  <section class="launcher" aria-live="polite" aria-busy="true">
+    <section class="conversation-preview" aria-label="对话内容快速预览">
+      <aside id="preview-left-drawer" class="preview-sidebar" aria-label="导航与历史会话" aria-hidden="true">
+        <header class="preview-drawer-head"><strong>导航与历史</strong><button id="preview-left-close" class="preview-drawer-close" type="button" aria-label="关闭导航">×</button></header>
+        <nav class="preview-site-nav">
+          <a href="/app/me.html"><i>⌂</i><span>我的</span></a>
+          <a href="/app/explore.html"><i>⌕</i><span>探索</span></a>
+          <a href="/app/favorites.html"><i>♡</i><span>收藏</span></a>
+          <a href="/app/workshop.html"><i>✦</i><span>创意工坊</span></a>
+        </nav>
+        <section class="preview-history">
+          <div class="preview-history-title">历史会话 <span id="preview-history-count">0</span></div>
+          <div id="preview-history-list" class="preview-history-list"></div>
+        </section>
+      </aside>
+      <section class="preview-stage">
+        <header class="preview-header">
+          <button id="preview-menu" class="preview-menu-button" type="button" aria-label="打开导航与历史会话"><span></span><span></span><span></span></button>
+          <img id="preview-avatar" class="preview-avatar" src="/assets/img/apk/avatar.webp?v=20260901-persistent-pages" alt="">
+          <div class="preview-heading" aria-hidden="true">
+            <h2 id="preview-title">角色对话</h2>
+            <p id="preview-status">本地对话</p>
+          </div>
+          <button id="preview-settings" class="preview-settings-button" type="button" aria-label="打开对话设置">⚙</button>
+        </header>
+        <aside id="preview-network-banner" class="preview-network-banner" aria-live="polite">
+          <img src="/assets/img/brand/network-error-512.png?v=20260901-persistent-pages" alt="">
+          <div><strong>连接暂时不可用</strong><small id="preview-network-detail">本地会话仍可阅读，恢复网络后可以继续对话。</small></div>
+          <button id="preview-network-retry" type="button">重试</button>
+        </aside>
+        <div id="preview-messages" class="preview-messages"></div>
+        <form id="preview-composer" class="preview-composer">
+          <textarea id="preview-input" rows="1" maxlength="10000" placeholder="输入想发送的消息"></textarea>
+          <button id="preview-send" type="submit">发送</button>
+        </form>
+      </section>
+      <aside id="preview-settings-drawer" class="preview-settings-drawer" aria-label="对话设置" aria-hidden="true">
+        <header class="preview-drawer-head"><strong>对话设置</strong><button id="preview-settings-close" class="preview-drawer-close" type="button" aria-label="关闭设置">×</button></header>
+        <div class="preview-setting-list">
+          <button id="preview-model-settings" class="preview-setting-row" type="button"><span class="preview-setting-row__icon">◉</span><span class="preview-setting-row__copy"><strong>模型设置</strong><small id="preview-model-summary">当前会话模型</small></span><span>›</span></button>
+          <button class="preview-setting-row" data-runtime-section="preset" type="button"><span class="preview-setting-row__icon">☷</span><span class="preview-setting-row__copy"><strong>预设开关</strong><small>仅作用于当前对话</small></span><span>›</span></button>
+          <a class="preview-setting-row" href="/app/favorites.html"><span class="preview-setting-row__icon">♡</span><span class="preview-setting-row__copy"><strong>收藏</strong><small>管理已收藏角色卡</small></span><span>›</span></a>
+          <button class="preview-setting-row" data-runtime-section="memory" type="button"><span class="preview-setting-row__icon">∞</span><span class="preview-setting-row__copy"><strong>长记忆</strong><small>当前对话记忆</small></span><span>›</span></button>
+          <button class="preview-setting-row" data-runtime-section="mod" type="button"><span class="preview-setting-row__icon">◇</span><span class="preview-setting-row__copy"><strong>Mod</strong><small>管理当前会话 Mod</small></span><span>›</span></button>
+        </div>
+        <p class="preview-privacy-note">角色卡世界书正文受创作者保护。这里只提供创作者允许开放的预设开关。</p>
+      </aside>
+      <button id="preview-scrim" class="preview-scrim" type="button" aria-label="关闭侧栏" hidden></button>
+      <p id="preview-toast" class="preview-toast" hidden></p>
+    </section>
+    <div class="launcher-card">
+      <img id="launcher-visual" class="launcher-visual" src="/assets/img/brand/launch-loading-1080x1920.png?v=20260901-persistent-pages" alt="">
+      <p class="eyebrow">惑梦</p>
+      <h1 id="launcher-title">加载中</h1>
+      <p id="launcher-detail">正在准备对话…</p>
+      <div class="progress" aria-hidden="true"></div>
+      <div class="actions">
+        <button id="launcher-retry" type="button">重新连接</button>
+        <a href="/app/histories.html">历史会话</a>
+        <a href="/app/explore.html">返回探索</a>
+      </div>
+    </div>
+  </section>
+
+  <dialog id="preview-model-dialog" class="preview-model-dialog">
+    <form id="preview-model-form" class="preview-model-form" method="dialog">
+      <header><h2>模型设置</h2><button id="preview-model-close" type="button" aria-label="关闭">×</button></header>
+      <label>当前模型<select id="preview-model-select"></select></label>
+      <label><span class="preview-range-head"><span>温度</span><input data-model-number="temperature" type="number" min="0" max="2" step="0.05"></span><input data-model-range="temperature" type="range" min="0" max="2" step="0.05"></label>
+      <label><span class="preview-range-head"><span>Top-P</span><input data-model-number="top_p" type="number" min="0" max="1" step="0.01"></span><input data-model-range="top_p" type="range" min="0" max="1" step="0.01"></label>
+      <label><span class="preview-range-head"><span>词频惩罚</span><input data-model-number="frequency_penalty" type="number" min="-2" max="2" step="0.05"></span><input data-model-range="frequency_penalty" type="range" min="-2" max="2" step="0.05"></label>
+      <label><span class="preview-range-head"><span>存在惩罚</span><input data-model-number="presence_penalty" type="number" min="-2" max="2" step="0.05"></span><input data-model-range="presence_penalty" type="range" min="-2" max="2" step="0.05"></label>
+      <footer class="preview-model-actions"><button id="preview-model-cancel" type="button">取消</button><button id="preview-model-save" type="submit">保存到本次会话</button></footer>
+    </form>
+  </dialog>
+
+  <p id="dialogue-announcer" class="sr-only" aria-live="assertive"></p>
+  <noscript>需要启用 JavaScript 才能进入对话。</noscript>
+<script type="module" src="/app/assets/js/chat.js?v=20260904-instant-history-v1"></script>
+</body>
+</html>

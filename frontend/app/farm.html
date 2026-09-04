@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>惑梦农场 · 惑梦（Homer）</title>
+  <meta name="theme-color" content="#f3eddb">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/img/favicon-32.png?v=20260901-persistent-pages">
+  <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
+  <link rel="stylesheet" href="/app/assets/css/farm.css?v=20260901-persistent-pages">
+  <script type="module" src="/app/assets/js/farm.js?v=20260812-license-removal"></script>
+  <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
+</head>
+<body class="min-h-screen farm-page">
+  <div class="app-shell" x-data="farmPage()" x-cloak>
+    <aside class="app-sidebar" data-app-sidebar></aside>
+    <main class="app-main farm-main">
+      <header class="app-topbar farm-topbar">
+        <div>
+          <span class="farm-topbar__eyebrow">HOMER PIXEL FARM</span>
+          <h1>惑梦农场</h1>
+        </div>
+        <div class="grow"></div>
+        <a class="farm-wallet-link" href="/app/rewards.html"><span>惑梦币</span><b x-text="Number(points || 0).toLocaleString('zh-CN')"></b><em>充值</em></a>
+        <button class="farm-icon-button" type="button" @click="loadAll(true)" :disabled="loading || busy" aria-label="刷新农场" title="刷新农场">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M20 11a8.1 8.1 0 10.5 4M20 4v7h-7"/></svg>
+        </button>
+      </header>
+
+      <template x-if="toast"><div class="farm-toast" :class="`is-${toast.type}`" x-text="toast.message"></div></template>
+
+      <section class="farm-content">
+        <div class="farm-loading" x-show="loading && !state">
+          <span class="farm-loader"></span>
+          <p>正在整理田地…</p>
+        </div>
+
+        <div class="farm-error" x-show="loadError && !state">
+          <img src="/assets/img/brand/network-error-512.png?v=20260901-persistent-pages" alt=""><h2>农场暂时没有响应</h2><p x-text="loadError"></p>
+          <button type="button" @click="loadAll(true)">重新加载</button>
+        </div>
+
+        <template x-if="state">
+          <div>
+            <section class="farm-welcome">
+              <div>
+                <span class="farm-kicker">今天也要照顾好灵感</span>
+                <h2>欢迎回来，<b x-text="user?.name || '农场主'"></b></h2>
+              <p>种下代码与灵感。种植消耗农场币，收获返还更多农场币；每日第一次有效收获，还会得到 <strong x-text="dailyRewardPoints"></strong> 惑梦币。</p>
+              </div>
+              <div class="farm-streak"><span>连续活跃</span><b x-text="streakDays"></b><em>天</em></div>
+            </section>
+
+            <section class="farm-stats" aria-label="农场状态">
+              <div><span class="farm-stat-icon is-coin">◆</span><p>农场币<strong x-text="coins.toLocaleString('zh-CN')"></strong></p></div>
+              <div><span class="farm-stat-icon is-energy">♥</span><p>体力<strong><b x-text="energy"></b>/<span x-text="energyMax"></span></strong></p></div>
+              <div><span class="farm-stat-icon is-xp">✦</span><p>农场经验<strong x-text="xp.toLocaleString('zh-CN')"></strong></p></div>
+              <div><span class="farm-stat-icon is-level">L</span><p>农场等级<strong x-text="level"></strong></p></div>
+            </section>
+
+            <div class="farm-layout">
+              <section class="pixel-panel farm-field-panel">
+                <header class="farm-panel-head">
+                  <div class="farm-panel-title"><span>田</span><div><h2>我的田地</h2><p>成熟时间与奖励由服务器计算</p></div></div>
+                  <div class="farm-energy"><span>体力恢复</span><b x-text="energyRecoveryText()"></b></div>
+                </header>
+
+                <div class="farm-world">
+                  <div class="farm-cloud cloud-a"></div><div class="farm-cloud cloud-b"></div>
+                  <div class="farm-fence" aria-hidden="true"></div>
+                  <div class="farm-plots">
+                    <template x-for="plot in plots" :key="plot.plotNo">
+                      <button type="button" class="farm-plot" :class="plotClasses(plot)" @click="choosePlot(plot)" :disabled="busy && activePlotNo === plot.plotNo">
+                        <span class="farm-soil"><i></i><i></i></span>
+                        <span class="farm-crop" x-html="cropSprite(plot)"></span>
+                        <span class="farm-plot-badge" x-show="plot.ready">可收获</span>
+                        <span class="farm-plot-time" :class="{ 'is-ready': plot.ready }" x-text="plotStatus(plot)"></span>
+                      </button>
+                    </template>
+                  </div>
+                  <div class="farm-world-hint">点击土地进行种植、浇水或收获</div>
+                </div>
+
+                <div class="farm-plot-action" x-show="selectedPlot" x-transition>
+                  <template x-if="selectedPlot">
+                    <div class="farm-plot-action__inner">
+                      <span class="farm-plot-number">#<b x-text="selectedPlot.plotNo"></b></span>
+                      <div><strong x-text="selectedPlot.name"></strong><small x-text="plotActionHint(selectedPlot)"></small></div>
+                      <button type="button" x-show="selectedPlot.empty" @click="openSeedPicker(selectedPlot)" :disabled="busy">选择种子</button>
+                      <button type="button" x-show="selectedPlot.planted && !selectedPlot.ready" @click="waterPlot(selectedPlot)" :disabled="busy || selectedPlot.watered || energy < 1" x-text="selectedPlot.watered ? '已浇水' : '浇水加速'"></button>
+                      <button type="button" class="is-harvest" x-show="selectedPlot.ready" @click="harvestPlot(selectedPlot)" :disabled="busy">收获作物</button>
+                    </div>
+                  </template>
+                </div>
+              </section>
+
+              <aside class="farm-side">
+                <section class="pixel-panel farm-daily-card" :class="{ 'is-claimed': dailyClaimed }">
+                  <div class="farm-daily-card__top"><span>日</span><div><h2>今日首收奖励</h2><p>北京时间自然日</p></div><b>+<em x-text="dailyRewardPoints"></em></b></div>
+                  <div class="farm-daily-track"><i :class="{ done: dailyClaimed }"></i><span x-text="dailyClaimed ? '今日惑梦币已领取' : '收获任意一株成熟作物即可领取'"></span></div>
+                  <p>旧版 APK 签到与农场共享同一份每日记录，不会重复领取。</p>
+                </section>
+
+                <section class="pixel-panel farm-guide-card">
+                  <h2>作物图鉴</h2>
+                  <template x-for="seed in seeds" :key="seed.kind">
+                    <div class="farm-seed-row"><span x-html="cropSprite({ cropKind: seed.kind, stage: 4 })"></span><p><b x-text="seed.name"></b><small><em>◆ <span x-text="seed.cost"></span> 农场币</em> · <span x-text="seed.durationLabel"></span></small></p><strong>+<span x-text="seed.rewardCoins"></span> 农场币</strong></div>
+                  </template>
+                </section>
+              </aside>
+            </div>
+
+            <section class="pixel-panel farm-friends-panel">
+              <header class="farm-panel-head">
+                <div class="farm-panel-title"><span>友</span><div><h2>好友农场</h2><p>只展示真实站点好友，不生成虚构邻居</p></div></div>
+                <div class="farm-friends-status">0 位好友</div>
+              </header>
+              <div class="farm-friends-empty">
+                <span class="farm-friends-empty__icon" aria-hidden="true">友</span>
+                <div><h3>还没有好友</h3><p x-text="friendsMessage || '当前账号暂无可访问的好友农场。'"></p></div>
+                <a href="/app/me.html">查看我的账号</a>
+              </div>
+            </section>
+          </div>
+        </template>
+      </section>
+    </main>
+    <nav class="app-bottom-nav" data-app-bottom-nav></nav>
+
+    <template x-if="seedPickerOpen">
+      <div class="farm-modal-backdrop" @click.self="closeSeedPicker" @keydown.escape.window="closeSeedPicker">
+        <section class="farm-seed-modal" role="dialog" aria-modal="true" aria-labelledby="farm-seed-title">
+          <button class="farm-modal-close" type="button" @click="closeSeedPicker" aria-label="关闭">×</button>
+          <span class="farm-kicker">SEED STORAGE</span>
+          <h2 id="farm-seed-title">选择一包种子</h2>
+          <p>花费农场币种植，成熟后可收回更多农场币与经验。</p>
+          <div class="farm-seed-options">
+            <template x-for="seed in seeds" :key="seed.kind">
+              <button type="button" @click="plantSeed(seed)" :disabled="busy || coins < seed.cost">
+                <span class="farm-seed-sprite" x-html="cropSprite({ cropKind: seed.kind, stage: 4 })"></span>
+                <strong x-text="seed.name"></strong>
+                <small x-text="seed.durationLabel + '成熟'"></small>
+                <span class="farm-seed-economy"><em>◆ <b x-text="seed.cost"></b> 农场币</em><i>→</i><strong>◆ <b x-text="seed.rewardCoins"></b> 农场币</strong></span>
+              </button>
+            </template>
+          </div>
+          <div class="farm-seed-tip">成熟后才能收获；每块土地每轮最多浇水一次。</div>
+        </section>
+      </div>
+    </template>
+  </div>
+</body>
+</html>

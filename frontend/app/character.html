@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>角色详情 · 惑梦（Homer）</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/img/favicon-32.png?v=20260901-persistent-pages">
+  <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
+  <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
+  <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
+  <script type="module" src="/app/assets/js/character.js?v=20260902-conversation-routing"></script>
+  <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
+</head>
+<body class="min-h-screen">
+  <div class="xy-stars-bg"></div>
+  <div class="xy-meteor"></div>
+
+  <div class="app-shell" x-data="characterPage()" x-cloak>
+    <aside class="app-sidebar" data-app-sidebar></aside>
+
+    <main class="app-main">
+      <header class="app-topbar">
+        <a href="/app/explore.html" class="xy-btn xy-btn-ghost text-sm px-3 py-2" @click.prevent="goBack">← <span x-text="characterText('back_text', '返回')"></span></a>
+        <h1 x-text="characterText('page_title', '角色详情')"></h1>
+        <div class="grow"></div>
+        <button type="button" class="xy-btn xy-btn-primary text-sm" :disabled="!card" @click="openVersionPicker()" x-text="characterText('start_chat_text', '开始聊天')"></button>
+      </header>
+
+      <div x-show="loading" class="flex items-center justify-center py-24">
+        <div class="xy-loading"></div>
+      </div>
+
+      <section x-show="!loading && card" class="app-page-pad max-w-6xl mx-auto grid lg:grid-cols-[380px_1fr] gap-6 character-detail-layout">
+        <div class="detail-cover">
+          <img :src="card?.cover || card?.icon || '/assets/img/apk/avatar.webp?v=20260901-persistent-pages'" :alt="card?.name" referrerpolicy="no-referrer" onerror="this.src='/assets/img/apk/avatar.webp?v=20260901-persistent-pages'">
+          <div class="detail-cover__shade"></div>
+          <div class="detail-cover__caption">
+            <span x-text="card?.source === 'user' ? characterText('user_badge', '用户角色') : characterText('official_badge', '官方角色')"></span>
+            <code x-text="`#${card?.displayId || card?.id || ''}`"></code>
+          </div>
+        </div>
+        <div class="space-y-5">
+          <div class="xy-glass p-7 character-hero-panel">
+            <div class="flex items-start justify-between gap-4">
+              <div>
+                <h2 class="text-3xl font-bold text-white mb-2" x-text="card?.name || characterText('unnamed_role', '未命名角色')"></h2>
+                <p class="text-violet-100/85 leading-relaxed" x-text="cardSummary()"></p>
+                <div class="character-capabilities" aria-label="角色能力">
+                  <div class="character-capability" :class="card?.hasOpening ? 'is-on' : 'is-off'">
+                    <span class="character-capability__mark" x-text="card?.hasOpening ? '✓' : '—'"></span>
+                    <span><strong>开场白</strong><small x-text="card?.hasOpening ? '已配置' : '未配置'"></small></span>
+                  </div>
+                  <div class="character-capability" :class="card?.hasWorldInfo ? 'is-on' : 'is-off'">
+                    <span class="character-capability__mark" x-text="card?.hasWorldInfo ? '✓' : '—'"></span>
+                    <span><strong>世界书</strong><small x-text="card?.hasWorldInfo ? '已配置' : '未配置'"></small></span>
+                  </div>
+                  <div class="character-capability" :class="card?.hasRegex ? 'is-on' : 'is-off'">
+                    <span class="character-capability__mark" x-text="card?.hasRegex ? '✓' : '—'"></span>
+                    <span><strong>正则</strong><small x-text="card?.hasRegex ? '已配置' : '未配置'"></small></span>
+                  </div>
+                </div>
+                <div class="detail-id-row">
+                  <code x-text="`ID: ${card?.displayId || card?.id || ''}`"></code>
+                  <button type="button" class="xy-btn xy-btn-ghost text-xs px-2 py-1" @click="copyCardId" x-text="characterText('copy_id_text', '复制 ID')">复制 ID</button>
+                </div>
+                <div class="flex flex-wrap gap-2 mt-4">
+                  <button type="button" class="xy-btn xy-btn-ghost text-xs" :class="{ 'is-active': card?.liked }" @click="toggleLike($event)" x-text="likeLabel()">点赞</button>
+                  <button type="button" class="xy-btn xy-btn-ghost text-xs" :class="{ 'is-active': card?.favorited }" @click="toggleFavorite($event)" x-text="favoriteLabel()">收藏</button>
+                  <button type="button" class="xy-btn xy-btn-ghost text-xs" x-show="extraFlags?.contest_id" :class="{ 'is-active': extraFlags?.voted }" @click="toggleContestVote()" x-text="voteLabel()">投票</button>
+                </div>
+              </div>
+              <span class="xy-badge xy-badge-purple character-source-badge" x-text="card?.source === 'user' ? characterText('user_badge', '用户角色') : characterText('official_badge', '角色设定')"></span>
+            </div>
+            <div class="flex flex-wrap gap-2 mt-5 character-category-tags">
+              <template x-for="t in (card?.tags || [])" :key="t">
+                <span class="chip" x-text="t"></span>
+              </template>
+            </div>
+            <div class="character-copy-grid" x-show="card?.description_detail?.summary || card?.opening_detail?.summary">
+              <article x-show="card?.description_detail?.summary">
+                <span>角色设定</span>
+                <p x-text="card?.description_detail?.summary"></p>
+              </article>
+              <article x-show="card?.opening_detail?.summary">
+                <span>开场预览</span>
+                <p x-text="card?.opening_detail?.summary"></p>
+              </article>
+            </div>
+            <div class="user-tags-box mt-5">
+              <div class="user-tags-box__head">
+                <span x-text="characterText('user_tags_title', '我的标签')">我的标签</span>
+                <button type="button" class="xy-btn xy-btn-ghost text-xs" :disabled="userTagSaving" @click="saveUserTags" x-text="userTagSaving ? characterText('saving_text', '保存中') : characterText('save_text', '保存')">保存</button>
+              </div>
+              <input class="xy-input text-sm" x-model="userTagDraft" :placeholder="characterText('user_tags_placeholder', '例如：已测、喜欢、慢热；逗号分隔')">
+              <div class="flex flex-wrap gap-2 mt-3" x-show="card?.user_tags?.length">
+                <template x-for="t in (card?.user_tags || [])" :key="t">
+                  <span class="chip chip-static" x-text="t"></span>
+                </template>
+              </div>
+            </div>
+          </div>
+
+          <section class="character-extra-panel p-6" x-show="extraFlags?.contest_id">
+            <div class="character-extra-panel__head">
+              <div><h3 x-text="contest?.title || '当前赛事参赛作品'"></h3><p x-text="contest?.reward ? `奖励：${contest.reward}` : '在赛事有效期内，每位用户都可以为喜欢的角色投票。'"></p></div>
+              <span class="character-vote-count" x-text="`${extraFlags?.votes || 0} 票`"></span>
+            </div>
+            <button type="button" class="xy-btn xy-btn-primary text-sm" :class="{ 'is-active': extraFlags?.voted }" @click="toggleContestVote()" x-text="extraFlags?.voted ? '取消投票' : '投票支持'"></button>
+          </section>
+
+          <section class="character-extra-panel p-6" x-show="extraFlags?.is_open_source && extraFlags?.open_source_entries?.length">
+            <div class="character-extra-panel__head"><div><h3>开源条目</h3><p>作者已公开以下条目的实际内容；浏览用户只能查看，无法更改。</p></div><span class="xy-badge xy-badge-purple">只读</span></div>
+            <div class="character-source-list">
+              <template x-for="(entry, index) in (extraFlags?.open_source_entries || [])" :key="`${entry.group || ''}-${entry.name || ''}-${index}`">
+                <article class="character-source-entry"><strong x-text="entry.name || '未命名条目'"></strong><small x-text="entry.group || '条目'"></small><pre x-text="entry.content || ''"></pre></article>
+              </template>
+            </div>
+          </section>
+
+          <section class="character-extra-panel p-6" x-show="versions.length">
+            <div class="character-extra-panel__head"><div><h3>历史版本</h3><p>每次发布都会保留独立版本；进入会话后不能更换。</p></div><span class="character-version-count" x-text="`${versions.length} 个版本`"></span></div>
+            <div class="character-version-list">
+              <template x-for="version in versions" :key="version.id">
+                <article class="character-version-row">
+                  <div><strong><span x-text="versionName(version)"></span><span class="character-version-current ml-2 text-xs" x-show="isCurrentVersion(version)">当前</span></strong><small x-text="version.author_description || version.note || '作者未填写本版介绍'"></small><small x-text="formatTime(version.created_at)"></small></div>
+                  <button type="button" class="xy-btn xy-btn-ghost text-xs" @click="openVersionPicker(version.id)">游玩此版本</button>
+                </article>
+              </template>
+            </div>
+          </section>
+
+          <div class="xy-glass p-7">
+            <h3 class="font-semibold mb-3 text-violet-100 flex items-center gap-2"><span class="text-pink-300">✦</span> <span x-text="characterText('comment_title', '评论区')"></span></h3>
+            <form class="space-y-3" @submit.prevent="submitComment">
+              <textarea class="xy-input" rows="3" maxlength="1000" x-model="commentDraft" :placeholder="characterText('comment_placeholder', '写下你的评论')" :disabled="commentSubmitting"></textarea>
+              <div class="flex items-center justify-between gap-3">
+                <span class="text-xs text-violet-100/45" x-text="`${commentDraft.length}/1000`"></span>
+                <button type="submit" class="xy-btn xy-btn-primary text-sm" :disabled="commentSubmitting || !commentDraft.trim()" x-text="commentSubmitting ? characterText('comment_submitting_text', '发送中') : characterText('comment_submit_text', '回复')"></button>
+              </div>
+            </form>
+            <div class="mt-5 space-y-3" x-show="comments.length">
+              <template x-for="comment in comments" :key="comment.id">
+                <article class="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                  <div class="flex items-start justify-between gap-3">
+                    <div>
+                      <div class="text-sm font-semibold text-violet-50" x-text="comment.user_name || characterText('comment_user_fallback', '星月用户')"></div>
+                      <div class="text-xs text-violet-100/45 mt-1" x-text="formatTime(comment.created_at)"></div>
+                    </div>
+                    <button type="button" class="xy-btn xy-btn-ghost text-xs px-3 py-1" :class="{ 'is-active': comment.liked }" :disabled="commentLikingId === comment.id" @click="toggleCommentLike(comment)" x-text="commentLikeLabel(comment)"></button>
+                  </div>
+                  <p class="text-sm text-violet-100/80 leading-7 whitespace-pre-line mt-3" x-text="comment.content"></p>
+                </article>
+              </template>
+            </div>
+            <p class="text-sm text-violet-100/70 leading-7 mt-4" x-show="!commentsLoading && !comments.length" x-text="characterText('comment_empty_text', '暂无评论')"></p>
+            <div class="mt-4 flex justify-center" x-show="commentsHasMore || commentsExpanded">
+              <button type="button" class="xy-btn xy-btn-ghost text-sm" @click="toggleCommentsExpanded" x-text="commentsExpanded ? characterText('comment_collapse_text', '收起') : characterText('comment_expand_text', '展开全部')"></button>
+            </div>
+          </div>
+
+          <div class="flex gap-3">
+            <button type="button" class="xy-btn xy-btn-primary flex-1 justify-center" @click="openVersionPicker()" x-text="characterText('start_chat_text', '开始聊天')"></button>
+            <a href="/app/create.html" class="xy-btn xy-btn-ghost" x-text="characterText('create_role_text', '创建角色')"></a>
+          </div>
+        </div>
+      </section>
+
+      <div x-show="!loading && !card" class="py-24 text-center text-violet-200/70">
+        <p class="mb-2 text-lg font-semibold" x-text="loadError || characterText('not_found_text', '没有找到这个角色')"></p>
+        <p class="mb-4 text-sm text-slate-400">可能是旧链接、已删除角色，或标签筛选中的过期缓存。</p>
+        <a href="/app/explore.html" class="xy-btn xy-btn-primary" x-text="characterText('back_to_explore_text', '回到探索')"></a>
+      </div>
+    </main>
+
+    <nav class="app-bottom-nav" data-app-bottom-nav></nav>
+
+    <template x-if="versionPickerOpen">
+      <div class="character-version-mask" @click.self="versionPickerOpen = false" @keydown.escape.window="versionPickerOpen = false">
+        <section class="character-version-dialog" role="dialog" aria-modal="true" aria-labelledby="character-version-title">
+          <header class="character-version-dialog__head"><div><h2 id="character-version-title">选择游玩版本</h2><p>新会话会永久锁定所选版本，游玩过程中无法更换。</p></div><button type="button" class="character-dialog-close" @click="versionPickerOpen = false" aria-label="关闭">×</button></header>
+          <div class="character-version-dialog__body">
+            <template x-if="versions.length">
+              <div><template x-for="version in versions" :key="version.id"><label class="character-version-choice"><input type="radio" name="character-version" :value="version.id" x-model="selectedVersionId"><span class="character-version-choice__body"><span><strong><span x-text="versionName(version)"></span><span class="character-version-current ml-2 text-xs" x-show="isCurrentVersion(version)">当前推荐</span></strong><small x-text="version.author_description || version.note || '作者未填写本版介绍'"></small></span><time class="character-version-time" x-text="formatTime(version.created_at)"></time></span></label></template></div>
+            </template>
+            <template x-if="!versions.length"><label class="character-version-choice"><input type="radio" name="character-version" value="" x-model="selectedVersionId"><span class="character-version-choice__body"><span><strong>当前公开版本</strong><small>该角色尚无可展示的历史版本记录。</small></span></span></label></template>
+            <p class="character-version-error" x-show="startError" x-text="startError"></p>
+            <div class="flex gap-3 mt-5"><button type="button" class="xy-btn xy-btn-primary flex-1 justify-center" :disabled="startingVersion" @click="startSelectedVersion()" x-text="startingVersion ? '正在创建会话…' : '确认并开始'"></button><button type="button" class="xy-btn xy-btn-ghost" @click="versionPickerOpen = false">取消</button></div>
+          </div>
+        </section>
+      </div>
+    </template>
+  </div>
+</body>
+</html>

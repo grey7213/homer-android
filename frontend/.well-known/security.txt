@@ -1,0 +1,4 @@
+Contact: mailto:admin@patcher.villainy.top
+Preferred-Languages: zh-CN, en
+Canonical: https://patcher.villainy.top/.well-known/security.txt
+Expires: 2027-07-13T00:00:00Z

@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>用户中心 - 惑梦（Homer）</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/img/favicon-32.png?v=20260901-persistent-pages">
+  <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/img/apple-touch-icon.png?v=20260901-persistent-pages">
+  <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
+  <link rel="stylesheet" href="/assets/css/custom.css?v=20260901-persistent-pages">
+  <script type="module" src="/assets/js/dashboard-app.js?v=20260717-handoff-merge"></script>
+  <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
+</head>
+<body class="min-h-screen">
+  <div class="xy-stars-bg"></div>
+
+  <!-- 顶栏 -->
+  <nav class="xy-global-topbar fixed top-0 inset-x-0 z-40 border-b border-white/5">
+    <div class="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+      <a href="/" class="flex items-center gap-3">
+        <img src="/assets/img/logo-64.png?v=20260901-persistent-pages" alt="惑梦（Homer）" class="w-10 h-10 drop-shadow-[0_0_12px_rgba(168,85,247,0.55)]">
+        <div>
+          <div class="font-bold text-lg leading-tight xy-gradient-text">惑梦（Homer）</div>
+          <div class="text-[10px] text-slate-400 leading-tight" data-dashboard-text="dashboard.topbar_subtitle">用户中心</div>
+        </div>
+      </a>
+      <div class="flex items-center gap-3" x-data x-cloak>
+        <a href="/" class="text-sm text-slate-300 hover:text-white" data-dashboard-text="dashboard.home_link_text">首页</a>
+        <template x-if="$store.user && $store.user.isAdmin">
+          <a href="/admin.html" class="text-sm text-amber-300 hover:text-amber-200 flex items-center gap-1">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+            <span data-dashboard-text="dashboard.admin_link_text">管理后台</span>
+          </a>
+        </template>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-28 pb-20 px-6" x-data="dashboard()" x-init="init()" x-cloak>
+    <!-- Toast -->
+    <template x-if="toast">
+      <div class="xy-toast" :class="`xy-toast-${toast.type}`" x-text="toast.message"></div>
+    </template>
+
+    <!-- 未登录：登录/注册 -->
+    <template x-if="!loggedIn">
+      <div class="max-w-md mx-auto">
+        <div class="text-center mb-8">
+          <img src="/assets/img/logo-256.png?v=20260901-persistent-pages" alt="惑梦（Homer）" class="w-20 h-20 mx-auto mb-4 drop-shadow-[0_0_24px_rgba(168,85,247,0.65)]">
+          <h1 class="text-2xl font-bold xy-gradient-text mb-2" x-text="authText('dashboard_title', '欢迎使用 惑梦（Homer）')">欢迎使用 惑梦（Homer）</h1>
+          <p class="text-slate-400 text-sm" x-text="authText('dashboard_subtitle', '登录或注册以管理你的账号和积分')">登录或注册以管理你的账号和积分</p>
+        </div>
+
+        <div class="xy-glass p-2 mb-6 flex">
+          <button @click="view = 'login'" class="flex-1 py-2.5 rounded-xl text-sm font-medium transition" :class="view === 'login' ? 'bg-violet-500/30 text-white' : 'text-slate-400 hover:text-white'" x-text="authText('login_tab_label', '登录')">登录</button>
+          <button @click="view = 'register'" class="flex-1 py-2.5 rounded-xl text-sm font-medium transition" :class="view === 'register' ? 'bg-violet-500/30 text-white' : 'text-slate-400 hover:text-white'" x-text="authText('register_tab_label', '注册')">注册</button>
+        </div>
+
+        <!-- 登录表单 -->
+        <div x-show="view === 'login'" class="xy-glass p-7">
+          <h2 class="text-lg font-semibold mb-5" x-text="authText('dashboard_login_title', '账号登录')">账号登录</h2>
+          <form @submit.prevent="doLogin" class="space-y-4">
+            <div>
+              <label class="xy-label" x-text="authText('email_label', '邮箱')">邮箱</label>
+              <input type="email" x-model="loginForm.email" class="xy-input" :placeholder="authText('email_placeholder', 'you@example.com')" required>
+            </div>
+            <div>
+              <label class="xy-label" x-text="authText('password_label', '密码')">密码</label>
+              <input type="password" x-model="loginForm.password" class="xy-input" :placeholder="authText('login_password_placeholder', '请输入密码')" required minlength="6">
+            </div>
+            <button type="submit" class="xy-btn xy-btn-primary w-full" :disabled="loading">
+              <span x-show="!loading" x-text="authText('dashboard_login_button_text', '登录')">登录</span>
+              <span x-show="loading" class="xy-loading"></span>
+            </button>
+          </form>
+          <p class="text-xs text-slate-500 mt-5 text-center"><span x-text="authText('dashboard_login_hint', '还没有账号？')">还没有账号？</span><a href="#" @click.prevent="view = 'register'" class="xy-link" x-text="authText('dashboard_register_link_text', '立即注册')">立即注册</a></p>
+        </div>
+
+        <!-- 注册表单 -->
+        <div x-show="view === 'register'" class="xy-glass p-7">
+          <h2 class="text-lg font-semibold mb-5" x-text="authText('dashboard_register_title', '创建账号')">创建账号</h2>
+          <form @submit.prevent="doRegister" class="space-y-4">
+            <div>
+              <label class="xy-label" x-text="authText('email_label', '邮箱')">邮箱</label>
+              <input type="email" x-model="registerForm.email" class="xy-input" :placeholder="authText('email_placeholder', 'you@example.com')" required>
+            </div>
+            <div>
+              <label class="xy-label" x-text="authText('code_label', '验证码')">验证码</label>
+              <div class="flex gap-2">
+                <input type="text" x-model="registerForm.code" class="xy-input flex-1" :placeholder="authText('code_placeholder', '6 位验证码')" required pattern="\d{6}">
+                <button type="button" @click="sendCode" class="xy-btn xy-btn-ghost text-sm whitespace-nowrap" :disabled="codeCountdown > 0 || sendingCode">
+                  <span x-show="!sendingCode && codeCountdown === 0" x-text="authText('send_code_button_text', '发送验证码')">发送验证码</span>
+                  <span x-show="sendingCode" class="xy-loading"></span>
+                  <span x-show="codeCountdown > 0" x-text="`${codeCountdown}s`"></span>
+                </button>
+              </div>
+            </div>
+            <div>
+              <label class="xy-label" x-text="authText('nickname_label', '昵称')">昵称</label>
+              <input type="text" x-model="registerForm.name" class="xy-input" :placeholder="authText('nickname_placeholder', '给自己起个名字')" required maxlength="32">
+            </div>
+            <div>
+              <label class="xy-label" x-text="authText('password_label', '密码')">密码</label>
+              <input type="password" x-model="registerForm.password" class="xy-input" :placeholder="authText('register_password_placeholder', '至少 8 位')" required minlength="8">
+            </div>
+            <div class="text-xs text-slate-400 leading-relaxed bg-white/5 rounded-lg p-3">
+              <p class="mb-1" x-text="authText('register_hint_email', '验证码将通过邮件发送至上述邮箱')">验证码将通过邮件发送至上述邮箱</p>
+              <p x-text="authText('register_hint_points', '注册后将自动获得 2500 惑梦币，约 50 次角色回复')">注册后将自动获得 2500 惑梦币，约 50 次角色回复</p>
+            </div>
+            <button type="submit" class="xy-btn xy-btn-primary w-full" :disabled="loading">
+              <span x-show="!loading" x-text="authText('register_button_text', '完成注册')">完成注册</span>
+              <span x-show="loading" class="xy-loading"></span>
+            </button>
+          </form>
+        </div>
+      </div>
+    </template>
+
+    <!-- 已登录：用户面板 -->
+    <template x-if="loggedIn">
+      <div class="max-w-5xl mx-auto">
+        <!-- 个人信息卡 -->
+        <div class="xy-glass p-7 mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-5">
+          <div class="flex items-center gap-4">
+            <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center text-2xl font-bold shadow-lg shadow-violet-500/30">
+              <span x-text="(user?.name || user?.email || '?').slice(0, 1).toUpperCase()"></span>
+            </div>
+            <div>
+              <div class="text-xl font-bold mb-1" x-text="user?.name || dashboardText('unnamed_user', '未命名用户')"></div>
+              <div class="text-sm text-slate-400" x-text="user?.email"></div>
+              <div class="text-xs text-slate-500 mt-1"><span x-text="dashboardText('profile_registered_label', '注册时间')">注册时间</span>：<span x-text="formatDate(user?.created_at)"></span></div>
+            </div>
+          </div>
+          <button @click="doLogout" class="xy-btn xy-btn-ghost text-sm">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+            <span x-text="dashboardText('logout_text', '退出登录')">退出登录</span>
+          </button>
+        </div>
+
+        <!-- 积分卡 + 兑换 -->
+        <div class="grid md:grid-cols-2 gap-6 mb-6">
+          <div class="xy-glass p-7 relative overflow-hidden">
+            <div class="absolute -top-12 -right-12 w-40 h-40 rounded-full bg-violet-500/20 blur-3xl"></div>
+            <div class="relative">
+              <div class="text-sm text-slate-400 mb-2 flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                <span x-text="dashboardText('balance_title', '当前积分余额')">当前积分余额</span>
+              </div>
+              <div class="text-4xl md:text-5xl font-bold xy-gradient-text mb-3" x-text="points ?? '...'"></div>
+              <div class="text-xs text-slate-500" x-show="lastRefreshed"><span x-text="dashboardText('balance_updated_label', '最后更新')">最后更新</span>：<span x-text="formatTime(lastRefreshed)"></span></div>
+              <button @click="refreshPoints" class="text-xs text-violet-300 hover:text-white mt-2 inline-flex items-center gap-1">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                <span x-text="dashboardText('balance_refresh_text', '刷新')">刷新</span>
+              </button>
+              <div class="grid grid-cols-3 gap-2 mt-5">
+                <div class="rounded-xl border border-white/10 bg-white/5 p-3">
+                  <div class="text-xs text-slate-500" x-text="dashboardText('balance_free_label', '免费')">免费</div>
+                  <div class="text-sm font-semibold text-cyan-100" x-text="balance.free_points.toLocaleString('zh-CN')"></div>
+                </div>
+                <div class="rounded-xl border border-white/10 bg-white/5 p-3">
+                  <div class="text-xs text-slate-500" x-text="dashboardText('balance_paid_label', '充值')">充值</div>
+                  <div class="text-sm font-semibold text-fuchsia-100" x-text="balance.paid_points.toLocaleString('zh-CN')"></div>
+                </div>
+                <div class="rounded-xl border border-white/10 bg-white/5 p-3">
+                  <div class="text-xs text-slate-500" x-text="dashboardText('balance_reward_label', '奖励')">奖励</div>
+                  <div class="text-sm font-semibold text-amber-100" x-text="balance.reward_points.toLocaleString('zh-CN')"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="xy-glass p-7">
+            <div class="text-sm text-slate-400 mb-3 flex items-center gap-2">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
+              <span x-text="dashboardText('purchase_section_label', '充值通道')">充值通道</span>
+            </div>
+            <div class="text-xl font-bold text-white mb-2" x-text="depositText('title', '充值通道维护中')">充值通道维护中</div>
+            <p class="text-sm text-slate-400 mb-4" x-text="depositText('description', '充值和兑换入口暂时关闭，已有余额、每日奖励和聊天功能不受影响。')">充值和兑换入口暂时关闭，已有余额、每日奖励和聊天功能不受影响。</p>
+            <template x-if="paymentAvailable()">
+              <div>
+                <button @click="openPayments" class="xy-btn xy-btn-primary w-full justify-center mb-3">
+                  <span>选择套餐并支付</span>
+                </button>
+                <details class="text-xs text-slate-500">
+                  <summary class="cursor-pointer">备用兑换码入口</summary>
+                  <div class="flex gap-2 mt-3">
+                    <input type="text" x-model="redeemCode" @keydown.enter="redeemNow" class="xy-input flex-1 text-sm uppercase font-mono" :placeholder="depositText('redeem_placeholder', 'XY-XXXX-XXXX-XXXX-XXXX')">
+                    <button @click="redeemNow" class="xy-btn xy-btn-ghost" :disabled="loading || !redeemCode">兑换</button>
+                  </div>
+                </details>
+              </div>
+            </template>
+            <p class="text-[11px] text-slate-500 mt-3 leading-relaxed">
+              <span x-text="paymentNote()"></span>
+            </p>
+          </div>
+        </div>
+
+        <!-- 操作中心 -->
+        <div class="grid md:grid-cols-3 gap-4 mb-6">
+          <a href="/app/farm.html" class="xy-glass xy-glass-hover p-5 text-left flex items-center gap-4">
+            <div class="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center">
+              <svg class="w-5 h-5 text-emerald-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/></svg>
+            </div>
+            <div>
+              <div class="font-semibold text-sm" x-text="dashboardText('daily_checkin_title', '惑梦农场')">惑梦农场</div>
+              <div class="text-xs text-slate-400">种植收获 · 每日首收奖励</div>
+            </div>
+          </a>
+          <a href="/download/ai-xingyue-latest.apk" download class="xy-glass xy-glass-hover p-5 flex items-center gap-4">
+            <div class="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center">
+              <svg class="w-5 h-5 text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+            </div>
+            <div>
+              <div class="font-semibold text-sm" x-text="dashboardText('download_title', '下载客户端')">下载客户端</div>
+              <div class="text-xs text-slate-400" x-text="dashboardText('download_subtitle', 'Android APK · 与网页端同账号')">Android APK · 与网页端同账号</div>
+            </div>
+          </a>
+        <template x-if="isAdmin || user?.is_admin || user?.is_env_admin || user?.role === 'admin'">
+            <a href="/admin.html" class="xy-glass xy-glass-hover p-5 flex items-center gap-4">
+              <div class="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center">
+                <svg class="w-5 h-5 text-amber-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+              </div>
+              <div>
+                <div class="font-semibold text-sm" x-text="dashboardText('admin_card_title', '管理后台')">管理后台</div>
+                <div class="text-xs text-slate-400" x-text="dashboardText('admin_card_subtitle', '查看数据 · 管理用户')">查看数据 · 管理用户</div>
+              </div>
+            </a>
+          </template>
+        </div>
+
+        <!-- API 信息 -->
+        <div class="xy-glass p-6">
+          <h3 class="font-semibold mb-4 flex items-center gap-2">
+            <svg class="w-5 h-5 text-violet-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>
+            <span x-text="dashboardText('api_title', 'API 接入信息')">API 接入信息</span>
+          </h3>
+          <div class="grid md:grid-cols-2 gap-4 text-sm">
+            <div>
+              <div class="text-xs text-slate-400 mb-1" x-text="dashboardText('api_endpoint_label', 'API 端点')">API 端点</div>
+              <code class="block px-3 py-2 rounded-lg bg-black/40 font-mono text-xs text-violet-200 break-all">https://patcher.villainy.top/</code>
+            </div>
+            <div>
+              <div class="text-xs text-slate-400 mb-1" x-text="dashboardText('user_id_label', '用户 ID')">用户 ID</div>
+              <code class="block px-3 py-2 rounded-lg bg-black/40 font-mono text-xs text-violet-200 break-all" x-text="user?.id || '-'"></code>
+            </div>
+          </div>
+          <p class="text-xs text-slate-500 mt-4 leading-relaxed">
+            <span x-text="dashboardText('api_note', '如果你在使用 惑梦（Homer） APP 时遇到节点不可用问题，请检查 APP 的服务器配置是否指向 patcher.villainy.top。')">如果你在使用 惑梦（Homer） APP 时遇到节点不可用问题，请检查 APP 的服务器配置是否指向 patcher.villainy.top。</span>
+          </p>
+        </div>
+      </div>
+    </template>
+  </main>
+</body>
+</html>

@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>信息中心 · 惑梦（Homer）</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/img/favicon-32.png?v=20260901-persistent-pages">
+  <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
+  <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
+  <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
+  <script type="module" src="/app/assets/js/hub-pages.js?v=20260812-license-removal"></script>
+  <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
+</head>
+<body class="min-h-screen hub-page hub-page--info">
+  <div class="xy-stars-bg"></div>
+  <div class="xy-meteor"></div>
+
+  <div class="app-shell" x-data="infoPage()" x-cloak>
+    <aside class="app-sidebar" data-app-sidebar></aside>
+    <main class="app-main">
+      <header class="app-topbar">
+        <h1 x-text="infoValue('info_topbar_title', '信息中心')">信息中心</h1>
+        <div class="grow"></div>
+        <a href="/download/ai-xingyue-latest.apk" download class="xy-btn xy-btn-primary text-sm" x-text="infoValue('info_download_button_text', '下载客户端')">下载客户端</a>
+      </header>
+      <div class="hub-loading-skeleton app-page-pad max-w-6xl mx-auto" x-show="!ready" aria-label="正在加载信息中心">
+        <div class="hub-skeleton hub-skeleton--hero"></div>
+        <div class="hub-skeleton-grid hub-skeleton-grid--stats"><i></i><i></i><i></i><i></i></div>
+      </div>
+      <section class="app-page-pad max-w-6xl mx-auto space-y-5" x-show="ready" x-transition.opacity>
+        <div class="app-hero__panel">
+          <div class="app-hero__eyebrow" x-text="infoValue('info_eyebrow', '惑梦（Homer） Web 同步状态')">惑梦（Homer） Web 同步状态</div>
+          <h2 class="app-hero__title whitespace-pre-line" x-text="infoValue('info_title', '网页端\n同账号 · 同积分 · 同角色库。')">网页端
+同账号 · 同积分 · 同角色库。</h2>
+        </div>
+        <div class="stat-grid">
+          <div class="stat-card stat-card--official"><div class="num" x-text="stats?.apps?.public_admin || stats?.apps?.admin || 0"></div><div class="label" x-text="infoValue('info_stat_official_label', '公开官方角色')">公开官方角色</div></div>
+          <div class="stat-card stat-card--user"><div class="num" x-text="stats?.apps?.user || 0"></div><div class="label" x-text="infoValue('info_stat_user_label', '用户角色')">用户角色</div></div>
+          <div class="stat-card stat-card--favorite"><div class="num" x-text="stats?.favorites || 0"></div><div class="label" x-text="infoValue('info_stat_favorites_label', '你的收藏')">你的收藏</div></div>
+          <div class="stat-card stat-card--conversation"><div class="num" x-text="stats?.conversations || 0"></div><div class="label" x-text="infoValue('info_stat_conversations_label', '你的会话')">你的会话</div></div>
+        </div>
+      </section>
+    </main>
+    <nav class="app-bottom-nav" data-app-bottom-nav></nav>
+  </div>
+</body>
+</html>

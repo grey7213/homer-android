@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>社区 · 惑梦（Homer）</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/img/favicon-32.png?v=20260901-persistent-pages">
+  <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
+  <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
+  <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
+  <script type="module" src="/app/assets/js/community.js?v=20260812-license-removal"></script>
+  <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
+  <style>
+    .cm-page { width: min(1180px, 100%); margin: 0 auto; }
+    .cm-tabs, .cm-toolbar, .cm-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; }
+    .cm-tabs { margin-bottom: 18px; }
+    .cm-tab { min-height: 40px; padding: 0 16px; border: 1px solid var(--fy-border); border-radius: 999px; color: var(--fy-text-soft); background: var(--fy-panel); box-shadow: 0 1px 2px rgba(31,24,35,.04); font-size: 13px; font-weight: 750; cursor: pointer; transition: color .16s ease, border-color .16s ease, background .16s ease, box-shadow .16s ease; }
+    .cm-tab:hover { color: var(--fy-text); border-color: rgba(251,113,133,.52); background: #fff4f7; }
+    .cm-tab.is-active { color: #981b46; border-color: #fb7185; background: #ffe4ec; box-shadow: 0 0 0 3px rgba(251,113,133,.13); }
+    .cm-tab:focus-visible, .cm-scopes button:focus-visible, .cm-card:focus-visible { outline: 3px solid rgba(190,24,93,.26); outline-offset: 2px; }
+    .cm-toolbar { margin-bottom: 16px; }
+    .cm-search { flex: 1 1 240px; min-width: 0; border-color: #cec8d1; color: var(--fy-text); background: #fff; }
+    .cm-search::placeholder { color: #756e79; opacity: 1; }
+    .cm-scopes { display: flex; gap: 5px; padding: 4px; border: 1px solid var(--fy-border); border-radius: 13px; background: #ebe8ed; }
+    .cm-scopes button { min-height: 34px; padding: 0 11px; border: 1px solid transparent; border-radius: 9px; color: #514a56; background: transparent; font-size: 12px; font-weight: 700; cursor: pointer; transition: color .16s ease, border-color .16s ease, background .16s ease, box-shadow .16s ease; }
+    .cm-scopes button:hover { color: #342e38; background: rgba(255,255,255,.72); }
+    .cm-scopes button.is-active { color: #8f1743; border-color: rgba(251,113,133,.32); background: #fff; box-shadow: 0 1px 4px rgba(31,24,35,.08); }
+    .cm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 15px; }
+    .cm-card { overflow: hidden; padding: 0; border: 1px solid var(--fy-border); border-radius: 18px; color: var(--fy-text); background: var(--fy-panel); box-shadow: 0 8px 24px rgba(31,24,35,.05); text-align: left; cursor: pointer; transition: .16s ease; }
+    .cm-card:hover { transform: translateY(-2px); border-color: rgba(251,113,133,.48); background: #fff; box-shadow: 0 12px 30px rgba(31,24,35,.1); }
+    .cm-card__visual { position: relative; height: 132px; overflow: hidden; background: radial-gradient(circle at 25% 20%, rgba(251,113,133,.42), transparent 48%), linear-gradient(135deg, #251c39, #171521); }
+    .cm-card__visual img { width: 100%; height: 100%; object-fit: cover; }
+    .cm-card__badge { position: absolute; top: 10px; left: 10px; padding: 4px 9px; border-radius: 999px; color: #fff; background: rgba(10,10,16,.7); backdrop-filter: blur(6px); font-size: 10px; font-weight: 800; }
+    .cm-card__badge.is-open { background: rgba(22,163,74,.78); }
+    .cm-card__body { padding: 14px; }
+    .cm-card__name { overflow: hidden; color: #29242d; font-size: 15px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+    .cm-card__summary { display: -webkit-box; min-height: 40px; margin-top: 6px; overflow: hidden; color: #5f5864; font-size: 12px; line-height: 1.65; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+    .cm-card__meta { display: flex; gap: 10px; margin-top: 12px; color: #6b6470; font-size: 11px; }
+    .cm-empty { padding: 70px 20px; border: 1px dashed #c8c0cc; border-radius: 20px; color: #514a56; background: rgba(255,255,255,.72); text-align: center; }
+    .cm-mask { position: fixed; inset: 0; z-index: 1100; display: grid; place-items: center; padding: 18px; background: rgba(6,7,13,.72); backdrop-filter: blur(9px); }
+    .cm-modal { display: flex; flex-direction: column; width: min(760px, 100%); max-height: calc(100dvh - 36px); overflow: hidden; border: 1px solid rgba(255,255,255,.12); border-radius: 22px; color: #fff; background: rgba(24,21,37,.985); box-shadow: 0 30px 100px rgba(0,0,0,.52); }
+    .cm-modal--wide { width: min(920px, 100%); }
+    .cm-modal__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 19px 20px 15px; border-bottom: 1px solid rgba(255,255,255,.08); }
+    .cm-modal__head h2 { margin: 0; font-size: 19px; font-weight: 850; }
+    .cm-modal__head p { margin: 5px 0 0; color: rgba(237,233,254,.5); font-size: 12px; }
+    .cm-close { width: 34px; height: 34px; flex: 0 0 auto; border: 0; border-radius: 10px; color: rgba(255,255,255,.72); background: rgba(255,255,255,.07); cursor: pointer; }
+    .cm-modal__body { overflow: auto; padding: 18px 20px 22px; }
+    .cm-field { margin-bottom: 14px; }
+    .cm-field > label { display: block; margin-bottom: 6px; color: rgba(237,233,254,.68); font-size: 12px; font-weight: 750; }
+    .cm-field textarea { min-height: 105px; resize: vertical; }
+    .cm-checks { display: flex; flex-wrap: wrap; gap: 14px; margin: 12px 0 16px; }
+    .cm-checks label { display: inline-flex; align-items: center; gap: 7px; color: rgba(237,233,254,.72); font-size: 12px; }
+    .cm-checks input { accent-color: #fb7185; }
+    .cm-chips { display: flex; flex-wrap: wrap; gap: 7px; }
+    .cm-chip { padding: 5px 10px; border: 1px solid rgba(255,255,255,.08); border-radius: 999px; color: rgba(255,255,255,.72); background: rgba(255,255,255,.055); font-size: 11px; }
+    .cm-code { max-height: 330px; overflow: auto; padding: 14px; border-radius: 13px; color: #dbeafe; background: #0b1020; font: 12px/1.65 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; word-break: break-word; }
+    .cm-demo { width: 100%; height: 430px; border: 1px solid rgba(255,255,255,.1); border-radius: 14px; background: #fff; }
+    .cm-versions { display: grid; gap: 9px; }
+    .cm-version { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; padding: 12px 13px; border: 1px solid rgba(255,255,255,.08); border-radius: 13px; background: rgba(255,255,255,.035); }
+    .cm-version strong, .cm-version small { display: block; }
+    .cm-version small { margin-top: 4px; color: rgba(237,233,254,.48); line-height: 1.5; }
+    .cm-contest { padding: 22px; margin-bottom: 18px; border: 1px solid rgba(154,103,0,.25); border-radius: 20px; background: radial-gradient(circle at 85% 20%, rgba(251,191,36,.2), transparent 38%), var(--fy-panel); box-shadow: 0 8px 24px rgba(31,24,35,.05); }
+    .cm-contest h2 { margin: 0; color: #2d2730; font-size: 24px; font-weight: 850; }
+    .cm-contest p { margin: 9px 0; color: #59525e; white-space: pre-line; }
+    .cm-ranks { display: grid; gap: 10px; }
+    .cm-rank { display: grid; grid-template-columns: 42px 48px minmax(0,1fr) auto; align-items: center; gap: 11px; padding: 11px; border: 1px solid var(--fy-border); border-radius: 15px; background: var(--fy-panel); }
+    .cm-rank__no { color: #8a5a00; font-size: 18px; font-weight: 900; text-align: center; }
+    .cm-rank img { width: 48px; height: 48px; border-radius: 12px; object-fit: cover; }
+    .cm-rank a { overflow: hidden; color: #29242d; font-size: 13px; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
+    .cm-rank small { display: block; margin-top: 4px; color: #68616d; }
+    .cm-notice { position: fixed; right: 22px; bottom: 22px; z-index: 1300; max-width: min(360px, calc(100vw - 44px)); padding: 12px 15px; border: 1px solid rgba(251,113,133,.35); border-radius: 13px; color: #fff; background: rgba(32,24,42,.96); box-shadow: 0 12px 40px rgba(0,0,0,.32); font-size: 13px; }
+    @media (max-width: 620px) { .cm-rank { grid-template-columns: 32px 42px minmax(0,1fr); } .cm-rank > button { grid-column: 2 / -1; justify-content: center; } .cm-demo { height: 360px; } }
+  </style>
+</head>
+<body class="min-h-screen">
+  <div class="xy-stars-bg"></div>
+  <div class="xy-meteor"></div>
+
+  <div class="app-shell" x-data="communityPage()" x-cloak @keydown.escape.window="detailOpen = false; createOpen = false; contestCreateOpen = false">
+    <aside class="app-sidebar" data-app-sidebar></aside>
+    <main class="app-main">
+      <header class="app-topbar">
+        <a href="/app/workshop.html" class="xy-btn xy-btn-ghost text-sm px-3 py-2">← 创作工坊</a>
+        <h1>社区</h1>
+        <div class="grow"></div>
+        <button type="button" class="xy-btn xy-btn-primary text-sm" x-show="tab !== 'contests'" @click="openCreate()">＋ 发布作品</button>
+        <button type="button" class="xy-btn xy-btn-primary text-sm" x-show="tab === 'contests' && isAdmin" @click="openContestCreate()">＋ 发布赛事</button>
+      </header>
+
+      <section class="app-page-pad cm-page">
+        <nav class="cm-tabs" aria-label="社区分类">
+          <button type="button" class="cm-tab" :class="{ 'is-active': tab === 'mod' }" @click="switchTab('mod')">◇ Mod</button>
+          <button type="button" class="cm-tab" :class="{ 'is-active': tab === 'ui_template' }" @click="switchTab('ui_template')">▣ UI 模板</button>
+          <button type="button" class="cm-tab" :class="{ 'is-active': tab === 'preset' }" @click="switchTab('preset')">✦ 预设</button>
+          <button type="button" class="cm-tab" :class="{ 'is-active': tab === 'contests' }" @click="switchTab('contests')">♛ 当前赛事</button>
+        </nav>
+
+        <div x-show="tab !== 'contests'">
+          <div class="cm-toolbar">
+            <input class="xy-input cm-search" type="search" x-model="search" @input.debounce.300ms="loadWorks()" placeholder="搜索作品名称或简介">
+            <div class="cm-scopes" aria-label="作品范围">
+              <button type="button" :class="{ 'is-active': scope === 'public' }" @click="scope = 'public'; loadWorks()">全部公开</button>
+              <button type="button" :class="{ 'is-active': scope === 'mine' }" @click="scope = 'mine'; loadWorks()">我的</button>
+              <button type="button" :class="{ 'is-active': scope === 'favorites' }" @click="scope = 'favorites'; loadWorks()">我的收藏</button>
+            </div>
+          </div>
+          <div class="cm-empty" x-show="loading">正在读取社区作品…</div>
+          <div class="cm-empty" x-show="!loading && !works.length">这里还没有作品。</div>
+          <div class="cm-grid" x-show="!loading && works.length">
+            <template x-for="work in works" :key="work.id">
+              <button type="button" class="cm-card" @click="openDetail(work.id)">
+                <div class="cm-card__visual">
+                  <img x-show="work.cover_url" :src="work.cover_url" alt="" referrerpolicy="no-referrer" onerror="this.hidden=true">
+                  <span class="cm-card__badge" :class="{ 'is-open': work.is_open_source }" x-text="work.is_open_source ? '开源' : (work.is_public ? '公开' : '私密')"></span>
+                </div>
+                <div class="cm-card__body">
+                  <div class="cm-card__name" x-text="work.name || '未命名作品'"></div>
+                  <div class="cm-card__summary" x-text="work.summary || '暂无作品简介'"></div>
+                  <div class="cm-card__meta"><span x-text="`★ ${work.favorite_count || 0}`"></span><span x-text="`▶ ${work.use_count || 0}`"></span><span x-text="work.owner_name || ''"></span></div>
+                </div>
+              </button>
+            </template>
+          </div>
+        </div>
+
+        <div x-show="tab === 'contests'">
+          <div class="cm-empty" x-show="loading">正在读取赛事…</div>
+          <div class="cm-empty" x-show="!loading && !contest">当前没有可展示的赛事。</div>
+          <template x-if="!loading && contest">
+            <div>
+              <section class="cm-contest">
+                <h2 x-text="contest.title"></h2>
+                <p x-text="contest.content || '等待更多创作者参加。'"></p>
+                <div class="text-xs text-amber-100/65" x-text="`${formatTime(contest.start_at)} ～ ${formatTime(contest.end_at)}`"></div>
+                <div class="mt-2 text-sm text-amber-200" x-show="contest.reward" x-text="`奖励：${contest.reward}`"></div>
+              </section>
+              <div class="flex items-center justify-between gap-3 mb-3"><h2 class="text-lg font-bold text-white">参赛排行榜</h2><span class="text-xs text-violet-100/45" x-text="`${rankings.length} 张参赛角色`"></span></div>
+              <div class="cm-empty" x-show="!rankings.length">还没有角色报名本场赛事。</div>
+              <div class="cm-ranks" x-show="rankings.length">
+                <template x-for="row in rankings" :key="row.app_id">
+                  <article class="cm-rank">
+                    <span class="cm-rank__no" x-text="row.rank"></span>
+                    <img :src="row.cover_url || row.cover || row.icon || '/assets/img/apk/avatar.webp?v=20260901-persistent-pages'" alt="" onerror="this.src='/assets/img/apk/avatar.webp?v=20260901-persistent-pages'">
+                    <div class="min-w-0"><a :href="`/app/character.html?id=${encodeURIComponent(row.app_id)}`" x-text="row.name || row.app_name || row.app_id"></a><small x-text="`${row.votes || 0} 票${row.owner_name ? ` · ${row.owner_name}` : ''}`"></small></div>
+                    <button type="button" class="xy-btn xy-btn-ghost text-xs" :class="{ 'is-active': row.voted }" @click="vote(row)" x-text="row.voted ? '已投票' : '投票'"></button>
+                  </article>
+                </template>
+              </div>
+            </div>
+          </template>
+        </div>
+      </section>
+    </main>
+    <nav class="app-bottom-nav" data-app-bottom-nav></nav>
+
+    <div class="cm-notice" x-show="notice" x-transition.opacity x-text="notice"></div>
+
+    <template x-if="detailOpen && detail">
+      <div class="cm-mask" @click.self="closeDetail()">
+        <section class="cm-modal cm-modal--wide" role="dialog" aria-modal="true" aria-labelledby="cm-detail-title">
+          <header class="cm-modal__head"><div><h2 id="cm-detail-title" x-text="detail.name"></h2><p x-text="`${typeLabel(detail.work_type)}${detail.owner_name ? ` · ${detail.owner_name}` : ''}`"></p></div><button type="button" class="cm-close" @click="closeDetail()" aria-label="关闭">×</button></header>
+          <div class="cm-modal__body space-y-5">
+            <p class="text-sm leading-7 text-violet-100/70 whitespace-pre-line" x-text="detail.summary || '暂无作品简介'"></p>
+
+            <section x-show="(detail.work_type === 'mod' || detail.work_type === 'preset') && detail.entry_titles?.length">
+              <h3 class="text-sm font-bold text-white mb-2">条目名称 <span class="text-xs font-normal text-violet-100/45">正文受产权保护</span></h3>
+              <div class="cm-chips"><template x-for="title in detail.entry_titles" :key="title"><span class="cm-chip" x-text="title"></span></template></div>
+            </section>
+
+            <section x-show="detail.work_type === 'ui_template' && detail.safe_demo_html">
+              <div class="flex items-center justify-between gap-3 mb-2"><h3 class="text-sm font-bold text-white">效果演示</h3><span class="text-xs text-violet-100/45">隔离交互预览 · 允许内联交互，无同源、账号、存储和网络权限</span></div>
+              <iframe class="cm-demo" title="UI 模板安全演示" sandbox="allow-scripts" referrerpolicy="no-referrer" :srcdoc="detail.safe_demo_html"></iframe>
+            </section>
+
+            <section x-show="detail.can_see_content && detail.content != null">
+              <h3 class="text-sm font-bold text-white mb-2" x-text="detail.is_open_source ? '开源内容（只读）' : '完整内容（仅作者/管理员可见）'"></h3>
+              <pre class="cm-code" x-text="prettyContent(detail.content)"></pre>
+            </section>
+
+            <section x-show="detail.versions?.length">
+              <h3 class="text-sm font-bold text-white mb-2">版本历史</h3>
+              <div class="cm-versions">
+                <template x-for="version in detail.versions" :key="version.id"><article class="cm-version"><div><strong x-text="version.version_name || version.label || `v${version.version_no}`"></strong><small x-text="version.author_description || version.note || '作者未填写本版介绍'"></small></div><time class="text-xs text-violet-100/40" x-text="formatTime(version.created_at)"></time></article></template>
+              </div>
+            </section>
+
+            <div class="cm-actions">
+              <button type="button" class="xy-btn xy-btn-primary text-sm" :class="{ 'is-active': detail.is_favorited }" @click="toggleFavorite()" x-text="detail.is_favorited ? '已收藏' : '收藏'"></button>
+              <button type="button" class="xy-btn xy-btn-ghost text-sm" x-show="detail.is_owner" @click="openVersionEditor()">发布新版本</button>
+              <button type="button" class="xy-btn xy-btn-ghost text-sm text-rose-200" x-show="detail.is_owner" @click="deleteWork()">删除作品</button>
+            </div>
+          </div>
+        </section>
+      </div>
+    </template>
+
+    <template x-if="createOpen">
+      <div class="cm-mask" @click.self="createOpen = false">
+        <section class="cm-modal" role="dialog" aria-modal="true" aria-labelledby="cm-create-title">
+          <header class="cm-modal__head"><div><h2 id="cm-create-title" x-text="editingWorkId ? '发布新版本' : `发布${typeLabel(form.type)}`"></h2><p x-text="editingWorkId ? '原版本会保留，本次内容将生成不可变的新版本。' : '公开页面默认仅展示作品名、简介和条目名称。'"></p></div><button type="button" class="cm-close" @click="createOpen = false" aria-label="关闭">×</button></header>
+          <div class="cm-modal__body">
+            <div class="cm-field"><label>作品类型</label><select class="xy-input" x-model="form.type" :disabled="!!editingWorkId"><option value="mod">Mod（世界书）</option><option value="ui_template">UI 模板</option><option value="preset">预设</option></select></div>
+            <div class="cm-field"><label>作品名称 *</label><input class="xy-input" maxlength="120" x-model="form.name" placeholder="作品名称"></div>
+            <div class="cm-field"><label>作品简介</label><textarea class="xy-input" maxlength="2000" x-model="form.summary" placeholder="公开展示的作品说明"></textarea></div>
+            <div class="cm-field"><label>封面 URL（可选）</label><input class="xy-input" x-model="form.cover_url" placeholder="/media-cache/... 或 HTTPS 图片"></div>
+            <div class="cm-field" x-show="form.type === 'ui_template'"><label>演示 HTML</label><textarea class="xy-input" x-model="form.demo_html" placeholder="演示将在无同源、无网络、无脚本权限的 iframe 中静态展示"></textarea></div>
+            <div class="cm-field"><label x-text="form.type === 'mod' ? '世界书 JSON / 内容' : (form.type === 'preset' ? '预设 JSON / 内容' : 'UI 模板源码 / 内容')"></label><textarea class="xy-input" x-model="form.content_text" placeholder='例如：{"entries":[{"name":"条目名称","content":"正文"}]}'></textarea></div>
+            <template x-if="editingWorkId"><div><div class="cm-field"><label>新版本名称 *</label><input class="xy-input" maxlength="80" x-model="form.version_name" placeholder="例如：v2 · 夏日扩展"></div><div class="cm-field"><label>本版作者介绍 *</label><textarea class="xy-input" maxlength="4000" x-model="form.version_description" placeholder="必填：说明这一版修改了什么、适合怎样使用"></textarea></div></div></template>
+            <div class="cm-checks"><label><input type="checkbox" x-model="form.is_public"> 公开发布</label><label><input type="checkbox" x-model="form.is_open_source"> 开源（详情页只读展示实际内容）</label></div>
+            <div class="cm-actions"><button type="button" class="xy-btn xy-btn-primary text-sm" :disabled="saving || !form.name.trim()" @click="submitWork()" x-text="saving ? '发布中…' : (editingWorkId ? '发布新版本' : '发布')"></button><button type="button" class="xy-btn xy-btn-ghost text-sm" @click="createOpen = false">取消</button></div>
+          </div>
+        </section>
+      </div>
+    </template>
+
+    <template x-if="contestCreateOpen">
+      <div class="cm-mask" @click.self="contestCreateOpen = false">
+        <section class="cm-modal" role="dialog" aria-modal="true" aria-labelledby="cm-contest-title">
+          <header class="cm-modal__head"><div><h2 id="cm-contest-title">发布赛事</h2><p>赛事标题、内容、奖励及有效期由管理员发布。</p></div><button type="button" class="cm-close" @click="contestCreateOpen = false" aria-label="关闭">×</button></header>
+          <div class="cm-modal__body">
+            <div class="cm-field"><label>赛事标题 *</label><input class="xy-input" maxlength="120" x-model="contestForm.title"></div>
+            <div class="cm-field"><label>赛事内容</label><textarea class="xy-input" maxlength="4000" x-model="contestForm.content"></textarea></div>
+            <div class="cm-field"><label>赛事奖励</label><textarea class="xy-input" maxlength="1000" x-model="contestForm.reward"></textarea></div>
+            <div class="grid sm:grid-cols-2 gap-3"><div class="cm-field"><label>开始时间</label><input class="xy-input" type="datetime-local" x-model="contestForm.start_at"></div><div class="cm-field"><label>结束时间</label><input class="xy-input" type="datetime-local" x-model="contestForm.end_at"></div></div>
+            <div class="cm-actions"><button type="button" class="xy-btn xy-btn-primary text-sm" :disabled="saving || !contestForm.title.trim()" @click="submitContest()" x-text="saving ? '发布中…' : '发布赛事'"></button><button type="button" class="xy-btn xy-btn-ghost text-sm" @click="contestCreateOpen = false">取消</button></div>
+          </div>
+        </section>
+      </div>
+    </template>
+  </div>
+</body>
+</html>

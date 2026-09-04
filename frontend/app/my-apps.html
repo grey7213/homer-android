@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>我的角色 · 惑梦（Homer）</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/img/favicon-32.png?v=20260901-persistent-pages">
+  <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
+  <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
+  <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
+  <script type="module" src="/app/assets/js/my-apps.js?v=20260812-license-removal"></script>
+  <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
+</head>
+<body class="min-h-screen">
+  <div class="xy-stars-bg"></div>
+
+  <div class="app-shell" x-data="myAppsPage()" x-cloak>
+    <aside class="app-sidebar" data-app-sidebar></aside>
+
+    <main class="app-main">
+      <header class="app-topbar">
+        <h1 x-text="myText('topbar_title', '我的角色')">我的角色</h1>
+        <div class="grow"></div>
+        <a href="/app/create.html" class="xy-btn xy-btn-primary text-sm" x-text="myText('new_role_text', '＋ 新建角色')">＋ 新建角色</a>
+      </header>
+
+      <template x-if="toast">
+        <div class="xy-toast" :class="`xy-toast-${toast.type}`" x-text="toast.message"></div>
+      </template>
+
+      <div class="max-w-6xl mx-auto app-page-pad">
+        <div x-show="loading" class="flex justify-center py-24"><div class="xy-loading"></div></div>
+        <div x-show="!loading && apps.length === 0" class="xy-glass p-10 text-center text-violet-200/70">
+          <img src="/assets/img/apk/empty_view.webp?v=20260901-persistent-pages" class="w-28 mx-auto opacity-60 mb-4">
+          <p class="text-sm mb-4" x-text="emptyText('my_apps_empty_title', '还没有自己创建的角色')">还没有自己创建的角色</p>
+          <a href="/app/create.html" class="xy-btn xy-btn-primary text-sm" x-text="emptyText('my_apps_cta_text', '马上去创建')">马上去创建</a>
+        </div>
+
+        <div class="grid md:grid-cols-2 xl:grid-cols-3 gap-5" x-show="apps.length">
+          <template x-for="app in apps" :key="app.id">
+            <article class="xy-glass overflow-hidden">
+              <div class="aspect-[16/9] bg-black/30">
+                <img :src="app.cover || app.icon || '/assets/img/apk/avatar.webp?v=20260901-persistent-pages'" class="w-full h-full object-cover" alt="" onerror="this.src='/assets/img/apk/avatar.webp?v=20260901-persistent-pages'">
+              </div>
+              <div class="p-5">
+                <div class="flex items-start gap-3">
+                  <div class="flex-1 min-w-0">
+                    <h2 class="font-bold text-lg truncate" x-text="app.name || myText('unnamed_role', '未命名角色')"></h2>
+                    <p class="text-sm text-slate-400 line-clamp-2 mt-1" x-text="app.description || app.summary || myText('summary_fallback', '暂无简介')"></p>
+                  </div>
+                </div>
+                <div class="flex flex-wrap gap-2 mt-4">
+                  <template x-for="tag in (app.tags || []).slice(0, 4)" :key="tag">
+                    <span class="chip text-xs" x-text="tag"></span>
+                  </template>
+                </div>
+                <div class="flex gap-2 mt-5">
+                  <a class="xy-btn xy-btn-primary text-sm flex-1 text-center" :href="`/app/character.html?id=${encodeURIComponent(app.id)}`" x-text="myText('detail_text', '详情')">详情</a>
+                  <button class="xy-btn xy-btn-ghost text-sm" @click="edit(app)" x-text="myText('edit_text', '编辑')">编辑</button>
+                  <button class="xy-btn xy-btn-ghost text-sm" @click="remove(app)" x-text="myText('delete_text', '删除')">删除</button>
+                </div>
+              </div>
+            </article>
+          </template>
+        </div>
+      </div>
+    </main>
+
+    <template x-if="editing">
+      <div class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="xy-glass w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto">
+          <div class="flex items-center justify-between mb-5">
+            <h2 class="text-xl font-bold" x-text="myText('edit_modal_title', '编辑角色')">编辑角色</h2>
+            <button class="xy-btn xy-btn-ghost text-sm" @click="editing = null" x-text="myText('close_text', '关闭')">关闭</button>
+          </div>
+          <div class="space-y-4">
+            <div>
+              <label class="xy-label" x-text="myText('name_label', '名称')">名称</label>
+              <input class="xy-input" x-model="editing.name">
+            </div>
+            <div>
+              <label class="xy-label" x-text="myText('summary_label', '简介')">简介</label>
+              <input class="xy-input" x-model="editing.summary">
+            </div>
+            <div>
+              <label class="xy-label" x-text="myText('description_label', '设定')">设定</label>
+              <textarea class="xy-input min-h-[140px]" x-model="editing.description"></textarea>
+            </div>
+            <div>
+              <label class="xy-label" x-text="myText('opening_label', '开场白')">开场白</label>
+              <textarea class="xy-input min-h-[80px]" x-model="editing.opening_statement"></textarea>
+            </div>
+            <div>
+              <label class="xy-label" x-text="myText('tags_label', '标签')">标签</label>
+              <input class="xy-input" x-model="editing.tagsText">
+            </div>
+            <div>
+              <label class="xy-label" x-text="myText('cover_label', '封面 URL')">封面 URL</label>
+              <input class="xy-input" x-model="editing.cover">
+            </div>
+            <div>
+              <label class="xy-label">新版本名称</label>
+              <input class="xy-input" x-model="editing.versionName" maxlength="80" placeholder="例如：v2.0 · 新剧情线">
+            </div>
+            <div>
+              <label class="xy-label">作者介绍 / 更新说明</label>
+              <textarea class="xy-input min-h-[90px]" x-model="editing.versionDescription" maxlength="4000" placeholder="玩家会在版本历史和游玩选择中看到"></textarea>
+            </div>
+            <div class="flex justify-end gap-3 pt-2">
+              <button class="xy-btn xy-btn-ghost" @click="editing = null" x-text="myText('cancel_text', '取消')">取消</button>
+              <button class="xy-btn xy-btn-primary" @click="saveEdit" :disabled="saving">
+                <span x-show="!saving" x-text="myText('save_text', '保存')">保存</span>
+                <span x-show="saving" class="xy-loading"></span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </template>
+    <nav class="app-bottom-nav" data-app-bottom-nav></nav>
+  </div>
+</body>
+</html>

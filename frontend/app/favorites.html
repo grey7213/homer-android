@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>我的收藏 · 惑梦（Homer）</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/img/favicon-32.png?v=20260901-persistent-pages">
+  <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
+  <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
+  <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
+  <script type="module" src="/app/assets/js/hub-pages.js?v=20260812-license-removal"></script>
+  <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
+</head>
+<body class="min-h-screen">
+  <div class="xy-stars-bg"></div>
+
+  <div class="app-shell" x-data="favoritesPage()" x-cloak>
+    <aside class="app-sidebar" data-app-sidebar></aside>
+    <main class="app-main">
+      <header class="app-topbar">
+        <h1 x-text="appNavText('favorites', '我的收藏')">我的收藏</h1>
+        <div class="grow"></div>
+        <input class="xy-input py-1.5 text-sm w-52 sm:w-72" x-model="searchKeyword" @keydown.enter="loadList" :placeholder="appHomeText('search_placeholder', '搜索收藏角色')">
+      </header>
+      <div x-show="loading" class="flex items-center justify-center py-24"><div class="xy-loading"></div></div>
+      <div x-show="!loading && cards.length === 0" class="app-page-pad text-center text-violet-200/70">
+        <img src="/assets/img/apk/empty_view.webp?v=20260901-persistent-pages" class="w-32 mx-auto opacity-60 mb-4" alt="">
+        <p x-text="emptyText('favorites_empty_title', '还没有收藏角色')">还没有收藏角色</p>
+        <a href="/app/explore.html" class="xy-btn xy-btn-primary mt-4 inline-flex" x-text="emptyText('favorites_cta_text', '去探索浏览')">去探索浏览</a>
+      </div>
+      <div class="char-grid">
+        <template x-for="card in cards" :key="card.id">
+          <a class="char-card" :href="`/app/character.html?id=${encodeURIComponent(card.id)}`">
+            <div class="char-card__cover">
+              <img class="char-card__img" :src="card.cover || card.icon || '/assets/img/apk/avatar.webp?v=20260901-persistent-pages'" :alt="card.name" loading="lazy" referrerpolicy="no-referrer" onerror="this.src='/assets/img/apk/avatar.webp?v=20260901-persistent-pages'">
+              <div class="char-card__overlay"></div>
+              <div class="char-card__tags">
+                <template x-for="t in (card.tags || []).slice(0, 2)" :key="t"><span class="char-card__tag" x-text="t"></span></template>
+              </div>
+            </div>
+            <button class="char-card__fav is-active" @click="toggleFavorite(card, $event)" :aria-label="appHomeText('favorite_label', '取消收藏')">♥</button>
+            <div class="char-card__body">
+              <div class="char-card__author" x-text="card.author || appHomeText('official_author', '官方角色')"></div>
+              <div class="char-card__name" x-text="card.name"></div>
+              <div class="char-card__desc" x-text="card.description || card.summary || appHomeText('summary_fallback', '点击开始对话')"></div>
+            </div>
+            <div class="char-card__footer" x-show="(card.user_tags || []).length">
+              <div class="char-card__chip-tags">
+                <template x-for="t in (card.user_tags || []).slice(0, 4)" :key="t">
+                  <span class="char-card__chip-tag" x-text="t"></span>
+                </template>
+              </div>
+            </div>
+          </a>
+        </template>
+      </div>
+    </main>
+    <nav class="app-bottom-nav" data-app-bottom-nav></nav>
+  </div>
+</body>
+</html>
