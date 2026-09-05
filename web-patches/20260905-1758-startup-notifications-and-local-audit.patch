@@ -1,0 +1,1577 @@
+# homer-android web 补丁
+# 基线 commit: b0225ab462945bc3bd9c8537e19e19f932b17a3d
+# 基线仓库:   https://github.com/grey7213/homer-android.git
+# 导出时间:   2026-09-05 17:58
+# 说明:       startup-notifications-and-local-audit
+#
+# 维护者落地方式（在 AIXingYue 工作区）：
+#   git apply -3 --stat  <本文件>
+#   git apply -3         <本文件>
+# 冲突会明确报出来。不要用整目录覆盖代替这一步。
+
+diff --git a/frontend/admin.html b/frontend/admin.html
+index 663407d44f288357f3905b0b366f8c6700d587ed..72339bdd2c8e4a73fd9e554bf6c01efefa8f2af1 100644
+--- a/frontend/admin.html
++++ b/frontend/admin.html
+@@ -10,7 +10,7 @@
+   <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
+   <link rel="stylesheet" href="/assets/css/custom.css?v=20260901-persistent-pages">
+   <link rel="stylesheet" href="/assets/css/admin.css?v=20260817-mobile-model-pricing">
+-  <script type="module" src="/assets/js/admin-app.js?v=20260817-preset-pricing"></script>
++  <script type="module" src="/assets/js/admin-app.js?v=20260905-notices-v1"></script>
+   <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
+ </head>
+ <body class="xy-admin min-h-screen">
+@@ -1108,6 +1108,36 @@
+             </div>
+           </div>
+ 
++          <!-- 运营配置 -->
++          <section x-show="activeTab === 'notifications'" aria-label="通知管理">
++            <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
++              <div><h1 class="text-2xl font-bold xy-gradient-text">通知管理</h1>
++                <p class="text-sm text-slate-400 mt-2">启用的通知会在进入软件时弹出；用户可选择今日不再弹出。</p></div>
++              <button class="xy-btn xy-btn-primary" @click="editNotification()" :disabled="notificationBusy">创建通知</button>
++            </div>
++            <p role="alert" x-show="notificationError" x-text="notificationError" class="text-red-400 mb-4"></p>
++            <template x-if="notificationForm">
++              <form class="xy-glass p-5 mb-6 space-y-4" @submit.prevent="saveNotification()">
++                <h2 class="font-semibold" x-text="notificationForm.id ? '编辑通知' : '创建通知'"></h2>
++                <label class="block">通知标题<input class="xy-input mt-2" x-model="notificationForm.title" maxlength="80" required :disabled="notificationBusy"></label>
++                <label class="block">通知正文<textarea class="xy-input mt-2 min-h-40" x-model="notificationForm.content" maxlength="10000" required :disabled="notificationBusy"></textarea></label>
++                <label class="flex gap-2 items-center"><input type="checkbox" x-model="notificationForm.enabled" :disabled="notificationBusy">启用通知</label>
++                <div class="flex flex-wrap gap-3"><button class="xy-btn xy-btn-primary" type="submit" :disabled="notificationBusy" x-text="notificationBusy ? '保存中…' : '保存通知'"></button>
++                  <button class="xy-btn xy-btn-ghost" type="button" @click="notificationForm=null" :disabled="notificationBusy">取消</button></div>
++              </form>
++            </template>
++            <p x-show="!notifications.length" class="text-slate-400 py-8">暂无通知，点击“创建通知”添加。</p>
++            <div class="space-y-4"><template x-for="notice in notifications" :key="notice.id">
++              <article class="xy-glass p-5">
++                <div class="flex flex-wrap justify-between gap-3"><h2 class="font-semibold break-all" x-text="notice.title"></h2>
++                  <span class="text-sm text-slate-400" x-text="notice.enabled ? '已启用' : '已停用'"></span></div>
++                <p class="text-sm text-slate-300 whitespace-pre-wrap break-words mt-3" x-text="notice.content"></p>
++                <div class="flex gap-3 mt-4"><button class="xy-btn xy-btn-ghost" @click="editNotification(notice)" :disabled="notificationBusy">编辑</button>
++                  <button class="xy-btn xy-btn-ghost text-red-400" @click="deleteNotification(notice)" :disabled="notificationBusy">删除</button></div>
++              </article>
++            </template></div>
++          </section>
++
+           <!-- 运营配置 -->
+           <div x-show="activeTab === 'site'">
+             <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+diff --git a/frontend/app/assets/js/app-core.js b/frontend/app/assets/js/app-core.js
+index f62be9e68783ddd24078d70c6e78619c01b5efe1..8472f870e4cb96f6f75f9c44074cc619c8e29977 100644
+--- a/frontend/app/assets/js/app-core.js
++++ b/frontend/app/assets/js/app-core.js
+@@ -1,5 +1,6 @@
+ // 惑梦（Homer） Web App 共享核心 - 在所有 /app/*.html 顶部加载
+-import { api as baseApi, getToken, setToken, clearAuth, isLoggedIn, getCachedUser, setCachedUser, formatDateTime, ApiError } from '/assets/js/api.js?v=20260720-community-versions';
++import './notifications.js?v=20260905-notices-v1';
++import { api as baseApi, getToken, setToken, clearAuth, isLoggedIn, getCachedUser, setCachedUser, formatDateTime, ApiError } from '/assets/js/api.js?v=20260905-notices-v1';
+ 
+ function redirectAfterUnauthorized() {
+   clearAuth();
+@@ -21,6 +22,7 @@ async function rawRequest(path, opts = {}) {
+     // 携带 HttpOnly 登录 Cookie
+     credentials: 'include',
+     body: opts.body ? (opts.body instanceof FormData ? opts.body : JSON.stringify(opts.body)) : undefined,
++    signal: opts.signal,
+   });
+   const text = await res.text();
+   let data = null;
+@@ -110,21 +112,26 @@ async function sseRequest(path, payload, handlers = {}, options = {}) {
+     else handlers.onEvent?.(event, data);
+   };
+ 
+-  while (true) {
+-    const { value, done } = await reader.read();
+-    if (value) {
+-      buffer += decoder.decode(value, { stream: !done });
+-      let idx;
+-      while ((idx = buffer.indexOf('\n\n')) >= 0) {
+-        const block = buffer.slice(0, idx).trim();
+-        buffer = buffer.slice(idx + 2);
++  try {
++    while (true) {
++      const { value, done } = await reader.read();
++      buffer += done ? decoder.decode() : decoder.decode(value, { stream: true });
++      // SSE allows CRLF as well as LF, including separators split across reads.
++      let separator;
++      while ((separator = /\r?\n\r?\n/.exec(buffer))) {
++        const block = buffer.slice(0, separator.index).trim();
++        buffer = buffer.slice(separator.index + separator[0].length);
+         if (block) dispatch(block);
+       }
++      if (done) break;
+     }
+-    if (done) break;
++    const tail = buffer.trim();
++    if (tail) dispatch(tail);
++  } finally {
++    // Stop the transport when dispatch or an onDelta handler fails.
++    await reader.cancel().catch(() => {});
++    reader.releaseLock();
+   }
+-  const tail = buffer.trim();
+-  if (tail) dispatch(tail);
+   if (!sawMessageEnd) {
+     throw new ApiError('连接提前中断，本次回复未完成，请重试', 502, { code: 'stream_incomplete' });
+   }
+diff --git a/frontend/app/assets/js/character.js b/frontend/app/assets/js/character.js
+index 18e6cc17e4556ec0edbacfbb3e8a45426a4e3b05..078cbc65ac60f28da090a01e052d42ab821b82ca 100644
+--- a/frontend/app/assets/js/character.js
++++ b/frontend/app/assets/js/character.js
+@@ -1,5 +1,5 @@
+-import { api, requireAuth, getCachedUser, setCachedUser, formatDateTime, ApiError } from '/app/assets/js/app-core.js?v=20260720-community-versions';
+-import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260901-persistent-pages';
++import { api, requireAuth, getCachedUser, setCachedUser, formatDateTime, ApiError } from '/app/assets/js/app-core.js?v=20260905-notices-v1';
++import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260905-notices-v1';
+ 
+ const FIELD_LABELS = {
+   name: '姓名',
+diff --git a/frontend/app/assets/js/chat.js b/frontend/app/assets/js/chat.js
+index a0d36e192024f1bb145bb789e0bcd3ae906c084b..50e029ba674debd7b3571d8433cea65a6280b7a6 100644
+--- a/frontend/app/assets/js/chat.js
++++ b/frontend/app/assets/js/chat.js
+@@ -1,4 +1,4 @@
+-import { api, ApiError } from '/app/assets/js/app-core.js?v=20260729-dialogue-runtime';
++import { api, ApiError, getCachedUser } from '/app/assets/js/app-core.js?v=20260905-notices-v1';
+ 
+ const HOST_CHANNEL = 'homer:dialogue-host:v1';
+ const DEFAULT_RUNTIME_PATH = '/module/dialogue/';
+@@ -50,6 +50,8 @@ let activeConversationId = '';
+ let previewRequestId = 0;
+ let runtimeReady = false;
+ let runtimeState = null;
++let readyHandoffTimer = 0;
++let launchRequestId = 0;
+ let history = [];
+ let pendingDraft = '';
+ const pendingCommands = [];
+@@ -123,25 +125,32 @@ function postRuntimeCommand(type, payload = {}, { queue = true } = {}) {
+     frame.contentWindow.postMessage(command, location.origin);
+     return true;
+   }
+-  if (queue) pendingCommands.push(command);
++  if (queue) pendingCommands.push({ command, conversationId: activeConversationId });
+   return false;
+ }
+ 
+ function flushRuntimeCommands() {
+   if (!runtimeReady || !frame?.contentWindow) return;
+-  while (pendingCommands.length) frame.contentWindow.postMessage(pendingCommands.shift(), location.origin);
++  while (pendingCommands.length) {
++    const item = pendingCommands.shift();
++    if (item.conversationId === activeConversationId) frame.contentWindow.postMessage(item.command, location.origin);
++  }
+ }
+ 
+ function markReady(roleName = '') {
+   clearReadyTimer();
+   runtimeReady = true;
++  ++previewRequestId;
++  window.clearTimeout(readyHandoffTimer);
+   setDocumentTitle(roleName);
+   flushRuntimeCommands();
+   postRuntimeCommand('request-state', {}, { queue: false });
+   document.body.classList.remove('is-error');
+   launcherVisual.src = '/assets/img/brand/launch-loading-1080x1920.png?v=20260901-persistent-pages';
+   launcher.setAttribute('aria-busy', 'false');
+-  window.setTimeout(() => {
++  const readyConversationId = activeConversationId;
++  readyHandoffTimer = window.setTimeout(() => {
++    if (!runtimeReady || readyConversationId !== activeConversationId) return;
+     closeDrawers();
+     modelDialog?.close();
+     document.body.classList.remove('has-preview');
+@@ -173,11 +182,13 @@ function safePreviewImage(value) {
+ }
+ 
+ function normalizeMessage(message, index = 0) {
+-  const content = visiblePreviewText(message?.content ?? message?.text ?? message?.mes);
++  const isUser = message?.role === 'user' || message?.is_user === true;
++  const raw = message?.content ?? message?.text ?? message?.mes;
++  const content = isUser ? String(raw || '').trim().slice(0, 12_000) : visiblePreviewText(raw);
+   if (!content || message?.role === 'system' || message?.is_system === true) return null;
+   return {
+     id: String(message?.id || message?.extra?.homer_message_id || `local-${index}`).slice(0, 180),
+-    role: message?.role === 'user' || message?.is_user === true ? 'user' : 'assistant',
++    role: isUser ? 'user' : 'assistant',
+     content,
+     created_at: Number(message?.created_at || message?.extra?.homer_created_at || 0),
+   };
+@@ -201,13 +212,13 @@ function readCachedConversation(conversationId) {
+   const id = String(conversationId || '').trim();
+   if (!id) return null;
+   const native = parseJson(nativeCall('readConversationSnapshot', id), null);
+-  if (native?.conversation_id && Array.isArray(native.messages)) return native;
++  if (native?.conversation_id === id && Array.isArray(native.messages)) return native;
+   try {
+-    const cached = parseJson(localStorage.getItem(`${PREVIEW_CACHE_PREFIX}${id}`), null);
+-    if (cached?.conversation_id) return cached;
++    const cached = parseJson(localStorage.getItem(scopedKey(`${PREVIEW_CACHE_PREFIX}${id}`)), null);
++    if (cached?.conversation_id === id && Array.isArray(cached.messages)) return cached;
+     const legacy = parseJson(localStorage.getItem(`homer.dialogue.preview.v1:${id}`), null)
+       || parseJson(nativeCall('readLegacySnapshot'), null);
+-    if (legacy && Array.isArray(legacy.messages)) {
++    if (legacy && legacy.conversation_id === id && Array.isArray(legacy.messages)) {
+       return {
+         conversation_id: id,
+         app_id: activeAppId,
+@@ -228,7 +239,7 @@ function writeCachedConversation(snapshot) {
+   const payload = JSON.stringify({ ...snapshot, updated_at: Date.now() });
+   nativeCall('saveConversationSnapshot', payload);
+   try {
+-    localStorage.setItem(`${PREVIEW_CACHE_PREFIX}${snapshot.conversation_id}`, payload);
++    localStorage.setItem(scopedKey(`${PREVIEW_CACHE_PREFIX}${snapshot.conversation_id}`), payload);
+   } catch {
+     // Android SQLite remains available when browser storage is full.
+   }
+@@ -237,7 +248,7 @@ function writeCachedConversation(snapshot) {
+ function readCachedHistory() {
+   const native = parseJson(nativeCall('readConversationHistory'), []);
+   let local = [];
+-  try { local = parseJson(localStorage.getItem(HISTORY_CACHE_KEY), []); } catch { local = []; }
++  try { local = parseJson(localStorage.getItem(scopedKey(HISTORY_CACHE_KEY)), []); } catch { local = []; }
+   const merged = new Map();
+   for (const item of [...(Array.isArray(native) ? native : []), ...(Array.isArray(local) ? local : [])]) {
+     const id = String(item?.id || item?.conversation_id || '');
+@@ -249,7 +260,13 @@ function readCachedHistory() {
+ }
+ 
+ function writeCachedHistory(items) {
+-  try { localStorage.setItem(HISTORY_CACHE_KEY, JSON.stringify(items.slice(0, 100))); } catch {}
++  try { localStorage.setItem(scopedKey(HISTORY_CACHE_KEY), JSON.stringify(items.slice(0, 100))); } catch {}
++}
++
++function scopedKey(key) {
++  const user = getCachedUser();
++  const owner = String(user?.id || user?.user_id || user?.email || '').trim();
++  return `${key}:owner:${encodeURIComponent(owner || 'anonymous')}`;
+ }
+ 
+ function renderMessages(messages, { pending = '' } = {}) {
+@@ -340,7 +357,10 @@ async function loadQuickPreview(conversationId) {
+   renderCachedConversation(id);
+   try {
+     const response = await api.messages(id, { limit: 120 });
+-    if (requestId !== previewRequestId) return;
++    if (requestId !== previewRequestId || id !== activeConversationId || runtimeReady) return;
++    const data = response?.data || response || {};
++    const returnedId = String(data.conversation_id || data.conversation?.id || id);
++    if (returnedId !== id) return;
+     renderConversation(response);
+   } catch {
+     // Local cache stays usable without the network.
+@@ -348,6 +368,7 @@ async function loadQuickPreview(conversationId) {
+ }
+ 
+ function showShell() {
++  window.clearTimeout(readyHandoffTimer);
+   document.body.classList.remove('is-ready', 'is-error');
+   document.body.classList.add('has-preview');
+   launcher.setAttribute('aria-busy', 'false');
+@@ -357,10 +378,14 @@ function showConversationSwitchShell(message) {
+   const appId = String(message?.app_id || '').trim();
+   const conversationId = String(message?.conversation_id || '').trim();
+   if (!appId || !conversationId) return;
++  // Ignore the acknowledgement of a switch already reflected in the host.
++  if (!runtimeReady && conversationId === activeConversationId && activeAppId === appId) return;
+   clearReadyTimer();
+   runtimeReady = false;
++  runtimeState = null;
+   pendingDraft = '';
+   previewSend.disabled = false;
++  previewInput.value = '';
+   closeDrawers();
+   updateVisibleConversationUrl(appId, conversationId);
+   showShell();
+@@ -375,6 +400,7 @@ function showConversationSwitchShell(message) {
+       messages: [],
+     }, { save: false });
+   }
++  updateModelSummary();
+   void loadQuickPreview(conversationId);
+ }
+ 
+@@ -448,7 +474,7 @@ async function loadHistory() {
+   }
+ }
+ 
+-async function resolveLaunchTarget() {
++async function resolveLaunchTarget(requestId) {
+   const params = new URLSearchParams(location.search);
+   let appId = String(params.get('app_id') || '').trim();
+   let conversationId = String(params.get('conversation_id') || params.get('conv_id') || '').trim();
+@@ -458,8 +484,10 @@ async function resolveLaunchTarget() {
+     return runtimeTarget(appId, conversationId);
+   }
+   const [settings] = await Promise.all([readPublicSettings(), api.profile()]);
++  if (requestId !== launchRequestId) return null;
+   if (!appId) {
+     const response = await api.conversations();
++    if (requestId !== launchRequestId) return null;
+     const conversations = response?.data?.list || response?.list || [];
+     const selected = conversationId ? conversations.find(item => String(item?.id || '') === conversationId) : conversations[0];
+     appId = String(selected?.app_id || '').trim();
+@@ -467,6 +495,7 @@ async function resolveLaunchTarget() {
+   }
+   if (!appId) throw new Error('还没有可进入的角色会话，请先从探索页选择一张角色卡。');
+   const response = await api.dialogueSession(appId, conversationId, { launchOnly: true });
++  if (requestId !== launchRequestId) return null;
+   const payload = response?.data || response || {};
+   const launch = payload?.launch;
+   if (!launch?.app_id || !launch?.conversation_id) throw new Error('后端没有返回可启动的角色会话。');
+@@ -491,6 +520,7 @@ function allowedNavigationPath(value) {
+ }
+ 
+ function cacheRuntimeState(state) {
++  if (String(state?.conversation_id || '') !== activeConversationId) return;
+   runtimeState = state;
+   const snapshot = conversationSnapshot(state);
+   if (snapshot.messages.some(item => item.role === 'user' && item.content === pendingDraft)) {
+@@ -503,7 +533,7 @@ function cacheRuntimeState(state) {
+     writeCachedHistory(history);
+   }
+   try {
+-    localStorage.setItem(`${SETTINGS_CACHE_PREFIX}${snapshot.conversation_id}`, JSON.stringify({
++    localStorage.setItem(scopedKey(`${SETTINGS_CACHE_PREFIX}${snapshot.conversation_id}`), JSON.stringify({
+       models: state?.models || [],
+       model_default_id: state?.model_default_id || '',
+       model_settings: state?.model_settings || {},
+@@ -519,12 +549,18 @@ function handleRuntimeMessage(event) {
+   const message = event.data;
+   if (!message || message.channel !== HOST_CHANNEL || message.version !== 1) return;
+   if (message.type === 'ready') {
++    if (activeConversationId && String(message.conversation_id || '') !== activeConversationId) return;
+     updateVisibleConversationUrl(message.app_id, message.conversation_id);
+     markReady(message.role_name || message.title || '');
+     return;
+   }
+-  if (message.type === 'conversation-switching') {
++  if (message.type === 'conversation-switching' || message.type === 'conversation-switch-failed') {
+     showConversationSwitchShell(message);
++    if (message.type === 'conversation-switch-failed') {
++      pendingCommands.length = 0;
++      markReady(message.role_name || '');
++      showToast('未能切换，已返回原会话');
++    }
+     return;
+   }
+   if (message.type === 'state') {
+@@ -535,7 +571,7 @@ function handleRuntimeMessage(event) {
+     setDocumentTitle(message.role_name || message.title || '');
+     return;
+   }
+-  if (message.type === 'conversation') {
++  if (message.type === 'conversation' && runtimeReady) {
+     updateVisibleConversationUrl(message.app_id, message.conversation_id);
+     return;
+   }
+@@ -545,6 +581,13 @@ function handleRuntimeMessage(event) {
+     return;
+   }
+   if (message.type === 'command-error') {
++    pendingCommands.length = 0;
++    if (pendingDraft) {
++      previewInput.value = pendingDraft;
++      pendingDraft = '';
++      previewSend.disabled = false;
++    }
++    renderCachedConversation(activeConversationId);
+     showToast(message.message || '操作失败');
+     return;
+   }
+@@ -553,7 +596,7 @@ function handleRuntimeMessage(event) {
+ 
+ function modelData() {
+   if (runtimeState?.models) return runtimeState;
+-  try { return parseJson(localStorage.getItem(`${SETTINGS_CACHE_PREFIX}${activeConversationId}`), {}); } catch { return {}; }
++  try { return parseJson(localStorage.getItem(scopedKey(`${SETTINGS_CACHE_PREFIX}${activeConversationId}`)), {}); } catch { return {}; }
+ }
+ 
+ function updateModelSummary(state = modelData()) {
+@@ -594,24 +637,25 @@ async function switchConversation(appId, conversationId) {
+     closeDrawers();
+     return;
+   }
+-  closeDrawers();
+-  pendingDraft = '';
+-  previewSend.disabled = false;
++  if (pendingDraft || runtimeState?.generating) {
++    showToast('当前消息处理完成后再切换会话');
++    return;
++  }
+   const wasReady = runtimeReady;
+-  updateVisibleConversationUrl(appId, conversationId);
+-  showShell();
+-  renderCachedConversation(conversationId);
+-  void loadQuickPreview(conversationId);
++  ++launchRequestId;
++  pendingCommands.length = 0;
+   if (wasReady) {
+     postRuntimeCommand('switch-conversation', { app_id: appId, conversation_id: conversationId });
+-    runtimeReady = false;
++    showConversationSwitchShell({ app_id: appId, conversation_id: conversationId });
+     return;
+   }
++  showConversationSwitchShell({ app_id: appId, conversation_id: conversationId });
+   activeTarget = runtimeTarget(appId, conversationId);
+   frame.src = activeTarget.href;
+ }
+ 
+ async function start() {
++  const requestId = ++launchRequestId;
+   clearReadyTimer();
+   runtimeReady = false;
+   launcherVisual.src = '/assets/img/brand/launch-loading-1080x1920.png?v=20260901-persistent-pages';
+@@ -625,15 +669,29 @@ async function start() {
+   if (activeConversationId) renderCachedConversation(activeConversationId);
+   frame.removeAttribute('src');
+   try {
+-    activeTarget = await resolveLaunchTarget();
++    const target = await resolveLaunchTarget(requestId);
++    if (requestId !== launchRequestId) return;
++    activeTarget = target;
+     frame.src = activeTarget.href;
+     readyTimer = window.setTimeout(() => fail(new Error('后台对话能力连接超时，本地历史仍可使用。')), READY_TIMEOUT_MS);
+   } catch (error) {
+-    fail(error);
++    if (requestId === launchRequestId) fail(error);
+   }
+ }
+ 
+ window.addEventListener('message', handleRuntimeMessage);
++// Android keeps this document alive when a different history item is opened.
++// A cancelled event means navigation was handled, including a busy-chat refusal.
++window.addEventListener('homer:navigate-conversation', event => {
++  try {
++    const target = new URL(String(event.detail?.url || ''), location.href);
++    const appId = target.searchParams.get('app_id');
++    const conversationId = target.searchParams.get('conversation_id') || target.searchParams.get('conv_id');
++    if (target.origin !== location.origin || target.pathname !== '/app/chat.html' || !appId || !conversationId) return;
++    event.preventDefault();
++    void switchConversation(appId, conversationId);
++  } catch { /* The native container falls back to normal navigation. */ }
++});
+ frame.addEventListener('error', () => fail(new Error('对话能力连接失败。')));
+ retry.addEventListener('click', () => void start());
+ networkRetry.addEventListener('click', () => void start());
+@@ -680,7 +738,7 @@ modelForm.addEventListener('submit', event => {
+   const data = modelData();
+   data.model_settings = settings;
+   runtimeState = { ...(runtimeState || {}), ...data };
+-  try { localStorage.setItem(`${SETTINGS_CACHE_PREFIX}${activeConversationId}`, JSON.stringify(data)); } catch {}
++  try { localStorage.setItem(scopedKey(`${SETTINGS_CACHE_PREFIX}${activeConversationId}`), JSON.stringify(data)); } catch {}
+   postRuntimeCommand('model-settings', { settings });
+   updateModelSummary(data);
+   modelDialog.close();
+diff --git a/frontend/app/assets/js/community.js b/frontend/app/assets/js/community.js
+index 37e5c1658d3b054db63288f2e58a53c8c713cd81..87cf3666224aecc537fb6253b0559379fefc70e5 100644
+--- a/frontend/app/assets/js/community.js
++++ b/frontend/app/assets/js/community.js
+@@ -1,5 +1,5 @@
+-import { api, requireAuth, getCachedUser, setCachedUser, ApiError } from '/app/assets/js/app-core.js?v=20260720-community-versions';
+-import { injectLayout } from '/app/assets/js/layout.js?v=20260901-persistent-pages';
++import { api, requireAuth, getCachedUser, setCachedUser, ApiError } from '/app/assets/js/app-core.js?v=20260905-notices-v1';
++import { injectLayout } from '/app/assets/js/layout.js?v=20260905-notices-v1';
+ 
+ const WORK_TYPES = ['mod', 'ui_template', 'preset'];
+ const TYPE_LABELS = { mod: 'Mod', ui_template: 'UI 模板', preset: '预设' };
+diff --git a/frontend/app/assets/js/create.js b/frontend/app/assets/js/create.js
+index c67b843edd542b8d1cba20b93f2afe22fa881476..14ec5bf0dde9a01e6e38c7a22e31f78e3129cb24 100644
+--- a/frontend/app/assets/js/create.js
++++ b/frontend/app/assets/js/create.js
+@@ -1,5 +1,5 @@
+-import { api, requireAuth, getCachedUser, setCachedUser, ApiError } from '/app/assets/js/app-core.js?v=20260720-community-versions';
+-import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260901-persistent-pages';
++import { api, requireAuth, getCachedUser, setCachedUser, ApiError } from '/app/assets/js/app-core.js?v=20260905-notices-v1';
++import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260905-notices-v1';
+ import {
+   applyBubbleStyle,
+   applyStageTheme,
+diff --git a/frontend/app/assets/js/dialogue-prewarm.js b/frontend/app/assets/js/dialogue-prewarm.js
+index 1f023bc85a26ac3c932b0f17bd24bb39fbd86f65..bf352af3491ea6a324824160422c9715fa9b1ed1 100644
+--- a/frontend/app/assets/js/dialogue-prewarm.js
++++ b/frontend/app/assets/js/dialogue-prewarm.js
+@@ -1,367 +1,31 @@
+-const FRAME_ID = 'homer-warm-dialogue-frame';
+-const CHAT_PATH = '/app/chat.html';
+-const RUNTIME_PATH = '/module/dialogue/';
+-const HOST_CHANNEL = 'homer:dialogue-host:v1';
+-const LAST_TARGET_KEY = 'homer.dialogue.last-target.v1';
+-
++// Preload the lightweight host document, never a second full dialogue runtime.
++// Android retains page WebViews; hidden runtimes in each page would also remain
++// alive and compete with the active conversation for CPU, memory and sync.
+ let installed = false;
+-let frame = null;
+-let runtimeReady = false;
+-let active = false;
+-let pendingActivation = null;
+-let preparedTarget = null;
+-let preparingTarget = null;
+-let sentTarget = null;
+-let lastMessageType = '';
+-let previousRootOverflow = '';
+-let previousBodyOverflow = '';
+-
+-window.__homerDialoguePrewarm = {
+-  state: () => ({
+-    runtimeReady,
+-    active,
+-    pendingActivation,
+-    preparedTarget,
+-    preparingTarget,
+-    sentTarget,
+-    lastMessageType,
+-    frameUrl: frame?.contentWindow ? frame.contentWindow.location.href : '',
+-  }),
+-};
+-
+-function normalizeTarget(value) {
+-  const appId = String(value?.appId || value?.app_id || '').trim();
+-  const conversationId = String(
+-    value?.conversationId || value?.conversation_id || value?.conv_id || '',
+-  ).trim();
+-  if (!appId && !conversationId) return null;
+-  const preview = Boolean(value?.preview || value?.previewOnly || value?.preview_only);
+-  return { appId, conversationId, preview };
+-}
+-
+-function targetKey(value) {
+-  const target = normalizeTarget(value);
+-  return target ? `${target.appId}::${target.conversationId}` : '';
+-}
+-
+-function sameTarget(left, right) {
+-  const a = normalizeTarget(left);
+-  const b = normalizeTarget(right);
+-  if (!a || !b) return false;
+-  if (a.conversationId && b.conversationId) return a.conversationId === b.conversationId;
+-  return Boolean(a.appId && b.appId && a.appId === b.appId);
+-}
+-
+-function targetFromUrl(rawUrl) {
+-  try {
+-    const url = new URL(rawUrl, location.href);
+-    if (url.origin !== location.origin || url.pathname !== CHAT_PATH) return null;
+-    return normalizeTarget({
+-      appId: url.searchParams.get('app_id'),
+-      conversationId: url.searchParams.get('conversation_id') || url.searchParams.get('conv_id'),
+-    });
+-  } catch {
+-    return null;
+-  }
+-}
+-
+-function rememberTarget(target) {
+-  const normalized = normalizeTarget(target);
+-  if (!normalized) return;
+-  try {
+-    sessionStorage.setItem(LAST_TARGET_KEY, JSON.stringify(normalized));
+-  } catch {
+-    // Session storage may be disabled; prewarming still works for this page.
+-  }
+-}
+-
+-function readRememberedTarget() {
+-  try {
+-    const target = normalizeTarget(JSON.parse(sessionStorage.getItem(LAST_TARGET_KEY) || 'null'));
+-    return target?.appId && target?.conversationId ? target : null;
+-  } catch {
+-    return null;
+-  }
+-}
+-
+-function postToRuntime(type, payload = {}) {
+-  if (!frame?.contentWindow) return;
+-  frame.contentWindow.postMessage({ type, ...payload }, location.origin);
+-}
+-
+-function runtimeUrlForTarget(target) {
+-  const normalized = normalizeTarget(target);
+-  const url = new URL(RUNTIME_PATH, location.origin);
+-  if (normalized?.appId) url.searchParams.set('homer_app_id', normalized.appId);
+-  if (normalized?.conversationId) {
+-    url.searchParams.set('homer_conversation_id', normalized.conversationId);
+-  }
+-  url.searchParams.set('homer_site_origin', location.origin);
+-  url.searchParams.set('homer_embed', '1');
+-  url.searchParams.set('homer_host_channel', HOST_CHANNEL);
+-  url.searchParams.set('homer_prewarm', '1');
+-  return url.href;
+-}
+-
+-function requestPreparation(target, activateWhenReady = false) {
+-  const normalized = normalizeTarget(target);
+-  // Warming an app without a concrete conversation asks the dialogue session
+-  // endpoint to create one.  Character pages create their conversation only
+-  // after the user presses "开始聊天", so an app-only warm-up would leave a
+-  // second, partially initialized archive behind.
+-  if (!normalized?.appId || !normalized?.conversationId) return;
+-  normalized.preview = Boolean(!activateWhenReady && normalized.appId && !normalized.conversationId);
+-  if (activateWhenReady) pendingActivation = normalized;
+-  if (preparedTarget && sameTarget(preparedTarget, normalized)) {
+-    if (activateWhenReady && preparedTarget.preview) {
+-      preparedTarget = null;
+-      preparingTarget = null;
+-      sentTarget = null;
+-    } else {
+-      if (activateWhenReady) activateFrame(preparedTarget);
+-      return;
+-    }
+-  }
+-  if (preparingTarget && sameTarget(preparingTarget, normalized)) {
+-    if (!runtimeReady || (sentTarget && sameTarget(sentTarget, normalized))) return;
+-  }
+-  preparingTarget = normalized;
+-  sentTarget = normalized;
+-  // The main project's bridge accepts launch parameters at document start.
+-  // Navigating the hidden frame keeps the warm path compatible with the
+-  // complete bridge without relying on a reduced test-only message API.
+-  const nextUrl = runtimeUrlForTarget(normalized);
+-  if (frame.src !== nextUrl) {
+-    frame.src = nextUrl;
+-  }
+-}
++const prefetched = new Set();
+ 
+-function publicChatUrl(target) {
+-  const normalized = normalizeTarget(target);
+-  const url = new URL(CHAT_PATH, location.origin);
+-  if (normalized?.appId) url.searchParams.set('app_id', normalized.appId);
+-  if (normalized?.conversationId) url.searchParams.set('conversation_id', normalized.conversationId);
+-  return url;
+-}
+-
+-function activateFrame(target, roleName = '') {
+-  const normalized = normalizeTarget(target);
+-  if (!frame || !normalized) return;
+-  const wasActive = active;
+-  rememberTarget(normalized);
+-  preparedTarget = normalized;
+-  preparingTarget = null;
+-  pendingActivation = null;
+-  if (!wasActive) {
+-    history.pushState({ homerWarmDialogue: true }, '', publicChatUrl(normalized));
+-  } else {
+-    history.replaceState({ homerWarmDialogue: true }, '', publicChatUrl(normalized));
+-  }
+-  active = true;
+-  frame.hidden = false;
+-  frame.removeAttribute('aria-hidden');
+-  frame.classList.add('is-active');
+-  document.documentElement.classList.add('homer-dialogue-active');
+-  document.body.classList.add('homer-dialogue-active');
+-  if (!wasActive) {
+-    previousRootOverflow = document.documentElement.style.overflow;
+-    previousBodyOverflow = document.body.style.overflow;
+-  }
+-  document.documentElement.style.overflow = 'hidden';
+-  document.body.style.overflow = 'hidden';
+-  if (roleName) document.title = `${roleName} · 惑梦（Homer）`;
+-  frame.focus({ preventScroll: true });
+-  performance.mark('homer:warm:activated');
+-}
+-
+-function hideFrame() {
+-  if (!frame || !active) return;
+-  active = false;
+-  frame.classList.remove('is-active');
+-  frame.hidden = true;
+-  frame.setAttribute('aria-hidden', 'true');
+-  document.documentElement.classList.remove('homer-dialogue-active');
+-  document.body.classList.remove('homer-dialogue-active');
+-  document.documentElement.style.overflow = previousRootOverflow;
+-  document.body.style.overflow = previousBodyOverflow;
+-}
+-
+-function nearestChatTarget(root = document) {
+-  const links = [...root.querySelectorAll('a[href]')]
+-    .map(link => targetFromUrl(link.href))
+-    .filter(target => target?.appId && target?.conversationId);
+-  return links[0] || readRememberedTarget();
+-}
+-
+-async function prepareRecentConversationIfNeeded() {
+-  if (preparingTarget || preparedTarget) return;
+-  const hinted = nearestChatTarget();
+-  if (hinted) {
+-    requestPreparation(hinted);
+-    return;
+-  }
+-  try {
+-    const response = await fetch('/console/api/web/conversations', {
+-      credentials: 'include',
+-      headers: { Accept: 'application/json' },
+-    });
+-    if (!response.ok) return;
+-    const payload = await response.json();
+-    const conversations = payload?.data?.list || payload?.list || [];
+-    const recent = conversations[0];
+-    requestPreparation({ appId: recent?.app_id, conversationId: recent?.id });
+-  } catch {
+-    // Prewarming is opportunistic and must never disrupt the current page.
+-  }
+-}
+-
+-function onRuntimeMessage(event) {
+-  if (event.origin !== location.origin || event.source !== frame?.contentWindow) return;
+-  const message = event.data && typeof event.data === 'object' ? event.data : {};
+-  if (message.channel !== HOST_CHANNEL || message.version !== 1) return;
+-  lastMessageType = String(message.type || '');
+-  if (message.type === 'runtime-ready') {
+-    runtimeReady = true;
+-    const target = preparingTarget || nearestChatTarget();
+-    if (target) requestPreparation(target, Boolean(pendingActivation));
+-    else void prepareRecentConversationIfNeeded();
+-    return;
+-  }
+-  if (message.type === 'conversation-shell') {
+-    const target = normalizeTarget(message);
+-    if (target) preparingTarget = target;
+-    return;
+-  }
+-  if (message.type === 'conversation-ready' || message.type === 'ready') {
+-    // The embedded bridge reports its usable state as `ready`; older runtime
+-    // builds used `runtime-ready`. Treat both as a warmed frame so a later
+-    // history click can activate it without another navigation.
+-    runtimeReady = true;
+-    const target = normalizeTarget(message);
+-    if (!target) return;
+-    preparedTarget = target;
+-    preparingTarget = null;
+-    sentTarget = null;
+-    if (!target.preview) rememberTarget(target);
+-    if (pendingActivation && sameTarget(pendingActivation, target)) {
+-      if (target.preview) requestPreparation(pendingActivation, true);
+-      else activateFrame(target, String(message.roleName || ''));
+-    }
+-    return;
+-  }
+-  if (message.type === 'navigate-site' || message.type === 'navigate') {
+-    try {
+-      const target = new URL(String(message.href || message.target || ''), location.origin);
+-      if (target.origin === location.origin && target.pathname.startsWith('/app/')) {
+-        location.assign(target.href);
+-      }
+-    } catch {
+-      // Ignore malformed navigation requests from embedded content.
+-    }
+-  }
+-}
+-
+-function createFrame() {
+-  if (frame || document.getElementById(FRAME_ID)) return;
+-  frame = document.createElement('iframe');
+-  frame.id = FRAME_ID;
+-  frame.name = 'homer-dialogue-runtime';
+-  frame.title = '角色对话';
+-  frame.hidden = true;
+-  frame.setAttribute('aria-hidden', 'true');
+-  frame.setAttribute('allow', 'clipboard-read; clipboard-write');
+-  frame.setAttribute('fetchpriority', 'high');
+-  frame.src = runtimeUrlForTarget(readRememberedTarget() || {});
+-  Object.assign(frame.style, {
+-    position: 'fixed',
+-    inset: '0',
+-    width: '100vw',
+-    height: '100dvh',
+-    border: '0',
+-    background: '#0a0909',
+-    zIndex: '2147483000',
+-  });
+-  document.body.append(frame);
+-}
+-
+-function onDocumentClick(event) {
++function prefetchChat(event) {
+   const link = event.target instanceof Element ? event.target.closest('a[href]') : null;
+-  if (!(link instanceof HTMLAnchorElement)) return;
+-  const target = targetFromUrl(link.href);
+-  if (!target || event.defaultPrevented || event.button > 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+-    return;
+-  }
+-  // A cold or still-loading warm frame must never hold the navigation hostage.
+-  // Let the normal chat page open immediately; its local conversation shell
+-  // renders cached messages and keeps the composer usable while the runtime
+-  // finishes in the background.  Reuse the hidden frame only when this exact
+-  // conversation is already ready.
+-  if (!runtimeReady || !preparedTarget || preparedTarget.preview || !sameTarget(preparedTarget, target)) {
+-    performance.mark('homer:warm:navigation-fallback');
+-    // Android keeps the histories WebView alive after switching to chat.  Park
+-    // an unfinished warm frame so it does not continue downloading a second
+-    // dialogue runtime behind the newly opened local-first chat page.
+-    if (frame && !active) frame.src = 'about:blank';
+-    runtimeReady = false;
+-    preparingTarget = null;
+-    preparedTarget = null;
+-    sentTarget = null;
+-    pendingActivation = null;
+-    return;
+-  }
+-  event.preventDefault();
+-  performance.mark('homer:warm:activation-requested');
+-  activateFrame(preparedTarget);
+-}
+-
+-function onTargetIntent(event) {
+-  const link = event.target instanceof Element ? event.target.closest('a[href]') : null;
+-  if (!(link instanceof HTMLAnchorElement)) return;
+-  const target = targetFromUrl(link.href);
+-  if (target) requestPreparation(target);
+-}
+-
+-function observeDialogueTargets() {
+-  const observer = new MutationObserver(() => {
+-    if (!preparingTarget && !preparedTarget) {
+-      const target = nearestChatTarget();
+-      if (target) requestPreparation(target);
+-    }
+-  });
+-  observer.observe(document.documentElement, {
+-    childList: true,
+-    subtree: true,
+-    attributes: true,
+-    attributeFilter: ['href'],
+-  });
++  if (!link) return;
++  const url = new URL(link.href, location.href);
++  if (url.origin !== location.origin || url.pathname !== '/app/chat.html') return;
++  if (!url.searchParams.get('app_id')
++      || !(url.searchParams.get('conversation_id') || url.searchParams.get('conv_id'))) return;
++  if (prefetched.has(url.href) || prefetched.size >= 2) return;
++  prefetched.add(url.href);
++  const preload = document.createElement('link');
++  preload.rel = 'prefetch';
++  preload.as = 'document';
++  preload.href = url.href;
++  document.head.append(preload);
+ }
+ 
+ export function installDialoguePrewarm() {
+-  if (installed || location.pathname === CHAT_PATH || location.pathname === '/app/login.html') return;
++  if (installed || location.pathname === '/app/chat.html' || location.pathname === '/app/login.html') return;
+   installed = true;
+-  window.addEventListener('message', onRuntimeMessage);
+-  window.addEventListener('popstate', () => {
+-    if (location.pathname !== CHAT_PATH) hideFrame();
+-    else if (preparedTarget && frame) {
+-      active = true;
+-      frame.hidden = false;
+-      frame.removeAttribute('aria-hidden');
+-      frame.classList.add('is-active');
+-      document.documentElement.classList.add('homer-dialogue-active');
+-      document.body.classList.add('homer-dialogue-active');
+-      previousRootOverflow = document.documentElement.style.overflow;
+-      previousBodyOverflow = document.body.style.overflow;
+-      document.documentElement.style.overflow = 'hidden';
+-      document.body.style.overflow = 'hidden';
+-    }
+-  });
+-  document.addEventListener('click', onDocumentClick, true);
+-  document.addEventListener('pointerover', onTargetIntent, true);
+-  document.addEventListener('focusin', onTargetIntent, true);
+-  document.addEventListener('touchstart', onTargetIntent, { capture: true, passive: true });
+-  observeDialogueTargets();
+-  // Start warming as soon as the shell exists so a history click can reuse a
+-  // ready runtime instead of waiting for an idle callback first.
+-  performance.mark('homer:warm:preload-start');
+-  createFrame();
++  document.addEventListener('pointerover', prefetchChat, { passive: true });
++  document.addEventListener('focusin', prefetchChat);
++  document.addEventListener('touchstart', prefetchChat, { passive: true });
++  // Navigation remains under the app's normal router. No preventDefault,
++  // iframe activation or session-creation request is needed for prefetching.
+ }
+diff --git a/frontend/app/assets/js/explore.js b/frontend/app/assets/js/explore.js
+index b034cdd55d89ce3b41bfeb08f5f77dffb1848e45..096b2431bbb045cfd68c659be078b96b2fcafb15 100644
+--- a/frontend/app/assets/js/explore.js
++++ b/frontend/app/assets/js/explore.js
+@@ -1,6 +1,6 @@
+-import { api, requireAuth, getCachedUser, setCachedUser, ApiError } from '/app/assets/js/app-core.js?v=20260717-handoff-merge';
+-import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260901-persistent-pages';
+-import { readPageCache, writePageCache } from '/app/assets/js/page-cache.js?v=20260901-persistent-pages';
++import { api, requireAuth, getCachedUser, setCachedUser, ApiError } from '/app/assets/js/app-core.js?v=20260905-notices-v1';
++import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260905-notices-v1';
++import { readPageCache, writePageCache } from '/app/assets/js/page-cache.js?v=20260905-notices-v1';
+ 
+ const DEFAULT_PAGE_SIZE = 12;
+ const INITIAL_RANDOM_SEED = Math.floor(Math.random() * 2147483647);
+diff --git a/frontend/app/assets/js/farm.js b/frontend/app/assets/js/farm.js
+index 3805e2b9eebcb790f4795f10ab3a1a5ecacec39d..a82feb23e7a55441afddb575263d4331df9dc99b 100644
+--- a/frontend/app/assets/js/farm.js
++++ b/frontend/app/assets/js/farm.js
+@@ -1,5 +1,5 @@
+-import { api, requireAuth, getCachedUser, setCachedUser, ApiError } from '/app/assets/js/app-core.js?v=20260717-handoff-merge';
+-import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260901-persistent-pages';
++import { api, requireAuth, getCachedUser, setCachedUser, ApiError } from '/app/assets/js/app-core.js?v=20260905-notices-v1';
++import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260905-notices-v1';
+ 
+ const BASE_SEEDS = [
+   { kind: 'carrot', apiKind: 'code_carrot', name: '代码胡萝卜', cost: 50, rewardCoins: 90, rewardXp: 10, durationSeconds: 3 * 3600, durationLabel: '3 小时' },
+diff --git a/frontend/app/assets/js/group-chat.js b/frontend/app/assets/js/group-chat.js
+index 624aa1112cdb84d0d6dbc966aca4273e725433c8..12e33c70a51c18cf2cc43c8c418356860c105f2c 100644
+--- a/frontend/app/assets/js/group-chat.js
++++ b/frontend/app/assets/js/group-chat.js
+@@ -1,5 +1,5 @@
+-import { api, requireAuth, getCachedUser } from '/app/assets/js/app-core.js?v=20260717-handoff-merge';
+-import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260901-persistent-pages';
++import { api, requireAuth, getCachedUser } from '/app/assets/js/app-core.js?v=20260905-notices-v1';
++import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260905-notices-v1';
+ 
+ function groupChatPage() {
+   return {
+diff --git a/frontend/app/assets/js/home.js b/frontend/app/assets/js/home.js
+index 6b1df8c69aa174a1613f1293371588da1d45d176..526cf06fec4e786e8f90ecf5ac839835938d0ea4 100644
+--- a/frontend/app/assets/js/home.js
++++ b/frontend/app/assets/js/home.js
+@@ -1,4 +1,4 @@
+-import { api, isLoggedIn, ApiError } from '/app/assets/js/app-core.js?v=20260717-handoff-merge';
++import { api, isLoggedIn, ApiError } from '/app/assets/js/app-core.js?v=20260905-notices-v1';
+ 
+ const statusNode = document.querySelector('[data-resume-status]');
+ 
+diff --git a/frontend/app/assets/js/hub-pages.js b/frontend/app/assets/js/hub-pages.js
+index c51292d6dc8af6ee422d389f817e144a5cab40d9..9907a5b1500f52977edf694728ebb2a1cd4e3ef7 100644
+--- a/frontend/app/assets/js/hub-pages.js
++++ b/frontend/app/assets/js/hub-pages.js
+@@ -1,16 +1,21 @@
+-import { api, requireAuth, getCachedUser, setCachedUser, clearAuth, ApiError } from '/app/assets/js/app-core.js?v=20260717-handoff-merge';
+-import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260901-persistent-pages';
++import { api, requireAuth, getCachedUser, setCachedUser, clearAuth, ApiError } from '/app/assets/js/app-core.js?v=20260905-notices-v1';
++import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260905-notices-v1';
++import { readPageCache, writePageCache } from './page-cache.js';
+ 
+ async function loadUser(ctx) {
+   if (!requireAuth()) return false;
+   const cached = getCachedUser();
+   if (cached) ctx.user = cached;
+   try {
+-    const profile = await api.profile();
++    const [profileResult, pointsResult] = await Promise.allSettled([api.profile(), api.points()]);
++    if (profileResult.status === 'rejected') throw profileResult.reason;
++    const profile = profileResult.value;
+     ctx.user = profile?.data || profile;
+     setCachedUser(ctx.user);
+-    const p = await api.points();
+-    ctx.points = parseInt(p.points || p.data?.points || 0, 10);
++    if (pointsResult.status === 'fulfilled') {
++      const p = pointsResult.value;
++      ctx.points = parseInt(p.points || p.data?.points || 0, 10);
++    }
+     return true;
+   } catch (err) {
+     if (err instanceof ApiError && err.code === 401) {
+@@ -79,7 +84,15 @@ export function historiesPage() {
+   return {
+     user: null, points: 0, loading: false, conversations: [], siteSettings: null,
+     copyingId: '', deletingId: '', likingId: '', favoritingId: '',
+-    async init() { injectLayout('histories'); await loadSiteSettings(this); if (await loadUser(this)) await this.loadList(); },
++    _listEpoch: 0,
++    async init() {
++      injectLayout('histories');
++      if (!requireAuth()) return;
++      this.user = getCachedUser();
++      const cached = readPageCache('histories', this.user);
++      if (Array.isArray(cached?.list)) this.conversations = cached.list.map(item => this.normalizeConversation(item));
++      await Promise.allSettled([loadSiteSettings(this), loadUser(this), this.loadList()]);
++    },
+     emptyText(key, fallback = '') { return emptyText(this, key, fallback); },
+     appNavText(key, fallback = '') { return appNavText(this, key, fallback); },
+     chatText(key, fallback = '') { return chatText(this, key, fallback); },
+@@ -151,11 +164,15 @@ export function historiesPage() {
+       return Array.from(groups.values());
+     },
+     async loadList() {
++      const epoch = ++this._listEpoch;
++      const owner = getCachedUser();
+       this.loading = true;
+       try {
+         const r = await api.conversations();
++        if (epoch !== this._listEpoch) return;
+         this.conversations = (r?.data?.list || []).map(item => this.normalizeConversation(item));
+-      } finally { this.loading = false; }
++        writePageCache('histories', owner, { list: this.conversations.slice(0, 100) });
++      } finally { if (epoch === this._listEpoch) this.loading = false; }
+     },
+     async toggleLike(c, event) {
+       if (event) event.preventDefault();
+diff --git a/frontend/app/assets/js/layout.js b/frontend/app/assets/js/layout.js
+index 5804c6944d3be127b313d018fa4d62e18288e520..3c4ab6051465ae108dfd704249e2ec29f4d62c87 100644
+--- a/frontend/app/assets/js/layout.js
++++ b/frontend/app/assets/js/layout.js
+@@ -1,4 +1,4 @@
+-import { installDialoguePrewarm } from '/app/assets/js/dialogue-prewarm.js?v=20260904-instant-history-v1';
++import { installDialoguePrewarm } from '/app/assets/js/dialogue-prewarm.js?v=20260905-notices-v1';
+ 
+ const NAV_ITEMS = [
+   { key: 'explore', label: '探索', href: '/app/explore.html', icon: 'M3 12l9-9 9 9M5 10v10h14V10' },
+diff --git a/frontend/app/assets/js/login.js b/frontend/app/assets/js/login.js
+index 1c5f1b509a392334701eadac45d7f776bb75d7c6..4cbf0cdd6094dd9a359387f6adea1a206c5bb384 100644
+--- a/frontend/app/assets/js/login.js
++++ b/frontend/app/assets/js/login.js
+@@ -1,5 +1,5 @@
+-import { api, setToken, clearAuth, isLoggedIn, ApiError } from '/app/assets/js/app-core.js?v=20260717-handoff-merge';
+-import { loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260901-persistent-pages';
++import { api, setToken, clearAuth, isLoggedIn, ApiError } from '/app/assets/js/app-core.js?v=20260905-notices-v1';
++import { loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260905-notices-v1';
+ 
+ function safeNextPath() {
+   const value = new URLSearchParams(location.search).get('next') || '/app/';
+diff --git a/frontend/app/assets/js/me.js b/frontend/app/assets/js/me.js
+index c7795555f0742757b79e2c3417caa06d99e7ff3e..6254c44f83383644a722788824861e39c00c65f6 100644
+--- a/frontend/app/assets/js/me.js
++++ b/frontend/app/assets/js/me.js
+@@ -1,6 +1,6 @@
+-import { api, requireAuth, getCachedUser, setCachedUser, clearAuth, formatDateTime, ApiError } from '/app/assets/js/app-core.js?v=20260717-handoff-merge';
+-import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260901-persistent-pages';
+-import { clearPageCache, readPageCache, writePageCache } from '/app/assets/js/page-cache.js?v=20260901-persistent-pages';
++import { api, requireAuth, getCachedUser, setCachedUser, clearAuth, formatDateTime, ApiError } from '/app/assets/js/app-core.js?v=20260905-notices-v1';
++import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260905-notices-v1';
++import { clearPageCache, readPageCache, writePageCache } from '/app/assets/js/page-cache.js?v=20260905-notices-v1';
+ 
+ const ME_CACHE_SCOPE = 'me';
+ 
+diff --git a/frontend/app/assets/js/my-apps.js b/frontend/app/assets/js/my-apps.js
+index f7f57651f88d1ac43343a60b7c1a69af69e6bc76..6ac83baa98407e6a861129504fb6a78841b09700 100644
+--- a/frontend/app/assets/js/my-apps.js
++++ b/frontend/app/assets/js/my-apps.js
+@@ -1,5 +1,5 @@
+-import { api, requireAuth, getCachedUser, setCachedUser, ApiError } from '/app/assets/js/app-core.js?v=20260720-community-versions';
+-import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260901-persistent-pages';
++import { api, requireAuth, getCachedUser, setCachedUser, ApiError } from '/app/assets/js/app-core.js?v=20260905-notices-v1';
++import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260905-notices-v1';
+ 
+ function myAppsPage() {
+   return {
+diff --git a/frontend/app/assets/js/notifications.js b/frontend/app/assets/js/notifications.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..cab390bfd151aa27282a3ee3b4a92924faee8b9f
+--- /dev/null
++++ b/frontend/app/assets/js/notifications.js
+@@ -0,0 +1,80 @@
++// Startup notices are fetched independently of page/data/runtime readiness.
++const PREFIX = 'homer.notice.v1.';
++let dialog, pending = false;
++const memory = new Map();
++function read(key) { try { return localStorage.getItem(key) || ''; } catch { return memory.get(key) || ''; } }
++function write(key, value) { memory.set(key, value); try { localStorage.setItem(key, value); } catch {} }
++function owner() {
++  try { const u = JSON.parse(localStorage.getItem('ai_xingyue_user') || 'null'); return String(u?.id || u?.user_id || u?.email || 'guest'); }
++  catch { return 'guest'; }
++}
++export function localDay(date = new Date()) {
++  return `${date.getFullYear()}-${date.getMonth()+1}-${date.getDate()}`;
++}
++function visit() {
++  try { const id = window.HomerNative?.getAppVisitId?.(); if (id) return String(id); } catch {}
++  try {
++    let id = sessionStorage.getItem(PREFIX + 'visit');
++    if (!id) { id = crypto.randomUUID(); sessionStorage.setItem(PREFIX + 'visit', id); }
++    return id;
++  } catch { return 'document'; }
++}
++function key(suffix, user = owner()) { return PREFIX + encodeURIComponent(user) + '.' + suffix; }
++function show(notices, user, visitId) {
++  if (dialog?.open) return;
++  if (!document.querySelector('#homer-notice-style')) {
++    const style = document.createElement('style');
++    style.id = 'homer-notice-style';
++    style.textContent = `.homer-notice{box-sizing:border-box;width:min(480px,calc(100vw - 32px));max-height:calc(100dvh - 48px);padding:0;border:0;border-radius:22px;background:#fff;color:#25252b;box-shadow:0 20px 80px #0005;font:16px/1.6 system-ui,sans-serif;overflow:auto}.homer-notice::backdrop{background:#1119}.homer-notice header{padding:22px 24px 10px;font-size:20px;font-weight:700}.homer-notice section{padding:8px 24px 20px;overflow-wrap:anywhere}.homer-notice h3{font-size:17px;margin:8px 0}.homer-notice p{white-space:pre-wrap;margin:8px 0}.homer-notice article+article{border-top:1px solid #eee;padding-top:12px}.homer-notice footer{position:sticky;bottom:0;background:#fff;padding:12px 20px 20px;display:flex;gap:10px;flex-wrap:wrap}.homer-notice button{flex:1;min-width:120px;min-height:44px;border:0;border-radius:12px;padding:10px;color:#555;background:#f2f2f6;font:inherit;cursor:pointer}.homer-notice button:last-child{background:#ff3472;color:#fff}.homer-notice button:focus-visible{outline:3px solid #9052ff;outline-offset:2px}`;
++    document.head.append(style);
++  }
++  dialog = document.createElement('dialog');
++  dialog.className = 'homer-notice';
++  dialog.setAttribute('aria-labelledby', 'homer-notice-title');
++  const header = document.createElement('header');
++  header.id = 'homer-notice-title'; header.textContent = '站内通知';
++  const content = document.createElement('section');
++  for (const item of notices) {
++    const article = document.createElement('article');
++    const title = document.createElement('h3'); title.textContent = item.title;
++    const text = document.createElement('p'); text.textContent = item.content;
++    article.append(title, text); content.append(article);
++  }
++  const footer = document.createElement('footer');
++  const mute = document.createElement('button'); mute.type = 'button'; mute.textContent = '今日不再弹出';
++  const close = document.createElement('button'); close.type = 'button'; close.textContent = '我知道了';
++  mute.onclick = () => { write(key('muted', user), localDay()); dialog.close(); };
++  close.onclick = () => dialog.close();
++  footer.append(mute, close); dialog.append(header, content, footer);
++  dialog.addEventListener('close', () => { dialog?.remove(); dialog = null; }, {once:true});
++  document.body.append(dialog);
++  dialog.showModal();
++  write(key('shown', user), visitId + ':' + localDay());
++}
++export async function checkStartupNotifications() {
++  if (window.top !== window || !location.pathname.startsWith('/app/')
++      || document.visibilityState === 'hidden' || pending || dialog?.open) return;
++  const user = owner(), visitId = visit();
++  if (read(key('muted', user)) === localDay() || read(key('shown', user)) === visitId + ':' + localDay()) return;
++  pending = true;
++  const controller = new AbortController();
++  const timeout = setTimeout(() => controller.abort(), 5000);
++  try {
++    const response = await fetch('/console/api/public/notifications', {credentials:'include', cache:'no-store', signal:controller.signal});
++    if (!response.ok) return;
++    const body = await response.json();
++    const list = (body?.data?.list || body?.list || []).filter(n => n && n.enabled !== false && typeof n.title === 'string' && typeof n.content === 'string');
++    if (user !== owner() || visitId !== visit() || document.visibilityState === 'hidden') return;
++    if (read(key('muted', user)) === localDay() || read(key('shown', user)) === visitId + ':' + localDay()) return;
++    if (list.length) show(list, user, visitId);
++  } catch { /* A missing/offline notice service must never block the app. */ }
++  finally { clearTimeout(timeout); pending = false; }
++}
++if (!window.__homerNoticesInstalled) {
++  window.__homerNoticesInstalled = true;
++  window.addEventListener('homer:app-enter', () => void checkStartupNotifications());
++  document.addEventListener('visibilitychange', () => void checkStartupNotifications());
++  window.addEventListener('homer-account-cleared', () => dialog?.close());
++  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => void checkStartupNotifications(), {once:true});
++  else setTimeout(() => void checkStartupNotifications(), 0);
++}
+diff --git a/frontend/app/character.html b/frontend/app/character.html
+index 075655e2b6b0d93afe380bef36f51164ee95cd59..7cd1db3ed01c83637f9c02112c3e86a454129e96 100644
+--- a/frontend/app/character.html
++++ b/frontend/app/character.html
+@@ -8,7 +8,7 @@
+   <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
+   <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
+   <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
+-  <script type="module" src="/app/assets/js/character.js?v=20260902-conversation-routing"></script>
++  <script type="module" src="/app/assets/js/character.js?v=20260905-notices-v1"></script>
+   <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
+ </head>
+ <body class="min-h-screen">
+diff --git a/frontend/app/chat.html b/frontend/app/chat.html
+index 9119759ea8c557fae8db1195fd670e9232d450ab..3154a07193285b9f5de90a7107dfec9d5850286e 100644
+--- a/frontend/app/chat.html
++++ b/frontend/app/chat.html
+@@ -795,6 +795,6 @@
+ 
+   <p id="dialogue-announcer" class="sr-only" aria-live="assertive"></p>
+   <noscript>需要启用 JavaScript 才能进入对话。</noscript>
+-<script type="module" src="/app/assets/js/chat.js?v=20260904-instant-history-v1"></script>
++<script type="module" src="/app/assets/js/chat.js?v=20260905-notices-v1"></script>
+ </body>
+ </html>
+diff --git a/frontend/app/community.html b/frontend/app/community.html
+index c3428406b6d3a5a7702c6586ac75464c3c4a5c9e..eb4b388977ffe34b0ee5a3826d21a8f6e1d0f4e5 100644
+--- a/frontend/app/community.html
++++ b/frontend/app/community.html
+@@ -8,7 +8,7 @@
+   <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
+   <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
+   <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
+-  <script type="module" src="/app/assets/js/community.js?v=20260812-license-removal"></script>
++  <script type="module" src="/app/assets/js/community.js?v=20260905-notices-v1"></script>
+   <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
+   <style>
+     .cm-page { width: min(1180px, 100%); margin: 0 auto; }
+diff --git a/frontend/app/create.html b/frontend/app/create.html
+index 16a5017a29c9df451f541582c939d6e48780f456..cce94e3ddac8c0297268827f78565dd77a5c98b4 100644
+--- a/frontend/app/create.html
++++ b/frontend/app/create.html
+@@ -11,7 +11,7 @@
+   <link rel="stylesheet" href="/app/assets/css/worldbook-editor.css?v=20260713">
+   <link rel="stylesheet" href="/app/assets/css/card-experience-editor.css?v=20260806-tavern-helper">
+   <script src="/app/assets/vendor/jszip-3.10.1.min.js?v=3.10.1"></script>
+-  <script type="module" src="/app/assets/js/create.js?v=20260820-archive-stage"></script>
++  <script type="module" src="/app/assets/js/create.js?v=20260905-notices-v1"></script>
+   <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
+ </head>
+ <body class="min-h-screen creator-editor-page">
+diff --git a/frontend/app/explore.html b/frontend/app/explore.html
+index 62543a4b36d54feab434bc551c12f3f2b3f0cbdc..12fb80b3eff32aa14fc647753db5a02348922c67 100644
+--- a/frontend/app/explore.html
++++ b/frontend/app/explore.html
+@@ -7,11 +7,11 @@
+   <link rel="icon" type="image/png" sizes="32x32" href="/assets/img/favicon-32.png?v=20260901-persistent-pages">
+   <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
+   <link rel="preload" as="script" href="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1">
+-  <link rel="modulepreload" href="/assets/js/api.js?v=20260717-handoff-merge">
+-  <link rel="modulepreload" href="/app/assets/js/app-core.js?v=20260717-handoff-merge">
+-  <link rel="modulepreload" href="/app/assets/js/layout.js?v=20260901-persistent-pages">
++  <link rel="modulepreload" href="/assets/js/api.js?v=20260905-notices-v1">
++  <link rel="modulepreload" href="/app/assets/js/app-core.js?v=20260905-notices-v1">
++  <link rel="modulepreload" href="/app/assets/js/layout.js?v=20260905-notices-v1">
+   <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
+-  <script type="module" src="/app/assets/js/explore.js?v=20260901-persistent-pages"></script>
++  <script type="module" src="/app/assets/js/explore.js?v=20260905-notices-v1"></script>
+   <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
+ </head>
+ <body class="min-h-screen">
+diff --git a/frontend/app/farm.html b/frontend/app/farm.html
+index ffa29f469773348381a33545f31f54526c30817e..8f92443aadde99dae5e75b8db6d507b5629690b9 100644
+--- a/frontend/app/farm.html
++++ b/frontend/app/farm.html
+@@ -8,7 +8,7 @@
+   <link rel="icon" type="image/png" sizes="32x32" href="/assets/img/favicon-32.png?v=20260901-persistent-pages">
+   <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
+   <link rel="stylesheet" href="/app/assets/css/farm.css?v=20260901-persistent-pages">
+-  <script type="module" src="/app/assets/js/farm.js?v=20260812-license-removal"></script>
++  <script type="module" src="/app/assets/js/farm.js?v=20260905-notices-v1"></script>
+   <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
+ </head>
+ <body class="min-h-screen farm-page">
+diff --git a/frontend/app/favorites.html b/frontend/app/favorites.html
+index 35dca83bca1ba31578a15959ba7d3b99baeb0950..9307a18885e9e661253ce4b6033cb59ef47c10ab 100644
+--- a/frontend/app/favorites.html
++++ b/frontend/app/favorites.html
+@@ -8,7 +8,7 @@
+   <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
+   <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
+   <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
+-  <script type="module" src="/app/assets/js/hub-pages.js?v=20260812-license-removal"></script>
++  <script type="module" src="/app/assets/js/hub-pages.js?v=20260905-notices-v1"></script>
+   <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
+ </head>
+ <body class="min-h-screen">
+diff --git a/frontend/app/group-chat.html b/frontend/app/group-chat.html
+index b34061c2fb8c00f58b706fa32681fb94296804f5..07c5bee9edeb8ad9f134c1828c7b2b772be0d4e7 100644
+--- a/frontend/app/group-chat.html
++++ b/frontend/app/group-chat.html
+@@ -302,7 +302,7 @@
+       .xy-btn { transition:none!important; }
+     }
+   </style>
+-  <script type="module" src="/app/assets/js/group-chat.js?v=20260812-license-removal"></script>
++  <script type="module" src="/app/assets/js/group-chat.js?v=20260905-notices-v1"></script>
+   <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
+ </head>
+ <body class="min-h-screen">
+diff --git a/frontend/app/histories.html b/frontend/app/histories.html
+index 1ff750933baf3d4ce40559deb068a8999d11980a..8f58fc975c5127be536b2ee48a4df4049d4a72a4 100644
+--- a/frontend/app/histories.html
++++ b/frontend/app/histories.html
+@@ -8,7 +8,7 @@
+   <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
+   <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
+   <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
+-  <script type="module" src="/app/assets/js/hub-pages.js?v=20260902-conversation-routing"></script>
++  <script type="module" src="/app/assets/js/hub-pages.js?v=20260905-notices-v1"></script>
+   <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
+ </head>
+ <body class="min-h-screen">
+diff --git a/frontend/app/image-chat.html b/frontend/app/image-chat.html
+index a93a6df31f5bb7bcbd5c8b18ad6f8dadd59c9ee7..f24891c04e1e27a67b4a87182dcb741b714da58d 100644
+--- a/frontend/app/image-chat.html
++++ b/frontend/app/image-chat.html
+@@ -8,7 +8,7 @@
+   <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
+   <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
+   <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
+-  <script type="module" src="/app/assets/js/hub-pages.js?v=20260812-license-removal"></script>
++  <script type="module" src="/app/assets/js/hub-pages.js?v=20260905-notices-v1"></script>
+   <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
+ </head>
+ <body class="min-h-screen">
+diff --git a/frontend/app/index.html b/frontend/app/index.html
+index 1f3efc695f88cd32ce6f2d06eda7308ea11f2579..dff01d75ffb667c21c4ff8fd015cb99798f486c9 100644
+--- a/frontend/app/index.html
++++ b/frontend/app/index.html
+@@ -7,7 +7,7 @@
+   <link rel="icon" type="image/png" sizes="32x32" href="/assets/img/favicon-32.png?v=20260901-persistent-pages">
+   <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
+   <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
+-  <script type="module" src="/app/assets/js/home.js?v=20260717-handoff-merge"></script>
++  <script type="module" src="/app/assets/js/home.js?v=20260905-notices-v1"></script>
+ </head>
+ <body class="min-h-screen">
+   <div class="xy-stars-bg"></div>
+diff --git a/frontend/app/info.html b/frontend/app/info.html
+index 4b9464e1259de97e7658104e82a61436b01e447c..34754a958836eed7827e6e646be3509149293269 100644
+--- a/frontend/app/info.html
++++ b/frontend/app/info.html
+@@ -8,7 +8,7 @@
+   <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
+   <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
+   <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
+-  <script type="module" src="/app/assets/js/hub-pages.js?v=20260812-license-removal"></script>
++  <script type="module" src="/app/assets/js/hub-pages.js?v=20260905-notices-v1"></script>
+   <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
+ </head>
+ <body class="min-h-screen hub-page hub-page--info">
+diff --git a/frontend/app/login.html b/frontend/app/login.html
+index 230bcb78b741212b0e00a290a2638dba9476d26b..f013050dfc0fa9e4e1eb39375cc6bd57388499a9 100644
+--- a/frontend/app/login.html
++++ b/frontend/app/login.html
+@@ -8,7 +8,7 @@
+   <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
+   <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
+   <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
+-  <script type="module" src="/app/assets/js/login.js?v=20260812-license-removal"></script>
++  <script type="module" src="/app/assets/js/login.js?v=20260905-notices-v1"></script>
+   <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
+ </head>
+ <body class="min-h-screen bg-[#0a0420]">
+diff --git a/frontend/app/logs.html b/frontend/app/logs.html
+index 82b24d2c6164c24e49c12590c8ccd886e34a7090..9391284d1eb0dd07f5921ea506cf23561b274430 100644
+--- a/frontend/app/logs.html
++++ b/frontend/app/logs.html
+@@ -8,7 +8,7 @@
+   <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
+   <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
+   <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
+-  <script type="module" src="/app/assets/js/hub-pages.js?v=20260812-license-removal"></script>
++  <script type="module" src="/app/assets/js/hub-pages.js?v=20260905-notices-v1"></script>
+   <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
+ </head>
+ <body class="min-h-screen">
+diff --git a/frontend/app/me.html b/frontend/app/me.html
+index b9cb6bc5b0d093421df51b33fb6c9d7a400fea8e..a71ebb20fe31898dcc2867255d33a50e892a97d3 100644
+--- a/frontend/app/me.html
++++ b/frontend/app/me.html
+@@ -8,7 +8,7 @@
+   <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
+   <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
+   <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
+-  <script type="module" src="/app/assets/js/me.js?v=20260901-persistent-pages"></script>
++  <script type="module" src="/app/assets/js/me.js?v=20260905-notices-v1"></script>
+   <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
+ </head>
+ <body class="min-h-screen profile-center-page">
+diff --git a/frontend/app/my-apps.html b/frontend/app/my-apps.html
+index 523890861c8b7208862d8eb40743488df651411e..ec298317f1c5fa700274edb34d7da272d9d95445 100644
+--- a/frontend/app/my-apps.html
++++ b/frontend/app/my-apps.html
+@@ -8,7 +8,7 @@
+   <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
+   <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
+   <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
+-  <script type="module" src="/app/assets/js/my-apps.js?v=20260812-license-removal"></script>
++  <script type="module" src="/app/assets/js/my-apps.js?v=20260905-notices-v1"></script>
+   <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
+ </head>
+ <body class="min-h-screen">
+diff --git a/frontend/app/rewards.html b/frontend/app/rewards.html
+index 26004b1f0b43c435be8a98f715a68f20f691a15e..8541afed33f21b32076847675333451dedecc8a5 100644
+--- a/frontend/app/rewards.html
++++ b/frontend/app/rewards.html
+@@ -9,7 +9,7 @@
+   <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
+   <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
+   <link rel="stylesheet" href="/app/assets/css/rewards-payment.css?v=20260713-payment-orders">
+-  <script type="module" src="/app/assets/js/hub-pages.js?v=20260812-license-removal"></script>
++  <script type="module" src="/app/assets/js/hub-pages.js?v=20260905-notices-v1"></script>
+   <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
+ </head>
+ <body class="min-h-screen hub-page hub-page--rewards">
+diff --git a/frontend/app/workshop.html b/frontend/app/workshop.html
+index 5aa5ccafc74a64233946f62b32322f12f7dda61c..989ecfe8b98660a02f6b591b11183f0ea06f3965 100644
+--- a/frontend/app/workshop.html
++++ b/frontend/app/workshop.html
+@@ -8,7 +8,7 @@
+   <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
+   <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
+   <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
+-  <script type="module" src="/app/assets/js/hub-pages.js?v=20260812-license-removal"></script>
++  <script type="module" src="/app/assets/js/hub-pages.js?v=20260905-notices-v1"></script>
+   <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
+   <style>
+     .ws-create-mask { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 18px; background: rgba(7, 8, 15, .66); backdrop-filter: blur(8px); }
+diff --git a/frontend/assets/js/admin-app.js b/frontend/assets/js/admin-app.js
+index 1153a287d8c22fd5765968049de34ef7f27b26da..b096f650475088a6b3fae3cadbe40e9c49f90c36 100644
+--- a/frontend/assets/js/admin-app.js
++++ b/frontend/assets/js/admin-app.js
+@@ -1,5 +1,5 @@
+ // 惑梦（Homer） 管理后台 Alpine.js 应用
+-import { api, isLoggedIn, formatDateTime, ApiError } from '/assets/js/api.js?v=20260817-preset-pricing';
++import { api, isLoggedIn, formatDateTime, ApiError } from '/assets/js/api.js?v=20260905-notices-v1';
+ 
+ function adminPanel() {
+   return {
+@@ -9,10 +9,15 @@ function adminPanel() {
+     toast: null,
+     toastTimer: null,
+     adminInfo: null,
++    notifications: [],
++    notificationForm: null,
++    notificationBusy: false,
++    notificationError: '',
+     errorMessage: '',
+     errorDetail: '',
+ 
+     tabs: [
++      { id: 'notifications', label: '通知管理', icon: '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M6 8a6 6 0 0112 0v8l2 2H4l2-2V8m4 12h4"/></svg>' },
+       { id: 'stats', label: '数据总览', icon: '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>' },
+       { id: 'users', label: '用户管理', icon: '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-9a4 4 0 11-8 0 4 4 0 018 0zM21 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>' },
+       { id: 'logs', label: '请求日志', icon: '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>' },
+@@ -855,6 +860,7 @@ function adminPanel() {
+ 
+     async switchTab(id) {
+       this.activeTab = id;
++      if (id === 'notifications') await this.loadNotifications();
+       if (id === 'stats' && !this.stats) await this.loadStats();
+       if (id === 'users' && this.users.length === 0) await this.loadUsers(1);
+       if (id === 'logs' && this.logs.length === 0) await this.loadLogs(1);
+@@ -871,6 +877,43 @@ function adminPanel() {
+       if (id === 'apps' && this.apps.length === 0) await this.loadApps(1);
+     },
+ 
++    async loadNotifications() {
++      this.notificationError = '';
++      try {
++        const result = await api.admin.notifications();
++        this.notifications = result?.data?.list || result?.list || [];
++      } catch (error) { this.notificationError = error.message || '通知读取失败'; }
++    },
++    editNotification(item = null) {
++      this.notificationError = '';
++      this.notificationForm = item ? { ...item } : { title: '', content: '', enabled: true };
++    },
++    async saveNotification() {
++      if (this.notificationBusy || !this.notificationForm) return;
++      if (!this.notificationForm.title.trim() || !this.notificationForm.content.trim()) {
++        this.notificationError = '请填写通知标题和正文'; return;
++      }
++      this.notificationBusy = true;
++      this.notificationError = '';
++      try {
++        await api.admin.saveNotification(this.notificationForm);
++        this.notificationForm = null;
++        await this.loadNotifications();
++      } catch (error) { this.notificationError = error.message || '保存失败'; }
++      finally { this.notificationBusy = false; }
++    },
++    async deleteNotification(item) {
++      if (this.notificationBusy || !confirm('确定删除这条通知？删除后用户将不再看到它。')) return;
++      this.notificationBusy = true;
++      this.notificationError = '';
++      try {
++        await api.admin.deleteNotification(item.id);
++        if (this.notificationForm?.id === item.id) this.notificationForm = null;
++        await this.loadNotifications();
++      } catch (error) { this.notificationError = error.message || '删除失败'; }
++      finally { this.notificationBusy = false; }
++    },
++
+     contestPhaseLabel(contest) {
+       const phase = contest?.status === 'closed' ? 'closed' : contest?.phase;
+       return { upcoming: '未开始', active: '进行中', ended: '已结束', closed: '已关闭' }[phase] || contest?.status || '未知';
+diff --git a/frontend/assets/js/api.js b/frontend/assets/js/api.js
+index c2d298812d7f57553d02484d44aa87d70003b049..3c7f5001443e8ecf939b217c44f7adcc17d9a3b6 100644
+--- a/frontend/assets/js/api.js
++++ b/frontend/assets/js/api.js
+@@ -7,6 +7,11 @@ const TOKEN_KEY = 'ai_xingyue_token';
+ const LOGIN_KEY = 'ai_xingyue_logged_in';
+ const USER_KEY = 'ai_xingyue_user';
+ 
++function syncNativeAccount(user) {
++  const owner = String(user?.id || user?.user_id || user?.email || '').trim();
++  try { window.HomerNative?.setAccountScope?.(owner); } catch { /* Browser-only mode. */ }
++}
++
+ export function getToken() {
+   // 敏感 token 现由 HttpOnly Cookie 携带，JS 无法读取。
+   // 此处仅为兼容仍残留旧 token 的历史会话，作为 Bearer 回退。
+@@ -35,6 +40,7 @@ export function getCachedUser() {
+ }
+ 
+ export function setCachedUser(user) {
++  syncNativeAccount(user);
+   if (user) {
+     localStorage.setItem(USER_KEY, JSON.stringify(user));
+   } else {
+@@ -46,8 +52,19 @@ export function clearAuth() {
+   localStorage.removeItem(TOKEN_KEY);
+   localStorage.removeItem(LOGIN_KEY);
+   localStorage.removeItem(USER_KEY);
++  syncNativeAccount(null);
++  // Remove legacy unscoped dialogue and navigation caches on sign-out.
++  for (const storage of [localStorage, sessionStorage]) {
++    for (const key of Object.keys(storage)) {
++      if (key.startsWith('homer.dialogue.') || key.startsWith('homer.page-cache.')
++          || key.startsWith('ai_xingyue_home_')) storage.removeItem(key);
++    }
++  }
++  window.dispatchEvent(new Event('homer-account-cleared'));
+ }
+ 
++syncNativeAccount(getCachedUser());
++
+ export function isLoggedIn() {
+   // 登录态以非敏感标记判断；兼容仍残留旧 token 的历史会话。
+   return localStorage.getItem(LOGIN_KEY) === '1' || !!getToken();
+@@ -154,6 +171,10 @@ export const api = {
+ 
+   // 管理员接口
+   admin: {
++    notifications: () => request('/admin/api/notifications'),
++    saveNotification: (item) => request('/admin/api/notifications' + (item.id ? '/' + encodeURIComponent(item.id) : ''),
++      { method: item.id ? 'PUT' : 'POST', body: { title: item.title, content: item.content, enabled: !!item.enabled } }),
++    deleteNotification: (id) => request('/admin/api/notifications/' + encodeURIComponent(id), { method: 'DELETE' }),
+     whoami: () => request('/admin/api/whoami'),
+     stats: () => request('/admin/api/stats'),
+     users: (page = 1, limit = 20, search = '') => {
+diff --git a/frontend/assets/js/dashboard-app.js b/frontend/assets/js/dashboard-app.js
+index c26ce614fd4573e13efe0728348f0888bc0cd568..84f424218274b9eb313c48d5d9548b812bd539f4 100644
+--- a/frontend/assets/js/dashboard-app.js
++++ b/frontend/assets/js/dashboard-app.js
+@@ -1,5 +1,5 @@
+ // 惑梦（Homer） 用户面板 Alpine.js 应用
+-import { api, getToken, setToken, clearAuth, isLoggedIn, getCachedUser, setCachedUser, formatDateTime, ApiError } from '/assets/js/api.js?v=20260717-handoff-merge';
++import { api, getToken, setToken, clearAuth, isLoggedIn, getCachedUser, setCachedUser, formatDateTime, ApiError } from '/assets/js/api.js?v=20260905-notices-v1';
+ 
+ function dashboard() {
+   return {
+diff --git a/frontend/assets/js/site-settings.js b/frontend/assets/js/site-settings.js
+index bafed57cf64d7ac5fedeb5b28ba3cc270d808fb9..42bb2b76e31bba427def56b712ddfcbc1953bea8 100644
+--- a/frontend/assets/js/site-settings.js
++++ b/frontend/assets/js/site-settings.js
+@@ -1,5 +1,5 @@
+ // Public site settings hydrator. Static HTML stays usable if this request fails.
+-import { api } from '/assets/js/api.js?v=20260717-handoff-merge';
++import { api } from '/assets/js/api.js?v=20260905-notices-v1';
+ 
+ function getPath(obj, path) {
+   return String(path || '').split('.').reduce((cur, key) => (
+diff --git a/frontend/dashboard.html b/frontend/dashboard.html
+index 9cae2175081b78cfdb66f74a86cda492da3ecd13..4e7ec8c2f74f7ff1299574ac787ea1af20b9169b 100644
+--- a/frontend/dashboard.html
++++ b/frontend/dashboard.html
+@@ -9,7 +9,7 @@
+   <link rel="apple-touch-icon" sizes="180x180" href="/assets/img/apple-touch-icon.png?v=20260901-persistent-pages">
+   <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
+   <link rel="stylesheet" href="/assets/css/custom.css?v=20260901-persistent-pages">
+-  <script type="module" src="/assets/js/dashboard-app.js?v=20260717-handoff-merge"></script>
++  <script type="module" src="/assets/js/dashboard-app.js?v=20260905-notices-v1"></script>
+   <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
+ </head>
+ <body class="min-h-screen">
+diff --git a/frontend/index.html b/frontend/index.html
+index 23e741343cfb53c9f9497cc74791b4866f1ffa3d..3324f357f5cb576e7a30c68b49b327ebba3426f3 100644
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -18,7 +18,7 @@
+   <link rel="apple-touch-icon" sizes="180x180" href="/assets/img/apple-touch-icon.png?v=20260901-persistent-pages">
+   <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
+   <link rel="stylesheet" href="/assets/css/custom.css?v=20260901-persistent-pages">
+-  <script type="module" src="/assets/js/site-settings.js?v=20260717-handoff-merge"></script>
++  <script type="module" src="/assets/js/site-settings.js?v=20260905-notices-v1"></script>
+   <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
+ </head>
+ <body class="min-h-screen overflow-x-hidden bg-[#0a0420]">
+diff --git a/sillytavern-runtime/public/scripts/extensions/homer-bridge/index.js b/sillytavern-runtime/public/scripts/extensions/homer-bridge/index.js
+index 9261fca785d0182177be125f7b929c16dd15fe30..5744686620fab5c96994f354cd84965a313d99bf 100644
+--- a/sillytavern-runtime/public/scripts/extensions/homer-bridge/index.js
++++ b/sillytavern-runtime/public/scripts/extensions/homer-bridge/index.js
+@@ -4430,6 +4430,7 @@ async function switchConversation(conversation) {
+     }
+     if (loadingLaunch || generationBusy) {
+         showHostNotice(generationBusy ? '回复生成完成后才能切换会话' : '会话正在切换，请稍候', 'warning');
++        if (!loadingLaunch) notifyHostConversation('conversation-switch-failed');
+         return;
+     }
+ 
+@@ -4521,7 +4522,7 @@ async function switchConversation(conversation) {
+         showHostNotice(String(error?.message || '历史会话切换失败'), 'error');
+         // The host exposes its local shell while this switch runs.  Restore the
+         // previous ready runtime immediately if the target cannot be loaded.
+-        notifyHostConversation();
++        notifyHostConversation('conversation-switch-failed');
+     } finally {
+         loadingLaunch = false;
+         document.body.classList.remove('homer-switching-chat');

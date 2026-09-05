@@ -109,7 +109,7 @@ android {
         versionCode 269
         versionName "1.14.4"
         buildConfigField "String", "PATCH_PUBLIC_KEY_B64", javaString(configuredPatchKey)
-        testInstrumentationRunner "android.test.InstrumentationTestRunner"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildFeatures {
@@ -118,7 +118,7 @@ android {
 
     buildTypes {
         debug {
-            applicationIdSuffix ".debug"
+            applicationIdSuffix providers.gradleProperty("HOMER_DEBUG_APPLICATION_SUFFIX").orElse(".debug").get()
             versionNameSuffix "-debug"
             buildConfigField "String", "SERVER_BASE_URL", javaString(configuredDebugServer)
         }
@@ -149,4 +149,6 @@ tasks.named("preBuild").configure {
 
 dependencies {
     testImplementation "junit:junit:4.13.2"
+    androidTestImplementation "androidx.test:runner:1.6.2"
+    androidTestImplementation "junit:junit:4.13.2"
 }
