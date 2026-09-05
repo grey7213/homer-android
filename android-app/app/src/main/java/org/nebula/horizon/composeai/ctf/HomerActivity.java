@@ -59,9 +59,17 @@ public final class HomerActivity extends Activity {
 
     @Override protected void onResume() {
         super.onResume();
+        if (apkUpdates != null) apkUpdates.onResume();
         if (liveView != null) liveView.evaluateJavascript(
                 "window.dispatchEvent(new Event('homer:app-enter'))", null);
     }
+
+    @Override protected void onPause() {
+        if (apkUpdates != null) apkUpdates.onPause();
+        super.onPause();
+    }
+
+    void checkForAppUpdate() { if (apkUpdates != null) apkUpdates.check(true); }
     private static final int FILE_CHOOSER_REQUEST = 701;
     private static final int WEB_PERMISSION_REQUEST = 702;
     private static final long READY_POLL_MS = 300L;
@@ -118,6 +126,7 @@ public final class HomerActivity extends Activity {
     private String activePersistentPage = "";
     private HomerCacheDatabase cacheDatabase;
     private PatchManager patchManager;
+    private ApkUpdateController apkUpdates;
     private ClientAssetStore clientAssetStore;
     private ValueCallback<Uri[]> fileChooserCallback;
     private PermissionRequest pendingPermissionRequest;
@@ -145,6 +154,7 @@ public final class HomerActivity extends Activity {
         patchManager = new PatchManager(this);
         patchManager.recoverInterruptedUpdate();
         clientAssetStore = new ClientAssetStore(this, patchManager);
+        apkUpdates = new ApkUpdateController(this);
 
         root = new FrameLayout(this);
         liveView = new WebView(this);
@@ -744,6 +754,7 @@ public final class HomerActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        if (apkUpdates != null) apkUpdates.close();
         handler.removeCallbacksAndMessages(null);
         if (pendingPermissionRequest != null) pendingPermissionRequest.deny();
         if (fileChooserCallback != null) fileChooserCallback.onReceiveValue(null);

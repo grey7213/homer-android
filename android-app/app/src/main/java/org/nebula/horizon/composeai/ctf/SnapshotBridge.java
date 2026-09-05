@@ -20,6 +20,12 @@ public final class SnapshotBridge {
     }
 
     @JavascriptInterface
+    public String getAppVersion() { return BuildConfig.VERSION_NAME; }
+
+    @JavascriptInterface
+    public void checkForAppUpdate() { activity.runOnUiThread(activity::checkForAppUpdate); }
+
+    @JavascriptInterface
     public void retryConnection() {
         activity.runOnUiThread(activity::reloadLivePage);
     }
