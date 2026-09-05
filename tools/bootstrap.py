@@ -226,9 +226,9 @@ def install_runtime_deps(npm: str | None) -> None:
         die("没有 npm，装不了 webpack；构建会在 compileHomerDialogueLibraries 挂掉")
 
     say("\n装 sillytavern-runtime 的运行时依赖（首次约 3-8 分钟，装完约 320 MB）")
-    run([npm, "install", "--omit=dev", "--no-audit", "--no-fund"], cwd=runtime)
+    run([npm, "ci", "--omit=dev", "--no-audit", "--no-fund"], cwd=runtime)
     if not (runtime / "node_modules" / "webpack").is_dir():
-        die("npm install 装完还是没有 webpack，构建会挂在 compileHomerDialogueLibraries")
+        die("npm ci 装完还是没有 webpack，构建会挂在 compileHomerDialogueLibraries")
     marker.write_text("bootstrap 装的，删掉即可强制重装\n", encoding="utf-8")
     say("  webpack 就位")
 

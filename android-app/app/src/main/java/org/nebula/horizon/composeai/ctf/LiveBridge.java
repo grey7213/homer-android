@@ -18,6 +18,12 @@ public final class LiveBridge {
     }
 
     @JavascriptInterface
+    public String getAppVersion() { return BuildConfig.VERSION_NAME; }
+
+    @JavascriptInterface
+    public void checkForAppUpdate() { activity.runOnUiThread(activity::checkForAppUpdate); }
+
+    @JavascriptInterface
     public void setAccountScope(String owner) {
         if (database.setAccountScope(owner)) {
             activity.runOnUiThread(activity::discardInactiveAccountPages);

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 r"""把主仓库当前的 web 端两棵树推成 homer-android 的 web-base 分支。
 
-web-base 是孤立分支：没有历史，每次基线推进都是一个新的独立提交，内容就是
+web-base 是独立分支：每次基线推进保留前一份快照为父提交，内容只有
 frontend/ 与 sillytavern-runtime/ 两棵树。这样贡献者的 bootstrap 能只取一个
 浅检出（约 200 MB）而不必克隆主仓库的完整历史。
 
@@ -91,15 +91,19 @@ def main() -> int:
     message = (
         f"惑梦 web 端基线 {date.today().isoformat()}\n\n"
         f"从 AIXingYue 工作区取 frontend/ 与 sillytavern-runtime/ 两棵树，供 homer-android\n"
-        f"的 bootstrap 装配可构建工作区。这个分支没有历史，每次基线推进都是一个新的孤立提交。\n\n"
+        f"的 bootstrap 装配可构建工作区。保留前一份基线，支持旧 pin 恢复与正常快进推送。\n\n"
         f"源 commit: {source}\n"
     )
+    git(ANDROID_REPO, "fetch", "-q", "origin", "web-base")
+    previous = git(ANDROID_REPO, "rev-parse", "FETCH_HEAD").strip()
+    if previous != pin["commit"]:
+        die("远端 web-base 已变化，请先同步最新 pin，避免覆盖其他维护者的发布。")
     commit = subprocess.run(
-        ["git", "commit-tree", tree_sha], cwd=ANDROID_REPO, input=message,
+        ["git", "commit-tree", tree_sha, "-p", previous], cwd=ANDROID_REPO, input=message,
         text=True, encoding="utf-8", capture_output=True, check=True,
     ).stdout.strip()
     git(ANDROID_REPO, "branch", "-f", "web-base", commit)
-    print(f"造出孤立提交 {commit[:12]}")
+    print(f"造出基线提交 {commit[:12]}（父快照 {previous[:12]}）")
 
 
     if args.dry_run:
@@ -107,7 +111,7 @@ def main() -> int:
         return 0
 
     print("推 web-base（约 140 MB，慢）...")
-    git(ANDROID_REPO, "push", "-q", "origin", "web-base:web-base", "--force")
+    git(ANDROID_REPO, "push", "-q", "origin", "web-base:web-base")
 
     pin.update({
         "commit": commit,
@@ -125,5 +129,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
 

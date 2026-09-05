@@ -2,11 +2,11 @@
   "comment": "web 端基线。bootstrap 按 commit 检出 frontend/ 与 sillytavern-runtime/。这是 homer-android 里的孤立分支 web-base，内容与 AIXingYue 工作区逐字节一致。",
   "repo": "https://github.com/grey7213/homer-android.git",
   "ref": "web-base",
-  "commit": "b0225ab462945bc3bd9c8537e19e19f932b17a3d",
+  "commit": "736853e8647722671cb35a07c10c92d123ca12f9",
   "trees": [
     "frontend",
     "sillytavern-runtime"
   ],
-  "source_commit": "0f6b97a713262282d2985a5c82f90d637c623a7f",
-  "updated": "2026-09-04"
+  "source_commit": "520897d865db6087b79f0edd4147ca335c9ce7fa",
+  "updated": "2026-09-05"
 }

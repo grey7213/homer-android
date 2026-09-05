@@ -106,8 +106,8 @@ android {
         applicationId "org.nebula.horizon.composeai"
         minSdk 26
         targetSdk 35
-        versionCode 269
-        versionName "1.14.4"
+        versionCode 270
+        versionName "1.15.0"
         buildConfigField "String", "PATCH_PUBLIC_KEY_B64", javaString(configuredPatchKey)
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -148,7 +148,18 @@ tasks.named("preBuild").configure {
 }
 
 dependencies {
+    implementation "androidx.core:core:1.15.0"
     testImplementation "junit:junit:4.13.2"
+    testImplementation "org.json:json:20240303"
     androidTestImplementation "androidx.test:runner:1.6.2"
     androidTestImplementation "junit:junit:4.13.2"
+}
+
+// Only debug output can use a lower version to exercise the system upgrade flow.
+android.applicationVariants.all { variant ->
+    if (variant.buildType.name == "debug" && providers.gradleProperty("HOMER_DEBUG_VERSION_CODE").isPresent()) {
+        variant.outputs.all { output ->
+            output.versionCodeOverride = providers.gradleProperty("HOMER_DEBUG_VERSION_CODE").get().toInteger()
+        }
+    }
 }
