@@ -48,6 +48,20 @@ import java.util.Map;
 import java.util.Set;
 
 public final class HomerActivity extends Activity {
+    private volatile String appVisitId = java.util.UUID.randomUUID().toString();
+
+    String getAppVisitId() { return appVisitId; }
+
+    @Override protected void onStart() {
+        super.onStart();
+        appVisitId = java.util.UUID.randomUUID().toString();
+    }
+
+    @Override protected void onResume() {
+        super.onResume();
+        if (liveView != null) liveView.evaluateJavascript(
+                "window.dispatchEvent(new Event('homer:app-enter'))", null);
+    }
     private static final int FILE_CHOOSER_REQUEST = 701;
     private static final int WEB_PERMISSION_REQUEST = 702;
     private static final long READY_POLL_MS = 300L;
@@ -358,6 +372,40 @@ public final class HomerActivity extends Activity {
         return current == null || !current.equals(target);
     }
 
+    static boolean canSwitchConversationInPlace(String current, String target) {
+        if (current == null || target == null) return false;
+        try {
+            URI from = URI.create(current);
+            URI to = URI.create(target);
+            String query = to.getRawQuery();
+            return "/app/chat.html".equals(from.getPath()) && "/app/chat.html".equals(to.getPath())
+                    && java.util.Objects.equals(from.getScheme(), to.getScheme())
+                    && java.util.Objects.equals(from.getRawAuthority(), to.getRawAuthority())
+                    && query != null && query.matches(".*(?:^|&)app_id=[^&]+.*")
+                    && query.matches(".*(?:^|&)(?:conversation_id|conv_id)=[^&]+.*");
+        } catch (RuntimeException ignored) {
+            return false;
+        }
+    }
+
+    private boolean switchLiveConversation(WebView view, String target) {
+        if (!canSwitchConversationInPlace(view.getUrl(), target)) return false;
+        String script = "!window.dispatchEvent(new CustomEvent('homer:navigate-conversation',"
+                + "{cancelable:true,detail:{url:" + JSONObject.quote(target) + "}}))";
+        view.evaluateJavascript(script, handled -> {
+            if (view != liveView) return;
+            if ("true".equals(handled)) {
+                snapshotView.setVisibility(View.GONE);
+                liveRevealed = true;
+                cacheDatabase.saveLastUrl(view.getUrl());
+            } else {
+                // Older web bundles do not implement the event yet.
+                view.loadUrl(target);
+            }
+        });
+        return true;
+    }
+
     private void registerInitialPersistentPage(String target) {
         String key = persistentPageKey(target);
         if (key.isEmpty()) return;
@@ -375,7 +423,7 @@ public final class HomerActivity extends Activity {
         }
         if (key.equals(activePersistentPage)) {
             String current = liveView.getUrl();
-            return current != null && current.equals(target);
+            return current != null && (current.equals(target) || switchLiveConversation(liveView, target));
         }
 
         WebView previous = liveView;
@@ -406,7 +454,8 @@ public final class HomerActivity extends Activity {
             snapshotView.setVisibility(conversationTarget ? View.VISIBLE : View.GONE);
             liveRevealed = !conversationTarget;
             liveReadyHandled = false;
-            liveView.loadUrl(target);
+            snapshotView.setAlpha(1f);
+            if (!switchLiveConversation(liveView, target)) liveView.loadUrl(target);
         } else {
             snapshotView.setVisibility(View.GONE);
             liveRevealed = true;
@@ -415,6 +464,22 @@ public final class HomerActivity extends Activity {
         }
         applyNativeInsetsToWebViews();
         return true;
+    }
+
+    void discardInactiveAccountPages() {
+        Set<WebView> stale = new HashSet<>(persistentPages.values());
+        stale.remove(liveView);
+        for (WebView view : stale) {
+            view.stopLoading();
+            root.removeView(view);
+            view.destroy();
+        }
+        persistentPages.clear();
+        persistentPageHistory.clear();
+        activePersistentPage = "";
+        snapshotLoaded = false;
+        snapshotConversationId = "";
+        snapshotView.setVisibility(View.GONE);
     }
 
     private boolean restorePreviousPersistentPage() {

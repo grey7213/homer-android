@@ -12,7 +12,7 @@ import org.json.JSONObject;
 
 public final class HomerCacheDatabase extends SQLiteOpenHelper {
     private static final String DB_NAME = "homer-local-cache.db";
-    private static final int DB_VERSION = 2;
+    private static final int DB_VERSION = 4;
     private static final int MAX_PAYLOAD_CHARS = 2_000_000;
 
     public HomerCacheDatabase(Context context) {
@@ -25,7 +25,8 @@ public final class HomerCacheDatabase extends SQLiteOpenHelper {
                 + "id INTEGER PRIMARY KEY CHECK (id = 1),"
                 + "snapshot_json TEXT NOT NULL DEFAULT '{}',"
                 + "last_url TEXT NOT NULL DEFAULT '',"
-                + "updated_at INTEGER NOT NULL DEFAULT 0)");
+                + "updated_at INTEGER NOT NULL DEFAULT 0,"
+                + "account_scope TEXT NOT NULL DEFAULT '')");
         db.execSQL("INSERT INTO app_state(id) VALUES (1)");
         createConversationCache(db);
     }
@@ -34,6 +35,39 @@ public final class HomerCacheDatabase extends SQLiteOpenHelper {
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
         if (oldVersion < 2) {
             createConversationCache(db);
+        }
+        if (oldVersion < 3) {
+            db.execSQL("ALTER TABLE app_state ADD COLUMN account_scope TEXT NOT NULL DEFAULT ''");
+        }
+        if (oldVersion >= 2 && oldVersion < 4) {
+            db.execSQL("ALTER TABLE conversation_cache ADD COLUMN last_message TEXT NOT NULL DEFAULT ''");
+        }
+    }
+
+    public synchronized boolean setAccountScope(String owner) {
+        String scope = safeIdentifier(owner, 160);
+        SQLiteDatabase db = getWritableDatabase();
+        db.beginTransaction();
+        try {
+            String previous = "";
+            try (Cursor cursor = db.rawQuery("SELECT account_scope FROM app_state WHERE id=1", null)) {
+                if (cursor.moveToFirst()) previous = cursor.getString(0);
+            }
+            if (scope.equals(previous) && !scope.isEmpty()) {
+                db.setTransactionSuccessful();
+                return false;
+            }
+            db.delete("conversation_cache", null, null);
+            ContentValues values = new ContentValues();
+            values.put("account_scope", scope);
+            values.put("snapshot_json", "{}");
+            values.put("last_url", "");
+            values.put("updated_at", 0);
+            db.update("app_state", values, "id=1", null);
+            db.setTransactionSuccessful();
+            return !scope.equals(previous);
+        } finally {
+            db.endTransaction();
         }
     }
 
@@ -44,6 +78,7 @@ public final class HomerCacheDatabase extends SQLiteOpenHelper {
                 + "title TEXT NOT NULL DEFAULT '角色对话',"
                 + "avatar TEXT NOT NULL DEFAULT '',"
                 + "messages_json TEXT NOT NULL DEFAULT '[]',"
+                + "last_message TEXT NOT NULL DEFAULT '',"
                 + "updated_at INTEGER NOT NULL DEFAULT 0)");
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_conversation_cache_updated "
                 + "ON conversation_cache(updated_at DESC)");
@@ -110,7 +145,7 @@ public final class HomerCacheDatabase extends SQLiteOpenHelper {
     public synchronized String readConversationHistory() {
         JSONArray history = new JSONArray();
         try (Cursor cursor = getReadableDatabase().rawQuery(
-                "SELECT conversation_id,app_id,title,avatar,messages_json,updated_at "
+                "SELECT conversation_id,app_id,title,avatar,last_message,updated_at "
                         + "FROM conversation_cache ORDER BY updated_at DESC LIMIT 80",
                 null)) {
             while (cursor.moveToNext()) {
@@ -119,13 +154,7 @@ public final class HomerCacheDatabase extends SQLiteOpenHelper {
                 item.put("app_id", cursor.getString(1));
                 item.put("title", cursor.getString(2));
                 item.put("app_icon", cursor.getString(3));
-                JSONArray messages = new JSONArray(cursor.getString(4));
-                String lastMessage = "";
-                if (messages.length() > 0) {
-                    JSONObject last = messages.optJSONObject(messages.length() - 1);
-                    if (last != null) lastMessage = last.optString("content", "");
-                }
-                item.put("last_message", lastMessage);
+                item.put("last_message", cursor.getString(4));
                 item.put("updated_at", cursor.getLong(5));
                 history.put(item);
             }
@@ -152,6 +181,9 @@ public final class HomerCacheDatabase extends SQLiteOpenHelper {
             values.put("title", title);
             values.put("avatar", avatar);
             values.put("messages_json", messages.toString());
+            JSONObject lastMessage = messages.optJSONObject(messages.length() - 1);
+            values.put("last_message", lastMessage == null ? "" :
+                    safeText(lastMessage.optString("content", ""), 500, ""));
             values.put("updated_at", updatedAt);
             return getWritableDatabase().insertWithOnConflict(
                     "conversation_cache",

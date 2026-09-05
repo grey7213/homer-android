@@ -2,6 +2,7 @@ package org.nebula.horizon.composeai.ctf;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.Locale;
 
 public final class SafeUrls {
     private SafeUrls() {}
@@ -16,7 +17,7 @@ public final class SafeUrls {
 
     static URI requireTrustedBase(String value) {
         URI uri = parseBase(value);
-        String scheme = String.valueOf(uri.getScheme()).toLowerCase();
+        String scheme = String.valueOf(uri.getScheme()).toLowerCase(Locale.ROOT);
         boolean secure = "https".equals(scheme);
         boolean debugHttp = "http".equals(scheme)
                 && (isLoopback(uri.getHost()) || isPrivateIpv4(uri.getHost()));

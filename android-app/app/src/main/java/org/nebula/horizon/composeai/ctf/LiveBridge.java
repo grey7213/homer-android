@@ -13,6 +13,18 @@ public final class LiveBridge {
     }
 
     @JavascriptInterface
+    public String getAppVisitId() {
+        return activity.getAppVisitId();
+    }
+
+    @JavascriptInterface
+    public void setAccountScope(String owner) {
+        if (database.setAccountScope(owner)) {
+            activity.runOnUiThread(activity::discardInactiveAccountPages);
+        }
+    }
+
+    @JavascriptInterface
     public void requestOrientation(String value) {
         final String safe = "landscape".equals(value) ? "landscape" : "default";
         activity.runOnUiThread(() -> activity.requestOrientation(safe));
