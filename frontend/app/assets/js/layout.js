@@ -1,4 +1,4 @@
-import { installDialoguePrewarm } from '/app/assets/js/dialogue-prewarm.js?v=20260904-instant-history-v1';
+import { installDialoguePrewarm } from '/app/assets/js/dialogue-prewarm.js?v=20260905-notices-v1';
 
 const NAV_ITEMS = [
   { key: 'explore', label: '探索', href: '/app/explore.html', icon: 'M3 12l9-9 9 9M5 10v10h14V10' },

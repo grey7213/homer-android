@@ -8,7 +8,8 @@
   <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
   <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
   <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
-  <script type="module" src="/app/assets/js/me.js?v=20260901-persistent-pages"></script>
+  <script type="module" src="/app/assets/js/me.js?v=20260905-notices-v1"></script>
+  <script type="module" src="/app/assets/js/apk-updates.js?v=20260905-apk-update"></script>
   <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
 </head>
 <body class="min-h-screen profile-center-page">
@@ -19,6 +20,11 @@
       <template x-if="toast"><div class="xy-toast" :class="`xy-toast-${toast.type}`" x-text="toast.message"></div></template>
 
       <div class="profile-center">
+        <section class="profile-setting-section" data-homer-update-section hidden>
+          <h3>应用更新</h3>
+          <p>当前版本 <span data-homer-app-version></span></p>
+          <button type="button" class="xy-btn xy-btn-ghost" data-homer-check-update hidden>检查更新</button>
+        </section>
         <section class="profile-identity-card">
           <label class="profile-avatar" :class="uploadingAvatar ? 'is-loading' : ''" title="更换头像">
             <img :src="profileAvatar()" @error="onAvatarError" alt="头像">

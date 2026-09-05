@@ -1,6 +1,6 @@
-import { api, requireAuth, getCachedUser, setCachedUser, ApiError } from '/app/assets/js/app-core.js?v=20260717-handoff-merge';
-import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260901-persistent-pages';
-import { readPageCache, writePageCache } from '/app/assets/js/page-cache.js?v=20260901-persistent-pages';
+import { api, requireAuth, getCachedUser, setCachedUser, ApiError } from '/app/assets/js/app-core.js?v=20260905-notices-v1';
+import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260905-notices-v1';
+import { readPageCache, writePageCache } from '/app/assets/js/page-cache.js?v=20260905-notices-v1';
 
 const DEFAULT_PAGE_SIZE = 12;
 const INITIAL_RANDOM_SEED = Math.floor(Math.random() * 2147483647);

@@ -1,4 +1,4 @@
-import { api, ApiError } from '/app/assets/js/app-core.js?v=20260729-dialogue-runtime';
+import { api, ApiError, getCachedUser } from '/app/assets/js/app-core.js?v=20260905-notices-v1';
 
 const HOST_CHANNEL = 'homer:dialogue-host:v1';
 const DEFAULT_RUNTIME_PATH = '/module/dialogue/';
@@ -50,6 +50,8 @@ let activeConversationId = '';
 let previewRequestId = 0;
 let runtimeReady = false;
 let runtimeState = null;
+let readyHandoffTimer = 0;
+let launchRequestId = 0;
 let history = [];
 let pendingDraft = '';
 const pendingCommands = [];
@@ -123,25 +125,32 @@ function postRuntimeCommand(type, payload = {}, { queue = true } = {}) {
     frame.contentWindow.postMessage(command, location.origin);
     return true;
   }
-  if (queue) pendingCommands.push(command);
+  if (queue) pendingCommands.push({ command, conversationId: activeConversationId });
   return false;
 }
 
 function flushRuntimeCommands() {
   if (!runtimeReady || !frame?.contentWindow) return;
-  while (pendingCommands.length) frame.contentWindow.postMessage(pendingCommands.shift(), location.origin);
+  while (pendingCommands.length) {
+    const item = pendingCommands.shift();
+    if (item.conversationId === activeConversationId) frame.contentWindow.postMessage(item.command, location.origin);
+  }
 }
 
 function markReady(roleName = '') {
   clearReadyTimer();
   runtimeReady = true;
+  ++previewRequestId;
+  window.clearTimeout(readyHandoffTimer);
   setDocumentTitle(roleName);
   flushRuntimeCommands();
   postRuntimeCommand('request-state', {}, { queue: false });
   document.body.classList.remove('is-error');
   launcherVisual.src = '/assets/img/brand/launch-loading-1080x1920.png?v=20260901-persistent-pages';
   launcher.setAttribute('aria-busy', 'false');
-  window.setTimeout(() => {
+  const readyConversationId = activeConversationId;
+  readyHandoffTimer = window.setTimeout(() => {
+    if (!runtimeReady || readyConversationId !== activeConversationId) return;
     closeDrawers();
     modelDialog?.close();
     document.body.classList.remove('has-preview');
@@ -173,11 +182,13 @@ function safePreviewImage(value) {
 }
 
 function normalizeMessage(message, index = 0) {
-  const content = visiblePreviewText(message?.content ?? message?.text ?? message?.mes);
+  const isUser = message?.role === 'user' || message?.is_user === true;
+  const raw = message?.content ?? message?.text ?? message?.mes;
+  const content = isUser ? String(raw || '').trim().slice(0, 12_000) : visiblePreviewText(raw);
   if (!content || message?.role === 'system' || message?.is_system === true) return null;
   return {
     id: String(message?.id || message?.extra?.homer_message_id || `local-${index}`).slice(0, 180),
-    role: message?.role === 'user' || message?.is_user === true ? 'user' : 'assistant',
+    role: isUser ? 'user' : 'assistant',
     content,
     created_at: Number(message?.created_at || message?.extra?.homer_created_at || 0),
   };
@@ -201,13 +212,13 @@ function readCachedConversation(conversationId) {
   const id = String(conversationId || '').trim();
   if (!id) return null;
   const native = parseJson(nativeCall('readConversationSnapshot', id), null);
-  if (native?.conversation_id && Array.isArray(native.messages)) return native;
+  if (native?.conversation_id === id && Array.isArray(native.messages)) return native;
   try {
-    const cached = parseJson(localStorage.getItem(`${PREVIEW_CACHE_PREFIX}${id}`), null);
-    if (cached?.conversation_id) return cached;
+    const cached = parseJson(localStorage.getItem(scopedKey(`${PREVIEW_CACHE_PREFIX}${id}`)), null);
+    if (cached?.conversation_id === id && Array.isArray(cached.messages)) return cached;
     const legacy = parseJson(localStorage.getItem(`homer.dialogue.preview.v1:${id}`), null)
       || parseJson(nativeCall('readLegacySnapshot'), null);
-    if (legacy && Array.isArray(legacy.messages)) {
+    if (legacy && legacy.conversation_id === id && Array.isArray(legacy.messages)) {
       return {
         conversation_id: id,
         app_id: activeAppId,
@@ -228,7 +239,7 @@ function writeCachedConversation(snapshot) {
   const payload = JSON.stringify({ ...snapshot, updated_at: Date.now() });
   nativeCall('saveConversationSnapshot', payload);
   try {
-    localStorage.setItem(`${PREVIEW_CACHE_PREFIX}${snapshot.conversation_id}`, payload);
+    localStorage.setItem(scopedKey(`${PREVIEW_CACHE_PREFIX}${snapshot.conversation_id}`), payload);
   } catch {
     // Android SQLite remains available when browser storage is full.
   }
@@ -237,7 +248,7 @@ function writeCachedConversation(snapshot) {
 function readCachedHistory() {
   const native = parseJson(nativeCall('readConversationHistory'), []);
   let local = [];
-  try { local = parseJson(localStorage.getItem(HISTORY_CACHE_KEY), []); } catch { local = []; }
+  try { local = parseJson(localStorage.getItem(scopedKey(HISTORY_CACHE_KEY)), []); } catch { local = []; }
   const merged = new Map();
   for (const item of [...(Array.isArray(native) ? native : []), ...(Array.isArray(local) ? local : [])]) {
     const id = String(item?.id || item?.conversation_id || '');
@@ -249,7 +260,13 @@ function readCachedHistory() {
 }
 
 function writeCachedHistory(items) {
-  try { localStorage.setItem(HISTORY_CACHE_KEY, JSON.stringify(items.slice(0, 100))); } catch {}
+  try { localStorage.setItem(scopedKey(HISTORY_CACHE_KEY), JSON.stringify(items.slice(0, 100))); } catch {}
+}
+
+function scopedKey(key) {
+  const user = getCachedUser();
+  const owner = String(user?.id || user?.user_id || user?.email || '').trim();
+  return `${key}:owner:${encodeURIComponent(owner || 'anonymous')}`;
 }
 
 function renderMessages(messages, { pending = '' } = {}) {
@@ -340,7 +357,10 @@ async function loadQuickPreview(conversationId) {
   renderCachedConversation(id);
   try {
     const response = await api.messages(id, { limit: 120 });
-    if (requestId !== previewRequestId) return;
+    if (requestId !== previewRequestId || id !== activeConversationId || runtimeReady) return;
+    const data = response?.data || response || {};
+    const returnedId = String(data.conversation_id || data.conversation?.id || id);
+    if (returnedId !== id) return;
     renderConversation(response);
   } catch {
     // Local cache stays usable without the network.
@@ -348,6 +368,7 @@ async function loadQuickPreview(conversationId) {
 }
 
 function showShell() {
+  window.clearTimeout(readyHandoffTimer);
   document.body.classList.remove('is-ready', 'is-error');
   document.body.classList.add('has-preview');
   launcher.setAttribute('aria-busy', 'false');
@@ -357,10 +378,14 @@ function showConversationSwitchShell(message) {
   const appId = String(message?.app_id || '').trim();
   const conversationId = String(message?.conversation_id || '').trim();
   if (!appId || !conversationId) return;
+  // Ignore the acknowledgement of a switch already reflected in the host.
+  if (!runtimeReady && conversationId === activeConversationId && activeAppId === appId) return;
   clearReadyTimer();
   runtimeReady = false;
+  runtimeState = null;
   pendingDraft = '';
   previewSend.disabled = false;
+  previewInput.value = '';
   closeDrawers();
   updateVisibleConversationUrl(appId, conversationId);
   showShell();
@@ -375,6 +400,7 @@ function showConversationSwitchShell(message) {
       messages: [],
     }, { save: false });
   }
+  updateModelSummary();
   void loadQuickPreview(conversationId);
 }
 
@@ -448,7 +474,7 @@ async function loadHistory() {
   }
 }
 
-async function resolveLaunchTarget() {
+async function resolveLaunchTarget(requestId) {
   const params = new URLSearchParams(location.search);
   let appId = String(params.get('app_id') || '').trim();
   let conversationId = String(params.get('conversation_id') || params.get('conv_id') || '').trim();
@@ -458,8 +484,10 @@ async function resolveLaunchTarget() {
     return runtimeTarget(appId, conversationId);
   }
   const [settings] = await Promise.all([readPublicSettings(), api.profile()]);
+  if (requestId !== launchRequestId) return null;
   if (!appId) {
     const response = await api.conversations();
+    if (requestId !== launchRequestId) return null;
     const conversations = response?.data?.list || response?.list || [];
     const selected = conversationId ? conversations.find(item => String(item?.id || '') === conversationId) : conversations[0];
     appId = String(selected?.app_id || '').trim();
@@ -467,6 +495,7 @@ async function resolveLaunchTarget() {
   }
   if (!appId) throw new Error('还没有可进入的角色会话，请先从探索页选择一张角色卡。');
   const response = await api.dialogueSession(appId, conversationId, { launchOnly: true });
+  if (requestId !== launchRequestId) return null;
   const payload = response?.data || response || {};
   const launch = payload?.launch;
   if (!launch?.app_id || !launch?.conversation_id) throw new Error('后端没有返回可启动的角色会话。');
@@ -491,6 +520,7 @@ function allowedNavigationPath(value) {
 }
 
 function cacheRuntimeState(state) {
+  if (String(state?.conversation_id || '') !== activeConversationId) return;
   runtimeState = state;
   const snapshot = conversationSnapshot(state);
   if (snapshot.messages.some(item => item.role === 'user' && item.content === pendingDraft)) {
@@ -503,7 +533,7 @@ function cacheRuntimeState(state) {
     writeCachedHistory(history);
   }
   try {
-    localStorage.setItem(`${SETTINGS_CACHE_PREFIX}${snapshot.conversation_id}`, JSON.stringify({
+    localStorage.setItem(scopedKey(`${SETTINGS_CACHE_PREFIX}${snapshot.conversation_id}`), JSON.stringify({
       models: state?.models || [],
       model_default_id: state?.model_default_id || '',
       model_settings: state?.model_settings || {},
@@ -519,12 +549,18 @@ function handleRuntimeMessage(event) {
   const message = event.data;
   if (!message || message.channel !== HOST_CHANNEL || message.version !== 1) return;
   if (message.type === 'ready') {
+    if (activeConversationId && String(message.conversation_id || '') !== activeConversationId) return;
     updateVisibleConversationUrl(message.app_id, message.conversation_id);
     markReady(message.role_name || message.title || '');
     return;
   }
-  if (message.type === 'conversation-switching') {
+  if (message.type === 'conversation-switching' || message.type === 'conversation-switch-failed') {
     showConversationSwitchShell(message);
+    if (message.type === 'conversation-switch-failed') {
+      pendingCommands.length = 0;
+      markReady(message.role_name || '');
+      showToast('未能切换，已返回原会话');
+    }
     return;
   }
   if (message.type === 'state') {
@@ -535,7 +571,7 @@ function handleRuntimeMessage(event) {
     setDocumentTitle(message.role_name || message.title || '');
     return;
   }
-  if (message.type === 'conversation') {
+  if (message.type === 'conversation' && runtimeReady) {
     updateVisibleConversationUrl(message.app_id, message.conversation_id);
     return;
   }
@@ -545,6 +581,13 @@ function handleRuntimeMessage(event) {
     return;
   }
   if (message.type === 'command-error') {
+    pendingCommands.length = 0;
+    if (pendingDraft) {
+      previewInput.value = pendingDraft;
+      pendingDraft = '';
+      previewSend.disabled = false;
+    }
+    renderCachedConversation(activeConversationId);
     showToast(message.message || '操作失败');
     return;
   }
@@ -553,7 +596,7 @@ function handleRuntimeMessage(event) {
 
 function modelData() {
   if (runtimeState?.models) return runtimeState;
-  try { return parseJson(localStorage.getItem(`${SETTINGS_CACHE_PREFIX}${activeConversationId}`), {}); } catch { return {}; }
+  try { return parseJson(localStorage.getItem(scopedKey(`${SETTINGS_CACHE_PREFIX}${activeConversationId}`)), {}); } catch { return {}; }
 }
 
 function updateModelSummary(state = modelData()) {
@@ -594,24 +637,25 @@ async function switchConversation(appId, conversationId) {
     closeDrawers();
     return;
   }
-  closeDrawers();
-  pendingDraft = '';
-  previewSend.disabled = false;
-  const wasReady = runtimeReady;
-  updateVisibleConversationUrl(appId, conversationId);
-  showShell();
-  renderCachedConversation(conversationId);
-  void loadQuickPreview(conversationId);
-  if (wasReady) {
-    postRuntimeCommand('switch-conversation', { app_id: appId, conversation_id: conversationId });
-    runtimeReady = false;
+  if (pendingDraft || runtimeState?.generating) {
+    showToast('当前消息处理完成后再切换会话');
     return;
   }
+  const wasReady = runtimeReady;
+  ++launchRequestId;
+  pendingCommands.length = 0;
+  if (wasReady) {
+    postRuntimeCommand('switch-conversation', { app_id: appId, conversation_id: conversationId });
+    showConversationSwitchShell({ app_id: appId, conversation_id: conversationId });
+    return;
+  }
+  showConversationSwitchShell({ app_id: appId, conversation_id: conversationId });
   activeTarget = runtimeTarget(appId, conversationId);
   frame.src = activeTarget.href;
 }
 
 async function start() {
+  const requestId = ++launchRequestId;
   clearReadyTimer();
   runtimeReady = false;
   launcherVisual.src = '/assets/img/brand/launch-loading-1080x1920.png?v=20260901-persistent-pages';
@@ -625,15 +669,29 @@ async function start() {
   if (activeConversationId) renderCachedConversation(activeConversationId);
   frame.removeAttribute('src');
   try {
-    activeTarget = await resolveLaunchTarget();
+    const target = await resolveLaunchTarget(requestId);
+    if (requestId !== launchRequestId) return;
+    activeTarget = target;
     frame.src = activeTarget.href;
     readyTimer = window.setTimeout(() => fail(new Error('后台对话能力连接超时，本地历史仍可使用。')), READY_TIMEOUT_MS);
   } catch (error) {
-    fail(error);
+    if (requestId === launchRequestId) fail(error);
   }
 }
 
 window.addEventListener('message', handleRuntimeMessage);
+// Android keeps this document alive when a different history item is opened.
+// A cancelled event means navigation was handled, including a busy-chat refusal.
+window.addEventListener('homer:navigate-conversation', event => {
+  try {
+    const target = new URL(String(event.detail?.url || ''), location.href);
+    const appId = target.searchParams.get('app_id');
+    const conversationId = target.searchParams.get('conversation_id') || target.searchParams.get('conv_id');
+    if (target.origin !== location.origin || target.pathname !== '/app/chat.html' || !appId || !conversationId) return;
+    event.preventDefault();
+    void switchConversation(appId, conversationId);
+  } catch { /* The native container falls back to normal navigation. */ }
+});
 frame.addEventListener('error', () => fail(new Error('对话能力连接失败。')));
 retry.addEventListener('click', () => void start());
 networkRetry.addEventListener('click', () => void start());
@@ -680,7 +738,7 @@ modelForm.addEventListener('submit', event => {
   const data = modelData();
   data.model_settings = settings;
   runtimeState = { ...(runtimeState || {}), ...data };
-  try { localStorage.setItem(`${SETTINGS_CACHE_PREFIX}${activeConversationId}`, JSON.stringify(data)); } catch {}
+  try { localStorage.setItem(scopedKey(`${SETTINGS_CACHE_PREFIX}${activeConversationId}`), JSON.stringify(data)); } catch {}
   postRuntimeCommand('model-settings', { settings });
   updateModelSummary(data);
   modelDialog.close();

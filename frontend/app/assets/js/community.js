@@ -1,5 +1,5 @@
-import { api, requireAuth, getCachedUser, setCachedUser, ApiError } from '/app/assets/js/app-core.js?v=20260720-community-versions';
-import { injectLayout } from '/app/assets/js/layout.js?v=20260901-persistent-pages';
+import { api, requireAuth, getCachedUser, setCachedUser, ApiError } from '/app/assets/js/app-core.js?v=20260905-notices-v1';
+import { injectLayout } from '/app/assets/js/layout.js?v=20260905-notices-v1';
 
 const WORK_TYPES = ['mod', 'ui_template', 'preset'];
 const TYPE_LABELS = { mod: 'Mod', ui_template: 'UI 模板', preset: '预设' };

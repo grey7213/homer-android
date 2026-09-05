@@ -10,7 +10,7 @@
   <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
   <link rel="stylesheet" href="/assets/css/custom.css?v=20260901-persistent-pages">
   <link rel="stylesheet" href="/assets/css/admin.css?v=20260817-mobile-model-pricing">
-  <script type="module" src="/assets/js/admin-app.js?v=20260817-preset-pricing"></script>
+  <script type="module" src="/assets/js/admin-app.js?v=20260905-notices-v1"></script>
   <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
 </head>
 <body class="xy-admin min-h-screen">
@@ -1107,6 +1107,36 @@
               </section>
             </div>
           </div>
+
+          <!-- 运营配置 -->
+          <section x-show="activeTab === 'notifications'" aria-label="通知管理">
+            <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
+              <div><h1 class="text-2xl font-bold xy-gradient-text">通知管理</h1>
+                <p class="text-sm text-slate-400 mt-2">启用的通知会在进入软件时弹出；用户可选择今日不再弹出。</p></div>
+              <button class="xy-btn xy-btn-primary" @click="editNotification()" :disabled="notificationBusy">创建通知</button>
+            </div>
+            <p role="alert" x-show="notificationError" x-text="notificationError" class="text-red-400 mb-4"></p>
+            <template x-if="notificationForm">
+              <form class="xy-glass p-5 mb-6 space-y-4" @submit.prevent="saveNotification()">
+                <h2 class="font-semibold" x-text="notificationForm.id ? '编辑通知' : '创建通知'"></h2>
+                <label class="block">通知标题<input class="xy-input mt-2" x-model="notificationForm.title" maxlength="80" required :disabled="notificationBusy"></label>
+                <label class="block">通知正文<textarea class="xy-input mt-2 min-h-40" x-model="notificationForm.content" maxlength="10000" required :disabled="notificationBusy"></textarea></label>
+                <label class="flex gap-2 items-center"><input type="checkbox" x-model="notificationForm.enabled" :disabled="notificationBusy">启用通知</label>
+                <div class="flex flex-wrap gap-3"><button class="xy-btn xy-btn-primary" type="submit" :disabled="notificationBusy" x-text="notificationBusy ? '保存中…' : '保存通知'"></button>
+                  <button class="xy-btn xy-btn-ghost" type="button" @click="notificationForm=null" :disabled="notificationBusy">取消</button></div>
+              </form>
+            </template>
+            <p x-show="!notifications.length" class="text-slate-400 py-8">暂无通知，点击“创建通知”添加。</p>
+            <div class="space-y-4"><template x-for="notice in notifications" :key="notice.id">
+              <article class="xy-glass p-5">
+                <div class="flex flex-wrap justify-between gap-3"><h2 class="font-semibold break-all" x-text="notice.title"></h2>
+                  <span class="text-sm text-slate-400" x-text="notice.enabled ? '已启用' : '已停用'"></span></div>
+                <p class="text-sm text-slate-300 whitespace-pre-wrap break-words mt-3" x-text="notice.content"></p>
+                <div class="flex gap-3 mt-4"><button class="xy-btn xy-btn-ghost" @click="editNotification(notice)" :disabled="notificationBusy">编辑</button>
+                  <button class="xy-btn xy-btn-ghost text-red-400" @click="deleteNotification(notice)" :disabled="notificationBusy">删除</button></div>
+              </article>
+            </template></div>
+          </section>
 
           <!-- 运营配置 -->
           <div x-show="activeTab === 'site'">

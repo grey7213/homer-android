@@ -1,4 +1,4 @@
-import { api, isLoggedIn, ApiError } from '/app/assets/js/app-core.js?v=20260717-handoff-merge';
+import { api, isLoggedIn, ApiError } from '/app/assets/js/app-core.js?v=20260905-notices-v1';
 
 const statusNode = document.querySelector('[data-resume-status]');
 

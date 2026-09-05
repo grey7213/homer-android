@@ -8,8 +8,9 @@
   <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
   <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
   <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
-  <script type="module" src="/app/assets/js/login.js?v=20260812-license-removal"></script>
+  <script type="module" src="/app/assets/js/login.js?v=20260905-notices-v1"></script>
   <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
+  <script type="module" src="/app/assets/js/apk-updates.js?v=20260905-apk-update"></script>
 </head>
 <body class="min-h-screen bg-[#0a0420]">
   <div class="xy-stars-bg"></div>
@@ -128,6 +129,10 @@
 
       <p class="text-center text-xs text-slate-500 mt-6">
         <a href="/" class="xy-link" x-text="authText('home_link_text', '返回首页')">返回首页</a>
+      </p>
+      <p class="text-center text-sm mt-4" data-homer-update-section hidden>
+        <button type="button" class="xy-btn xy-btn-ghost" data-homer-check-update hidden>检查更新</button>
+        <span class="text-xs text-slate-500 ml-2" data-homer-app-version></span>
       </p>
     </div>
   </div>

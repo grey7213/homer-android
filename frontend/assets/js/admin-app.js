@@ -1,5 +1,5 @@
 // 惑梦（Homer） 管理后台 Alpine.js 应用
-import { api, isLoggedIn, formatDateTime, ApiError } from '/assets/js/api.js?v=20260817-preset-pricing';
+import { api, isLoggedIn, formatDateTime, ApiError } from '/assets/js/api.js?v=20260905-notices-v1';
 
 function adminPanel() {
   return {
@@ -9,10 +9,15 @@ function adminPanel() {
     toast: null,
     toastTimer: null,
     adminInfo: null,
+    notifications: [],
+    notificationForm: null,
+    notificationBusy: false,
+    notificationError: '',
     errorMessage: '',
     errorDetail: '',
 
     tabs: [
+      { id: 'notifications', label: '通知管理', icon: '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M6 8a6 6 0 0112 0v8l2 2H4l2-2V8m4 12h4"/></svg>' },
       { id: 'stats', label: '数据总览', icon: '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>' },
       { id: 'users', label: '用户管理', icon: '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-9a4 4 0 11-8 0 4 4 0 018 0zM21 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>' },
       { id: 'logs', label: '请求日志', icon: '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>' },
@@ -855,6 +860,7 @@ function adminPanel() {
 
     async switchTab(id) {
       this.activeTab = id;
+      if (id === 'notifications') await this.loadNotifications();
       if (id === 'stats' && !this.stats) await this.loadStats();
       if (id === 'users' && this.users.length === 0) await this.loadUsers(1);
       if (id === 'logs' && this.logs.length === 0) await this.loadLogs(1);
@@ -869,6 +875,43 @@ function adminPanel() {
       if (id === 'global-presets' && !this.globalPresets) await this.loadGlobalPresets();
       if (id === 'plugins' && this.tavoPlugins.length === 0) await this.loadTavoPlugins();
       if (id === 'apps' && this.apps.length === 0) await this.loadApps(1);
+    },
+
+    async loadNotifications() {
+      this.notificationError = '';
+      try {
+        const result = await api.admin.notifications();
+        this.notifications = result?.data?.list || result?.list || [];
+      } catch (error) { this.notificationError = error.message || '通知读取失败'; }
+    },
+    editNotification(item = null) {
+      this.notificationError = '';
+      this.notificationForm = item ? { ...item } : { title: '', content: '', enabled: true };
+    },
+    async saveNotification() {
+      if (this.notificationBusy || !this.notificationForm) return;
+      if (!this.notificationForm.title.trim() || !this.notificationForm.content.trim()) {
+        this.notificationError = '请填写通知标题和正文'; return;
+      }
+      this.notificationBusy = true;
+      this.notificationError = '';
+      try {
+        await api.admin.saveNotification(this.notificationForm);
+        this.notificationForm = null;
+        await this.loadNotifications();
+      } catch (error) { this.notificationError = error.message || '保存失败'; }
+      finally { this.notificationBusy = false; }
+    },
+    async deleteNotification(item) {
+      if (this.notificationBusy || !confirm('确定删除这条通知？删除后用户将不再看到它。')) return;
+      this.notificationBusy = true;
+      this.notificationError = '';
+      try {
+        await api.admin.deleteNotification(item.id);
+        if (this.notificationForm?.id === item.id) this.notificationForm = null;
+        await this.loadNotifications();
+      } catch (error) { this.notificationError = error.message || '删除失败'; }
+      finally { this.notificationBusy = false; }
     },
 
     contestPhaseLabel(contest) {

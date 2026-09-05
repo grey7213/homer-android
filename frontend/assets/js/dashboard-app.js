@@ -1,5 +1,5 @@
 // 惑梦（Homer） 用户面板 Alpine.js 应用
-import { api, getToken, setToken, clearAuth, isLoggedIn, getCachedUser, setCachedUser, formatDateTime, ApiError } from '/assets/js/api.js?v=20260717-handoff-merge';
+import { api, getToken, setToken, clearAuth, isLoggedIn, getCachedUser, setCachedUser, formatDateTime, ApiError } from '/assets/js/api.js?v=20260905-notices-v1';
 
 function dashboard() {
   return {

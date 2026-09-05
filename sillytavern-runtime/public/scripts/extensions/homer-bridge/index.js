@@ -4430,6 +4430,7 @@ async function switchConversation(conversation) {
     }
     if (loadingLaunch || generationBusy) {
         showHostNotice(generationBusy ? '回复生成完成后才能切换会话' : '会话正在切换，请稍候', 'warning');
+        if (!loadingLaunch) notifyHostConversation('conversation-switch-failed');
         return;
     }
 
@@ -4521,7 +4522,7 @@ async function switchConversation(conversation) {
         showHostNotice(String(error?.message || '历史会话切换失败'), 'error');
         // The host exposes its local shell while this switch runs.  Restore the
         // previous ready runtime immediately if the target cannot be loaded.
-        notifyHostConversation();
+        notifyHostConversation('conversation-switch-failed');
     } finally {
         loadingLaunch = false;
         document.body.classList.remove('homer-switching-chat');

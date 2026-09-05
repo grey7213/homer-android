@@ -1,16 +1,21 @@
-import { api, requireAuth, getCachedUser, setCachedUser, clearAuth, ApiError } from '/app/assets/js/app-core.js?v=20260717-handoff-merge';
-import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260901-persistent-pages';
+import { api, requireAuth, getCachedUser, setCachedUser, clearAuth, ApiError } from '/app/assets/js/app-core.js?v=20260905-notices-v1';
+import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260905-notices-v1';
+import { readPageCache, writePageCache } from './page-cache.js';
 
 async function loadUser(ctx) {
   if (!requireAuth()) return false;
   const cached = getCachedUser();
   if (cached) ctx.user = cached;
   try {
-    const profile = await api.profile();
+    const [profileResult, pointsResult] = await Promise.allSettled([api.profile(), api.points()]);
+    if (profileResult.status === 'rejected') throw profileResult.reason;
+    const profile = profileResult.value;
     ctx.user = profile?.data || profile;
     setCachedUser(ctx.user);
-    const p = await api.points();
-    ctx.points = parseInt(p.points || p.data?.points || 0, 10);
+    if (pointsResult.status === 'fulfilled') {
+      const p = pointsResult.value;
+      ctx.points = parseInt(p.points || p.data?.points || 0, 10);
+    }
     return true;
   } catch (err) {
     if (err instanceof ApiError && err.code === 401) {
@@ -79,7 +84,15 @@ export function historiesPage() {
   return {
     user: null, points: 0, loading: false, conversations: [], siteSettings: null,
     copyingId: '', deletingId: '', likingId: '', favoritingId: '',
-    async init() { injectLayout('histories'); await loadSiteSettings(this); if (await loadUser(this)) await this.loadList(); },
+    _listEpoch: 0,
+    async init() {
+      injectLayout('histories');
+      if (!requireAuth()) return;
+      this.user = getCachedUser();
+      const cached = readPageCache('histories', this.user);
+      if (Array.isArray(cached?.list)) this.conversations = cached.list.map(item => this.normalizeConversation(item));
+      await Promise.allSettled([loadSiteSettings(this), loadUser(this), this.loadList()]);
+    },
     emptyText(key, fallback = '') { return emptyText(this, key, fallback); },
     appNavText(key, fallback = '') { return appNavText(this, key, fallback); },
     chatText(key, fallback = '') { return chatText(this, key, fallback); },
@@ -151,11 +164,15 @@ export function historiesPage() {
       return Array.from(groups.values());
     },
     async loadList() {
+      const epoch = ++this._listEpoch;
+      const owner = getCachedUser();
       this.loading = true;
       try {
         const r = await api.conversations();
+        if (epoch !== this._listEpoch) return;
         this.conversations = (r?.data?.list || []).map(item => this.normalizeConversation(item));
-      } finally { this.loading = false; }
+        writePageCache('histories', owner, { list: this.conversations.slice(0, 100) });
+      } finally { if (epoch === this._listEpoch) this.loading = false; }
     },
     async toggleLike(c, event) {
       if (event) event.preventDefault();

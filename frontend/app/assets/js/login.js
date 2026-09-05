@@ -1,5 +1,5 @@
-import { api, setToken, clearAuth, isLoggedIn, ApiError } from '/app/assets/js/app-core.js?v=20260717-handoff-merge';
-import { loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260901-persistent-pages';
+import { api, setToken, clearAuth, isLoggedIn, ApiError } from '/app/assets/js/app-core.js?v=20260905-notices-v1';
+import { loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260905-notices-v1';
 
 function safeNextPath() {
   const value = new URLSearchParams(location.search).get('next') || '/app/';

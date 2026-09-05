@@ -1,5 +1,6 @@
 // 惑梦（Homer） Web App 共享核心 - 在所有 /app/*.html 顶部加载
-import { api as baseApi, getToken, setToken, clearAuth, isLoggedIn, getCachedUser, setCachedUser, formatDateTime, ApiError } from '/assets/js/api.js?v=20260720-community-versions';
+import './notifications.js?v=20260905-notices-v1';
+import { api as baseApi, getToken, setToken, clearAuth, isLoggedIn, getCachedUser, setCachedUser, formatDateTime, ApiError } from '/assets/js/api.js?v=20260905-notices-v1';
 
 function redirectAfterUnauthorized() {
   clearAuth();
@@ -21,6 +22,7 @@ async function rawRequest(path, opts = {}) {
     // 携带 HttpOnly 登录 Cookie
     credentials: 'include',
     body: opts.body ? (opts.body instanceof FormData ? opts.body : JSON.stringify(opts.body)) : undefined,
+    signal: opts.signal,
   });
   const text = await res.text();
   let data = null;
@@ -110,21 +112,26 @@ async function sseRequest(path, payload, handlers = {}, options = {}) {
     else handlers.onEvent?.(event, data);
   };
 
-  while (true) {
-    const { value, done } = await reader.read();
-    if (value) {
-      buffer += decoder.decode(value, { stream: !done });
-      let idx;
-      while ((idx = buffer.indexOf('\n\n')) >= 0) {
-        const block = buffer.slice(0, idx).trim();
-        buffer = buffer.slice(idx + 2);
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      buffer += done ? decoder.decode() : decoder.decode(value, { stream: true });
+      // SSE allows CRLF as well as LF, including separators split across reads.
+      let separator;
+      while ((separator = /\r?\n\r?\n/.exec(buffer))) {
+        const block = buffer.slice(0, separator.index).trim();
+        buffer = buffer.slice(separator.index + separator[0].length);
         if (block) dispatch(block);
       }
+      if (done) break;
     }
-    if (done) break;
+    const tail = buffer.trim();
+    if (tail) dispatch(tail);
+  } finally {
+    // Stop the transport when dispatch or an onDelta handler fails.
+    await reader.cancel().catch(() => {});
+    reader.releaseLock();
   }
-  const tail = buffer.trim();
-  if (tail) dispatch(tail);
   if (!sawMessageEnd) {
     throw new ApiError('连接提前中断，本次回复未完成，请重试', 502, { code: 'stream_incomplete' });
   }

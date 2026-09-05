@@ -1,5 +1,5 @@
-import { api, requireAuth, getCachedUser } from '/app/assets/js/app-core.js?v=20260717-handoff-merge';
-import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260901-persistent-pages';
+import { api, requireAuth, getCachedUser } from '/app/assets/js/app-core.js?v=20260905-notices-v1';
+import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260905-notices-v1';
 
 function groupChatPage() {
   return {

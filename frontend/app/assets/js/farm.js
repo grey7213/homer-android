@@ -1,5 +1,5 @@
-import { api, requireAuth, getCachedUser, setCachedUser, ApiError } from '/app/assets/js/app-core.js?v=20260717-handoff-merge';
-import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260901-persistent-pages';
+import { api, requireAuth, getCachedUser, setCachedUser, ApiError } from '/app/assets/js/app-core.js?v=20260905-notices-v1';
+import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260905-notices-v1';
 
 const BASE_SEEDS = [
   { kind: 'carrot', apiKind: 'code_carrot', name: '代码胡萝卜', cost: 50, rewardCoins: 90, rewardXp: 10, durationSeconds: 3 * 3600, durationLabel: '3 小时' },

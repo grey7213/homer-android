@@ -7,6 +7,11 @@ const TOKEN_KEY = 'ai_xingyue_token';
 const LOGIN_KEY = 'ai_xingyue_logged_in';
 const USER_KEY = 'ai_xingyue_user';
 
+function syncNativeAccount(user) {
+  const owner = String(user?.id || user?.user_id || user?.email || '').trim();
+  try { window.HomerNative?.setAccountScope?.(owner); } catch { /* Browser-only mode. */ }
+}
+
 export function getToken() {
   // 敏感 token 现由 HttpOnly Cookie 携带，JS 无法读取。
   // 此处仅为兼容仍残留旧 token 的历史会话，作为 Bearer 回退。
@@ -35,6 +40,7 @@ export function getCachedUser() {
 }
 
 export function setCachedUser(user) {
+  syncNativeAccount(user);
   if (user) {
     localStorage.setItem(USER_KEY, JSON.stringify(user));
   } else {
@@ -46,7 +52,18 @@ export function clearAuth() {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(LOGIN_KEY);
   localStorage.removeItem(USER_KEY);
+  syncNativeAccount(null);
+  // Remove legacy unscoped dialogue and navigation caches on sign-out.
+  for (const storage of [localStorage, sessionStorage]) {
+    for (const key of Object.keys(storage)) {
+      if (key.startsWith('homer.dialogue.') || key.startsWith('homer.page-cache.')
+          || key.startsWith('ai_xingyue_home_')) storage.removeItem(key);
+    }
+  }
+  window.dispatchEvent(new Event('homer-account-cleared'));
 }
+
+syncNativeAccount(getCachedUser());
 
 export function isLoggedIn() {
   // 登录态以非敏感标记判断；兼容仍残留旧 token 的历史会话。
@@ -154,6 +171,10 @@ export const api = {
 
   // 管理员接口
   admin: {
+    notifications: () => request('/admin/api/notifications'),
+    saveNotification: (item) => request('/admin/api/notifications' + (item.id ? '/' + encodeURIComponent(item.id) : ''),
+      { method: item.id ? 'PUT' : 'POST', body: { title: item.title, content: item.content, enabled: !!item.enabled } }),
+    deleteNotification: (id) => request('/admin/api/notifications/' + encodeURIComponent(id), { method: 'DELETE' }),
     whoami: () => request('/admin/api/whoami'),
     stats: () => request('/admin/api/stats'),
     users: (page = 1, limit = 20, search = '') => {
