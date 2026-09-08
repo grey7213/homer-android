@@ -8,8 +8,10 @@
   <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
   <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
   <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
-  <script type="module" src="/app/assets/js/my-apps.js?v=20260905-notices-v1"></script>
+  <script type="module" src="/app/assets/js/my-apps.js?v=20260908-pr7"></script>
   <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
+  <link rel="stylesheet" href="/assets/css/app-design.css?v=20260908-pr7">
+  <script defer src="/assets/js/option-picker.js?v=20260908-pr7"></script>
 </head>
 <body class="min-h-screen">
   <div class="xy-stars-bg"></div>
@@ -29,7 +31,7 @@
       </template>
 
       <div class="max-w-6xl mx-auto app-page-pad">
-        <div x-show="loading" class="flex justify-center py-24"><div class="xy-loading"></div></div>
+        <div x-show="loading && !apps.length" class="flex justify-center py-24"><div class="xy-loading"></div></div>
         <div x-show="!loading && apps.length === 0" class="xy-glass p-10 text-center text-violet-200/70">
           <img src="/assets/img/apk/empty_view.webp?v=20260901-persistent-pages" class="w-28 mx-auto opacity-60 mb-4">
           <p class="text-sm mb-4" x-text="emptyText('my_apps_empty_title', '还没有自己创建的角色')">还没有自己创建的角色</p>

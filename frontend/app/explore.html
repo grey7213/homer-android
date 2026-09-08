@@ -7,14 +7,16 @@
   <link rel="icon" type="image/png" sizes="32x32" href="/assets/img/favicon-32.png?v=20260901-persistent-pages">
   <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
   <link rel="preload" as="script" href="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1">
-  <link rel="modulepreload" href="/assets/js/api.js?v=20260905-notices-v1">
-  <link rel="modulepreload" href="/app/assets/js/app-core.js?v=20260905-notices-v1">
-  <link rel="modulepreload" href="/app/assets/js/layout.js?v=20260905-notices-v1">
+  <link rel="modulepreload" href="/assets/js/api.js?v=20260908-pr7">
+  <link rel="modulepreload" href="/app/assets/js/app-core.js?v=20260908-pr7">
+  <link rel="modulepreload" href="/app/assets/js/layout.js?v=20260908-pr7">
   <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
-  <script type="module" src="/app/assets/js/explore.js?v=20260905-notices-v1"></script>
+  <script type="module" src="/app/assets/js/explore.js?v=20260908-pr7"></script>
   <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
+  <link rel="stylesheet" href="/assets/css/explore-cards.css?v=20260908-pr7">
+  <script defer src="/assets/js/option-picker.js?v=20260908-pr7"></script>
 </head>
-<body class="min-h-screen">
+<body class="min-h-screen explore-page">
   <div class="xy-stars-bg"></div>
   <div class="xy-meteor"></div>
 
@@ -42,6 +44,7 @@
         <button class="home-icon-btn" type="button" @click="toggleAdvancedSearch" :class="{ 'is-active': advancedOpen }" :title="appHomeText('advanced_filter_title', '高级搜索')" :aria-expanded="advancedOpen.toString()" aria-controls="advanced-search-panel">
           <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M7 12h10M10 18h4"/></svg>
         </button>
+        <button class="home-icon-btn" type="button" data-open-notifications aria-label="查看当前通知" title="通知"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg></button>
       </div>
 
       <div id="advanced-search-panel" class="advanced-search-panel" x-show="advancedOpen" x-transition>
@@ -123,10 +126,12 @@
       </div>
 
       <div x-show="loading && cards.length === 0" class="flex items-center justify-center py-24"><div class="xy-loading"></div></div>
-      <div x-show="!loading && cards.length === 0" class="flex flex-col items-center justify-center py-24 text-violet-200/70">
+      <div x-show="!loading && !loadError && cards.length === 0" class="flex flex-col items-center justify-center py-24 text-violet-200/70">
         <img src="/assets/img/apk/empty_view.webp?v=20260901-persistent-pages" class="w-32 opacity-60 mb-4" alt="">
         <p class="text-sm" x-text="emptyText('explore_no_results', '没有找到匹配的角色')">没有找到匹配的角色</p>
       </div>
+
+      <div x-show="loadError" class="app-page-pad" role="alert"><p x-text="loadError"></p><button type="button" class="xy-btn xy-btn-ghost" @click="loadList(true)" :disabled="loading">重新加载</button></div>
 
       <section class="home-section" x-show="featuredCards().length > 0">
         <div class="home-section-title" x-text="appHomeText('featured_title', '官方每周推荐')">官方每周推荐</div>
@@ -134,30 +139,23 @@
           <template x-for="card in featuredCards()" :key="`featured-${card.id}`">
             <article class="feature-card" :class="{ 'is-pictureless': pictureless || card.pictureless }">
               <a class="feature-card__link" :href="`/app/character.html?id=${encodeURIComponent(card.id)}`" @click="rememberBrowsePosition(card)">
+                <code class="explore-card-id" x-text="`ID ${card.displayId || card.id}`"></code>
                 <div class="feature-card__cover">
                   <img class="feature-card__img" :src="card.cover || card.icon || '/assets/img/apk/avatar.webp?v=20260901-persistent-pages'" :alt="card.name" loading="lazy" referrerpolicy="no-referrer" onerror="this.src='/assets/img/apk/avatar.webp?v=20260901-persistent-pages'">
-                  <span class="feature-card__badge" x-text="appHomeText('featured_badge', '官方推荐')">官方推荐</span>
-                  <p class="feature-card__summary" x-text="card.description || appHomeText('card_summary_fallback', '点击查看角色设定')"></p>
                 </div>
                 <div class="feature-card__body">
                   <h2 class="feature-card__title" x-text="card.name"></h2>
-                  <p class="feature-card__desc" x-text="card.description || appHomeText('card_summary_fallback', '点击查看角色设定')"></p>
-                  <div class="card-capabilities" aria-label="角色能力">
-                    <span class="capability-badge" :class="card.hasOpening ? 'is-on capability-badge--opening' : 'is-off'"><b x-text="card.hasOpening ? '✓' : '—'"></b>开场</span>
-                    <span class="capability-badge" :class="card.hasWorldInfo ? 'is-on capability-badge--world' : 'is-off'"><b x-text="card.hasWorldInfo ? '✓' : '—'"></b>世界书</span>
-                    <span class="capability-badge" :class="card.hasRegex ? 'is-on capability-badge--regex' : 'is-off'"><b x-text="card.hasRegex ? '✓' : '—'"></b>正则</span>
+                  <div class="feature-card__tags">
+                    <template x-for="t in (card.tags || []).slice(0, 6)" :key="t"><span x-text="t"></span></template>
                   </div>
-                  <code class="card-id-chip" x-text="`ID: ${card.displayId || card.id}`"></code>
+                  <p class="feature-card__desc" x-text="card.description || ''"></p>
                   <div class="feature-card__meta">
-                    <span x-text="card.author || appHomeText('official_author', '惑梦（Homer）官方')"></span>
                     <span class="feature-card__stats" x-show="card.likeCount || card.playersCount">
                       <span x-show="card.likeCount" x-text="`♥ ${card.likeCount}`"></span>
                       <span x-show="card.playersCount" x-text="`对话 ${card.playersCount}`"></span>
                     </span>
                   </div>
-                  <div class="feature-card__tags">
-                    <template x-for="t in (card.tags || []).slice(0, 4)" :key="t"><span x-text="t"></span></template>
-                  </div>
+
                 </div>
               </a>
               <button class="char-card__fav feature-card__fav" :class="{ 'is-active': card.favorited }" @click="toggleFavorite(card, $event)" :aria-label="appHomeText('favorite_label', '收藏')">♥</button>
@@ -172,23 +170,18 @@
         <template x-for="card in recommendedCards()" :key="card.id">
           <article class="char-card" :class="{ 'is-pictureless': pictureless || card.pictureless }">
             <a class="char-card__link" :href="`/app/character.html?id=${encodeURIComponent(card.id)}`" @click="rememberBrowsePosition(card)">
+              <code class="explore-card-id" x-text="`ID ${card.displayId || card.id}`"></code>
               <div class="char-card__cover">
                 <img class="char-card__img" :src="card.cover || card.icon || '/assets/img/apk/avatar.webp?v=20260901-persistent-pages'" :alt="card.name" loading="lazy" referrerpolicy="no-referrer" onerror="this.src='/assets/img/apk/avatar.webp?v=20260901-persistent-pages'">
                 <div class="char-card__overlay"></div>
-                <div class="char-card__tags">
-                  <template x-for="t in (card.tags || []).slice(0, 2)" :key="t"><span class="char-card__tag" x-text="t"></span></template>
-                </div>
+
               </div>
               <div class="char-card__body">
-                <div class="char-card__author" x-text="card.author || '惑梦（Homer）官方'"></div>
-                <code class="card-id-chip card-id-chip--compact" x-text="`ID: ${card.displayId || card.id}`"></code>
                 <div class="char-card__name" x-text="card.name"></div>
-                <div class="char-card__desc" x-text="card.description || '点击查看角色设定'"></div>
-                <div class="card-capabilities card-capabilities--compact" aria-label="角色能力">
-                  <span class="capability-badge" :class="card.hasOpening ? 'is-on capability-badge--opening' : 'is-off'"><b x-text="card.hasOpening ? '✓' : '—'"></b>开场</span>
-                  <span class="capability-badge" :class="card.hasWorldInfo ? 'is-on capability-badge--world' : 'is-off'"><b x-text="card.hasWorldInfo ? '✓' : '—'"></b>世界书</span>
-                  <span class="capability-badge" :class="card.hasRegex ? 'is-on capability-badge--regex' : 'is-off'"><b x-text="card.hasRegex ? '✓' : '—'"></b>正则</span>
+                <div class="char-card__tags">
+                  <template x-for="t in (card.tags || []).slice(0, 6)" :key="t"><span class="char-card__tag" x-text="t"></span></template>
                 </div>
+                <div class="char-card__desc" x-text="card.description || ''"></div>
               </div>
             </a>
             <button class="char-card__fav" :class="{ 'is-active': card.favorited }" @click="toggleFavorite(card, $event)" :aria-label="appHomeText('favorite_label', '收藏')">♥</button>

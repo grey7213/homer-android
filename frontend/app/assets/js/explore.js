@@ -1,6 +1,6 @@
-import { api, requireAuth, getCachedUser, setCachedUser, ApiError } from '/app/assets/js/app-core.js?v=20260905-notices-v1';
-import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260905-notices-v1';
-import { readPageCache, writePageCache } from '/app/assets/js/page-cache.js?v=20260905-notices-v1';
+import { api, requireAuth, getCachedUser, setCachedUser, ApiError } from '/app/assets/js/app-core.js?v=20260908-pr7';
+import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260908-pr7';
+import { readPageCache, writePageCache } from '/app/assets/js/page-cache.js?v=20260908-pr7';
 
 const DEFAULT_PAGE_SIZE = 12;
 const INITIAL_RANDOM_SEED = Math.floor(Math.random() * 2147483647);
@@ -33,6 +33,7 @@ function explorePage() {
     stats: null,
     sidebarOpen: false,
     loading: false,
+    loadError: '',
     hasMore: true,
     page: 1,
     pageSize: DEFAULT_PAGE_SIZE,
@@ -262,6 +263,7 @@ function explorePage() {
       const requestController = new AbortController();
       this._listAbortController = requestController;
       this.loading = true;
+      this.loadError = '';
       try {
         const params = {
           page: requestPage,
@@ -298,8 +300,11 @@ function explorePage() {
         this.page = requestPage + 1;
         this.persistState();
       } catch (err) {
-        // 上游不可达时静默
-        if (err?.name !== 'AbortError' && requestEpoch === this._listEpoch && !this.cards.length) this.hasMore = false;
+        // 保留已有卡片，同时明确反馈刷新失败。
+        if (err?.name !== 'AbortError' && requestEpoch === this._listEpoch) {
+          this.loadError = err.message || '网络连接暂时不可用，请稍后重试。';
+          if (!this.cards.length) this.hasMore = false;
+        }
       } finally {
         if (requestEpoch === this._listEpoch && this._listAbortController === requestController) {
           this._listAbortController = null;

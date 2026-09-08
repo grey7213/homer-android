@@ -21,6 +21,9 @@ import { loadApprovedExtensions } from './extension-host.js';
 import { installRoleplayHubCompatibility } from './roleplayhub-compat.js';
 import { installCardStageRuntime } from './card-stage.js';
 import { installKeywordInjector } from './keyword-injector.js';
+import { openChatTool } from '/assets/js/chat-tools.js';
+import { bindChatAppearance } from '/assets/js/chat-appearance.js';
+import { installMemoryUi } from '/assets/js/memory-ui.js';
 
 const MODULE_ID = 'homer-bridge';
 const urlParams = new URLSearchParams(window.location.search);
@@ -64,6 +67,7 @@ let dialogueEventLogMuted = 0;
 let messageMenuObserver = null;
 let messageMenuRenderQueued = false;
 let activeMessageMenuTarget = null;
+let messageSelection = null;
 let messagePressTimer = null;
 let messagePressStart = null;
 let messagePressTarget = null;
@@ -135,8 +139,8 @@ function installEmbeddedComposerPolicy() {
     (document.head || document.documentElement).append(style);
     const updateComposer = () => {
         const composer = document.querySelector('#send_textarea');
-        if (composer instanceof HTMLTextAreaElement && composer.placeholder !== '输入想发送的消息') {
-            composer.placeholder = '输入想发送的消息';
+        if (composer instanceof HTMLTextAreaElement && composer.placeholder !== '随便聊聊...') {
+            composer.placeholder = '随便聊聊...';
         }
     };
     const hideAutocomplete = () => {
@@ -705,6 +709,8 @@ function hostMessageSnapshot(message, index) {
         ).slice(0, 180),
         role: message?.is_user ? 'user' : 'assistant',
         content,
+        hidden: Boolean(message?.extra?.homer_hidden),
+        collapsed: Boolean(message?.extra?.homer_collapsed),
         created_at: Number.isFinite(parsedCreatedAt) ? parsedCreatedAt : 0,
         swipes: swipes.slice(0, 100),
         swipe_index: swipeIndex,
@@ -739,7 +745,7 @@ function notifyHostState(reason = 'update') {
             conversation: hostConversationSnapshot(conversation),
             conversations: runtimeUiData.conversations.slice(0, 100).map(hostConversationSnapshot),
             messages: chat
-                .filter(message => !message?.is_system)
+                .filter(message => !message?.is_system || message?.extra?.homer_hidden)
                 .slice(-120)
                 .map(hostMessageSnapshot),
             models: runtimeUiData.models.slice(0, 100).map(model => ({
@@ -750,7 +756,7 @@ function notifyHostState(reason = 'update') {
             })),
             model_default_id: String(runtimeUiData.modelDefaultId || '').slice(0, 160),
             model_settings: { ...conversationModelSettings() },
-            generating: Boolean(generationBusy),
+            generating: Boolean(generationBusy || rollbackBusy),
         },
     });
 }
@@ -771,6 +777,18 @@ function openHostRequestedSettings(section) {
         return;
     }
     returnToDesktopNavigation();
+    if (target === 'new-chat') {
+        document.querySelector('#homer-new-chat-dialog')?.showModal();
+        return;
+    }
+    if (target === 'attachments') {
+        document.querySelector('#homer-attachment-dialog')?.showModal();
+        return;
+    }
+    if (target === 'generation') {
+        document.querySelector('#homer-generation-dialog')?.showModal();
+        return;
+    }
     if (target === 'model') {
         document.querySelector('#homer-model-dialog')?.showModal();
         return;
@@ -824,6 +842,7 @@ async function receiveHostCommand(event) {
             || cloudHomerMessageId(item) === messageId);
         const target = index >= 0 ? messageMenuTargetForIndex(index) : null;
         if (target) await handleMessageMenuAction(String(message.action || ''), target);
+        else showHostNotice('消息尚未同步完成，请稍后重新长按操作', 'warning');
         return;
     }
     if (message.type !== 'draft') return;
@@ -1706,6 +1725,7 @@ function cloudMessageToDialogue(message, index) {
     const role = String(message?.role || 'assistant');
     const isUser = role === 'user';
     const isSystem = role === 'system';
+    const presentation = runtimeVariables.homer_message_presentation?.[String(message?.id || '')] || {};
     const content = String(message?.content || '');
     const createdAt = Number(message?.created_at || Date.now() + index);
     const swipes = Array.isArray(message?.swipes)
@@ -1715,7 +1735,7 @@ function cloudMessageToDialogue(message, index) {
     return {
         name: isUser ? String(session?.user?.name || '你') : String(launch?.card?.data?.name || launch?.card?.name || '角色'),
         is_user: isUser,
-        is_system: isSystem,
+        is_system: isSystem || Boolean(presentation.hidden),
         send_date: new Date(createdAt).toISOString(),
         mes: swipes.length ? swipes[swipeId] : content,
         swipes,
@@ -1727,6 +1747,8 @@ function cloudMessageToDialogue(message, index) {
             extra: {},
         })),
         extra: {
+            homer_hidden: Boolean(presentation.hidden),
+            homer_collapsed: Boolean(presentation.collapsed),
             homer_message_id: String(message?.id || ''),
             homer_sync_id: String(message?.id || `cloud-${index}`),
             homer_created_at: createdAt,
@@ -1805,7 +1827,8 @@ function serializeChat() {
     return context.chat.map((message, index) => ({
         name: String(message?.name || ''),
         is_user: Boolean(message?.is_user),
-        is_system: Boolean(message?.is_system),
+        // Hiding changes prompt participation, not the original cloud message role.
+        is_system: Boolean(message?.is_system && !message?.extra?.homer_hidden),
         send_date: String(message?.send_date || ''),
         mes: String(message?.mes || ''),
         swipes: Array.isArray(message?.swipes) ? message.swipes.map(item => String(item)) : [],
@@ -2474,13 +2497,14 @@ function messageMenuTargetForIndex(messageIndex, element = null, anchor = {}) {
     const context = getContext();
     const index = Number(messageIndex);
     const message = Number.isInteger(index) && index >= 0 ? context.chat[index] : null;
-    if (!message || message?.is_system) {
+    if (!message || (message.is_system && !message.extra?.homer_hidden)) {
         return null;
     }
     return {
         messageIndex: index,
         messageId: stableHomerMessageId(message),
         messageRef: message,
+        message,
         isUser: Boolean(message?.is_user),
         element: element || document.querySelector(`#chat .mes[mesid="${index}"]`),
         anchorX: Number.isFinite(Number(anchor?.x)) ? Number(anchor.x) : null,
@@ -2503,7 +2527,7 @@ function resolveMessageMenuTarget(target) {
     const expectedId = String(target.messageId || '').trim();
     const matches = message => Boolean(
         message
-        && !message?.is_system
+        && (!message.is_system || message.extra?.homer_hidden)
         && (
             (target.messageRef && message === target.messageRef)
             || (expectedId && stableHomerMessageId(message) === expectedId)
@@ -2520,7 +2544,7 @@ function resolveMessageMenuTarget(target) {
         }
         message = index >= 0 ? context.chat[index] : null;
     }
-    if (!message || message?.is_system) {
+    if (!message || (message.is_system && !message.extra?.homer_hidden)) {
         return null;
     }
     const element = document.querySelector(`#chat .mes[mesid="${index}"]`);
@@ -2587,6 +2611,9 @@ function messageMenuActions(resolved) {
         { id: 'edit', label: '改写', icon: 'fa-solid fa-pen' },
         { id: 'rollback', label: '回溯', icon: 'fa-solid fa-clock-rotate-left', cloud: true },
         { id: 'delete', label: '删除', icon: 'fa-regular fa-trash-can', cloud: true, danger: true },
+        { id: 'hide', label: resolved?.message?.extra?.homer_hidden ? '取消隐藏' : '隐藏', icon: 'fa-regular fa-eye' },
+        { id: 'select', label: '多选', icon: 'fa-solid fa-list-check' },
+        { id: 'collapse', label: resolved?.message?.extra?.homer_collapsed ? '展开' : '折叠', icon: 'fa-solid fa-angles-down' },
     ];
 }
 
@@ -2641,7 +2668,7 @@ function closeMessageMenu() {
 }
 
 function positionMessageMenuDialog(dialog, resolved) {
-    if (!dialog?.open || window.matchMedia('(max-width: 640px)').matches) {
+    if (!dialog?.open) {
         dialog?.classList.remove('is-positioning');
         return;
     }
@@ -2657,26 +2684,9 @@ function positionMessageMenuDialog(dialog, resolved) {
     const edge = 12;
     const width = dialog.offsetWidth;
     const height = dialog.offsetHeight;
-    const pointerX = resolved?.anchorX === null ? Number.NaN : Number(resolved?.anchorX);
-    const pointerY = resolved?.anchorY === null ? Number.NaN : Number(resolved?.anchorY);
-    let left;
-    let top;
-    if (Number.isFinite(pointerX) && Number.isFinite(pointerY)) {
-        left = pointerX + gap;
-        top = pointerY + gap;
-        if (left + width > window.innerWidth - edge) {
-            left = pointerX - width - gap;
-        }
-        if (top + height > window.innerHeight - edge) {
-            top = pointerY - height - gap;
-        }
-    } else {
-        left = resolved?.isUser ? rect.right - width : rect.left;
-        top = rect.bottom + gap;
-        if (top + height > window.innerHeight - edge) {
-            top = rect.top - height - gap;
-        }
-    }
+    let left = resolved?.isUser ? rect.right - width : rect.left;
+    let top = rect.top - height - gap;
+    if (top < edge) top = rect.bottom + gap;
     left = Math.max(edge, Math.min(left, window.innerWidth - width - edge));
     top = Math.max(edge, Math.min(top, window.innerHeight - height - edge));
     dialog.style.left = `${Math.round(left)}px`;
@@ -2721,8 +2731,10 @@ function renderMessageMenuDialog() {
         if (action.cloud && !cloudReady) {
             button.title = '这条消息同步到云端后可用';
         }
+        const icon = createElement('span', `homer-message-menu__icon ${action.icon}`);
+        icon.setAttribute('aria-hidden', 'true');
         button.append(
-            createElement('span', `homer-message-menu__icon ${action.icon}`),
+            icon,
             createElement('span', 'homer-message-menu__label', action.label),
         );
         return button;
@@ -2895,7 +2907,9 @@ function renderMessageMenuTargets() {
         messageElement.querySelector('.homer-message-actions')?.remove();
         const index = messageIndexFromElement(messageElement);
         const message = index >= 0 ? context.chat[index] : null;
-        const eligible = Boolean(message && !message?.is_system && messageElement.getAttribute('is_system') !== 'true');
+        const eligible = Boolean(message && (!message.is_system || message.extra?.homer_hidden));
+        messageElement.classList.toggle('homer-message-hidden', !!message?.extra?.homer_hidden);
+        messageElement.classList.toggle('homer-message-collapsed', !!message?.extra?.homer_collapsed);
         const editing = eligible && Boolean(messageElement.querySelector('.edit_textarea'));
         messageElement.classList.toggle('homer-message-menu-target', eligible);
         messageElement.classList.toggle('homer-message-editing', editing);
@@ -2920,6 +2934,7 @@ function renderMessageMenuTargets() {
         messageElement.dataset.homerMessageId = stableHomerMessageId(message);
     });
     renderMessageMenuDialog();
+    renderMessageSelection();
 }
 
 function queueMessageMenuRender() {
@@ -2983,14 +2998,14 @@ async function openNativeMessageEditor(target) {
     });
 }
 
-async function deleteCloudMessage(target) {
+async function deleteCloudMessage(target, alreadyConfirmed = false) {
     let resolved = resolveMessageMenuTarget(target);
     let messageId = cloudHomerMessageId(resolved?.message);
     if (!resolved || !messageId) {
         showHostNotice('这条消息仍在同步，请稍后再删除', 'warning');
         return false;
     }
-    const confirmed = await confirmHomerAction({
+    const confirmed = alreadyConfirmed || await confirmHomerAction({
         id: 'homer-delete-message-dialog',
         title: '确认删除',
         notice: '只删除这一条消息，其他上下文保留。对话摘要会同步失效并在后续重建。',
@@ -3074,6 +3089,11 @@ async function handleMessageMenuAction(action, target) {
             await copyMessageText(resolved.message);
             return;
         }
+        if (action === 'hide' || action === 'collapse') {
+            await changeMessagePresentation([resolved], action, !resolved.message.extra?.[action === 'hide' ? 'homer_hidden' : 'homer_collapsed']);
+            return;
+        }
+        if (action === 'select') { startMessageSelection(resolved); return; }
         if (action === 'edit') {
             await openNativeMessageEditor(resolved);
             return;
@@ -3127,6 +3147,124 @@ async function handleMessageMenuAction(action, target) {
     }
 }
 
+async function changeMessagePresentation(targets, action, enabled) {
+    const context = getContext();
+    const resolved = targets.map(resolveMessageMenuTarget).filter(Boolean);
+    if (!resolved.length || generationBusy || rollbackBusy || loadingLaunch) return false;
+    if (resolved.some(({ message }) => !cloudHomerMessageId(message))) {
+        showHostNotice('这条消息仍在同步，请稍后再操作', 'warning');
+        return false;
+    }
+    const old = resolved.map(({ message }) => ({ message, is_system: message.is_system, extra: { ...message.extra } }));
+    const previousPresentation = runtimeVariables.homer_message_presentation;
+    const presentation = { ...previousPresentation };
+    rollbackBusy = true;
+    queueMessageMenuRender();
+    scheduleHostStateNotify(0, 'message-presentation-saving');
+    try {
+        for (const { message } of resolved) {
+            const id = cloudHomerMessageId(message);
+            presentation[id] = { ...presentation[id], [action === 'hide' ? 'hidden' : 'collapsed']: enabled };
+            message.extra = { ...message.extra };
+            if (action === 'hide') {
+                message.extra.homer_hidden = enabled;
+                message.is_system = enabled;
+            } else message.extra.homer_collapsed = enabled;
+        }
+        runtimeVariables.homer_message_presentation = presentation;
+        await persistRuntimeVariables();
+        // The account-scoped conversation state is authoritative; mirror failures
+        // must not roll back a successful cloud update only on this device.
+        try { await context.saveChat(); } catch { showHostNotice('设置已保存，本地镜像稍后同步', 'warning'); }
+        renderMessageMenuTargets();
+        scheduleSync(0);
+        scheduleHostStateNotify(0, 'message-presentation');
+        showHostNotice(action === 'hide' ? (enabled ? '消息已从模型上下文中隐藏' : '消息已恢复到模型上下文') : (enabled ? '已折叠消息' : '已展开消息'), 'success');
+        return true;
+    } catch (error) {
+        if (previousPresentation === undefined) delete runtimeVariables.homer_message_presentation;
+        else runtimeVariables.homer_message_presentation = previousPresentation;
+        for (const state of old) { state.message.is_system = state.is_system; state.message.extra = state.extra; }
+        renderMessageMenuTargets();
+        throw error;
+    } finally {
+        rollbackBusy = false;
+        queueMessageMenuRender();
+        scheduleHostStateNotify(0, 'message-presentation-saved');
+    }
+}
+
+function closeMessageSelection() {
+    messageSelection = null;
+    document.body.classList.remove('homer-selecting-messages');
+    document.querySelector('#homer-message-selection')?.remove();
+    document.querySelectorAll('#chat .mes').forEach(el => { el.classList.remove('homer-message-selected'); el.removeAttribute('aria-selected'); });
+}
+
+function renderMessageSelection() {
+    if (!messageSelection) return;
+    const context = getContext();
+    if (String(context.chatId || '') !== messageSelection.chatId) { closeMessageSelection(); return; }
+    messageSelection.targets = messageSelection.targets.map(resolveMessageMenuTarget).filter(Boolean);
+    const selected = new Set(messageSelection.targets.map(item => item.messageRef));
+    document.querySelectorAll('#chat .mes').forEach(el => {
+        const checked = selected.has(context.chat[messageIndexFromElement(el)]);
+        el.classList.toggle('homer-message-selected', checked);
+        el.setAttribute('aria-selected', String(checked));
+    });
+    const root = document.querySelector('#homer-message-selection');
+    if (!root) return;
+    const title = root.querySelector('[data-selection-count]');
+    const text = '已选择 ' + selected.size + ' 条消息';
+    if (title.textContent !== text) title.textContent = text;
+    const hidden = messageSelection.targets.filter(item => item.message.extra?.homer_hidden).length;
+    root.querySelector('[data-selection-hide]').disabled = selected.size === hidden;
+    root.querySelector('[data-selection-show]').disabled = hidden === 0;
+    root.querySelector('[data-selection-delete]').disabled = !selected.size || messageSelection.targets.some(item => !cloudHomerMessageId(item.message));
+}
+
+function startMessageSelection(target) {
+    const resolved = resolveMessageMenuTarget(target);
+    if (!resolved) return;
+    closeMessageSelection();
+    messageSelection = { chatId: String(getContext().chatId || ''), targets: [resolved] };
+    document.body.classList.add('homer-selecting-messages');
+    const root = createElement('section', 'homer-message-selection'); root.id = 'homer-message-selection';
+    const head = createElement('header', 'homer-selection-head');
+    const cancel = createElement('button', '', '取消'); cancel.type = 'button';
+    cancel.dataset.homerCancelSelection = '';
+    cancel.addEventListener('click', closeMessageSelection);
+    const count = createElement('span'); count.dataset.selectionCount = ''; count.setAttribute('aria-live', 'polite');
+    const all = createElement('button', '', '全选'); all.type = 'button';
+    all.addEventListener('click', () => {
+        messageSelection.targets = getContext().chat.map((_, index) => messageMenuTargetForIndex(index)).filter(Boolean);
+        renderMessageSelection();
+    });
+    head.append(cancel, count, all);
+    const foot = createElement('footer', 'homer-selection-footer');
+    for (const [action, label, icon] of [['hide','隐藏','fa-eye'],['show','取消隐藏','fa-eye-slash'],['delete','删除','fa-trash-can']]) {
+        const button = createElement('button'); button.type = 'button'; button.dataset['selection' + action[0].toUpperCase() + action.slice(1)] = '';
+        const glyph = createElement('i', 'fa-regular ' + icon); glyph.setAttribute('aria-hidden', 'true');
+        button.append(glyph, createElement('span', '', label));
+        button.addEventListener('click', async () => {
+            const selection = messageSelection;
+            if (!selection) return;
+            try {
+                if (action === 'delete') {
+                    const accepted = await confirmHomerAction({ id: 'homer-delete-selected-dialog', title: '删除所选消息', notice: '将删除所选的 ' + selection.targets.length + ' 条消息，其他消息保留。', confirmLabel: '确认删除', danger: true });
+                    if (!accepted || messageSelection !== selection || selection.chatId !== String(getContext().chatId || '')) return;
+                    for (const item of [...selection.targets].reverse()) {
+                        if (selection.chatId !== String(getContext().chatId || '') || !await deleteCloudMessage(item, true)) break;
+                    }
+                } else await changeMessagePresentation(selection.targets, 'hide', action === 'hide');
+                closeMessageSelection();
+            } catch (error) { showHostNotice(error.message || '操作失败', 'error'); }
+        });
+        foot.append(button);
+    }
+    root.append(head, foot); document.body.append(root); renderMessageSelection();
+}
+
 function installMessageMenu() {
     const chat = document.querySelector('#chat');
     if (!chat) {
@@ -3134,8 +3272,21 @@ function installMessageMenu() {
         return;
     }
     if (chat.dataset.homerMessageMenuInstalled !== 'true') {
+        chat.addEventListener('click', event => {
+            if (!messageSelection) return;
+            const element = event.target.closest?.('#chat .mes');
+            if (!element) return;
+            const target = messageMenuTargetFromElement(element);
+            if (!target) return;
+            event.preventDefault(); event.stopImmediatePropagation();
+            const selected = messageSelection.targets.findIndex(item => item.messageRef === target.messageRef);
+            if (selected >= 0) messageSelection.targets.splice(selected, 1);
+            else messageSelection.targets.push(target);
+            renderMessageSelection();
+        }, true);
         chat.dataset.homerMessageMenuInstalled = 'true';
         chat.addEventListener('pointerdown', event => {
+            if (messageSelection) return;
             const touchLike = event.pointerType === 'touch' || event.pointerType === 'pen';
             if ((!touchLike && event.button !== 0) || event.isPrimary === false || isInteractiveMessageTarget(event.target)) {
                 return;
@@ -3972,6 +4123,36 @@ function buildNewConversationMenu() {
     return dialog;
 }
 
+let continuationLayoutObserver;
+function positionContinuationControl() {
+    const trigger = document.querySelector('#homer-continuation-trigger');
+    const composer = document.querySelector('#send_form');
+    if (trigger && composer) trigger.style.bottom = `${Math.max(0, window.innerHeight - composer.getBoundingClientRect().top + 8)}px`;
+}
+window.addEventListener('resize', positionContinuationControl);
+
+function buildContinuationControls() {
+    const controls = createElement('div');
+    const trigger = createElement('button', 'homer-continuation-trigger');
+    trigger.id = 'homer-continuation-trigger'; trigger.type = 'button'; trigger.setAttribute('aria-label', '生成操作');
+    trigger.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8 8 5 4-5 4Zm6 0 5 4-5 4Z" fill="currentColor" stroke="none"/></svg>';
+    const dialog = createElement('dialog', 'homer-site-dialog'); dialog.id = 'homer-generation-dialog'; dialog.setAttribute('aria-label', '生成操作');
+    const surface = createElement('section', 'homer-site-dialog__surface homer-generation-options');
+    surface.append(createElement('h2', '', '生成操作'));
+    for (const [action, label, description] of [['continue', '续写', '接着当前最后一条回复继续写'], ['regenerate', '重写', '重新生成最后一条回复'], ['next', '下回续', '保持当前设定，推进到下一回合']]) {
+        const button = createElement('button'); button.type = 'button';
+        button.append(createElement('strong', '', label), createElement('small', '', description));
+        button.addEventListener('click', () => { dialog.close(); void runAction(action); }); surface.append(button);
+    }
+    const cancel = createElement('button', 'homer-secondary-button', '取消'); cancel.type = 'button'; cancel.addEventListener('click', () => dialog.close());
+    surface.append(cancel); dialog.append(surface); controls.append(trigger, dialog);
+    trigger.addEventListener('click', () => {
+        if (generationBusy || loadingLaunch) { showHostNotice('请等待当前操作完成', 'warning'); return; }
+        dialog.showModal();
+    });
+    return controls;
+}
+
 function buildAttachmentDialog() {
     const dialog = createElement('dialog', 'homer-site-dialog homer-attachment-dialog');
     dialog.id = 'homer-attachment-dialog';
@@ -4015,9 +4196,11 @@ function buildAttachmentDialog() {
         } else if (action === 'ai-help') {
             document.querySelector('#option_impersonate')?.click();
         } else {
-            const imageButton = [...document.querySelectorAll('button, a, [role="button"]')].find(item => /生图|生成图片|image generation/i.test(String(item.textContent || item.getAttribute('title') || '')));
-            if (imageButton instanceof HTMLElement) imageButton.click();
-            else showHostNotice('当前模型没有启用生图能力', 'warning');
+            // Use the app's existing image workspace; searching all buttons by
+            // their caption also found this very button and recursed indefinitely.
+            const target = '/app/image-chat.html';
+            if (canNotifyHost()) notifyHost('navigate', { target });
+            else window.location.assign(siteUrl(target));
         }
     });
     return dialog;
@@ -4103,6 +4286,21 @@ function populateHistoryList(historyCount, historyList) {
 }
 
 function buildRuntimeUi() {
+    installMemoryUi();
+    try { document.documentElement.toggleAttribute('data-homer-dark', localStorage.getItem('ai_xingyue_shell_theme') === 'dark'); } catch {}
+    if (!document.querySelector('#homer-option-picker-script')) {
+        const picker = document.createElement('script');
+        picker.id = 'homer-option-picker-script';
+        picker.src = siteUrl('/assets/js/option-picker.js?v=20260908-pr7');
+        document.head.append(picker);
+    }
+    if (!document.querySelector('#homer-chat-design')) {
+        const stylesheet = document.createElement('link');
+        stylesheet.id = 'homer-chat-design';
+        stylesheet.rel = 'stylesheet';
+        stylesheet.href = siteUrl('/assets/css/chat-design.css?v=20260908-pr7');
+        document.head.append(stylesheet);
+    }
     document.querySelector('#homer-runtime-root')?.remove();
     const root = createElement('div', 'homer-runtime-root');
     root.id = 'homer-runtime-root';
@@ -4114,17 +4312,18 @@ function buildRuntimeUi() {
         || '角色对话',
     );
     const header = createElement('header', 'homer-chat-header');
-    const menu = createElement('button', 'homer-header-button', '☰');
+    const menu = createElement('button', 'homer-header-button');
+    menu.innerHTML = "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"round\"><path d=\"M5 6h14M5 12h9M5 18h14\"/></svg>";
     menu.type = 'button';
     menu.setAttribute('aria-label', '打开导航与历史会话');
     menu.addEventListener('click', () => {
         const leftDrawer = document.querySelector('#homer-left-drawer');
         setDrawerOpen(leftDrawer?.classList.contains('is-open') ? '' : 'left');
     });
-    const title = createElement('div', 'homer-chat-header__title homer-chat-header__title--empty');
+    const title = createElement('div', 'homer-chat-header__title', roleName);
     title.id = 'homer-conversation-title';
-    title.setAttribute('aria-hidden', 'true');
-    const settingsButton = createElement('button', 'homer-header-button', '⚙');
+    const settingsButton = createElement('button', 'homer-header-button');
+    settingsButton.innerHTML = "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linejoin=\"round\"><path d=\"M16 4H10a8 8 0 0 0-1 16v-3h2a7 7 0 0 0 7-7\"/><path d=\"m20 2 1.1 2.9L24 6l-2.9 1.1L20 10l-1.1-2.9L16 6l2.9-1.1Z\" fill=\"currentColor\" stroke=\"none\"/></svg>";
     settingsButton.type = 'button';
     settingsButton.setAttribute('aria-label', '打开对话设置');
     settingsButton.addEventListener('click', () => setDrawerOpen('right'));
@@ -4203,11 +4402,12 @@ function buildRuntimeUi() {
     rightDrawer.setAttribute('aria-label', '对话设置');
     rightDrawer.setAttribute('aria-hidden', 'true');
     const rightHead = createElement('header', 'homer-drawer__head');
-    const settingCopy = createElement('div');
-    settingCopy.append(
-        createElement('span', 'homer-drawer__eyebrow', 'CURRENT CHAT'),
-        createElement('h2', 'homer-drawer__title', '对话设置'),
-    );
+    const settingCopy = createElement('div', 'homer-chat-identity');
+    const portrait = document.createElement('img'); portrait.alt = ''; portrait.className = 'homer-chat-identity__avatar';
+    const defaultPortrait = siteUrl('/assets/img/apk/avatar.webp');
+    portrait.src = siteAssetUrl(launch?.conversation?.app_icon) || defaultPortrait;
+    portrait.addEventListener('error', () => { if (portrait.src !== defaultPortrait) portrait.src = defaultPortrait; });
+    settingCopy.append(portrait, createElement('h2', 'homer-drawer__title', roleName));
     const rightClose = createElement('button', 'homer-icon-button', '×');
     rightClose.type = 'button';
     rightClose.setAttribute('aria-label', '关闭设置');
@@ -4270,16 +4470,33 @@ function buildRuntimeUi() {
         returnToDesktopNavigation();
         document.querySelector('#homer-mod-dialog')?.showModal();
     });
-    settingList.append(modelButton, presetButton, favoritesLink, memoryButton, modButton);
+    favoritesLink.addEventListener('click', event => {
+        if (!canNotifyHost()) return;
+        event.preventDefault(); notifyHost('navigate', { target: '/app/favorites.html' });
+    });
+    settingList.append(modelButton, presetButton, memoryButton, modButton);
+    const appearance = bindChatAppearance(() => ({ owner: session?.user?.id || session?.user?.user_id, conversation: launch?.conversation_id }));
+    const shortcuts = createElement('nav', 'homer-chat-shortcuts');
+    shortcuts.setAttribute('aria-label', '对话快捷操作');
+    for (const [action, label, icon] of [['appearance', '界面设置', 'fa-palette'], ['stats', '统计', 'fa-chart-simple'], ['search', '搜索', 'fa-magnifying-glass']]) {
+        const button = createElement('button'); button.type = 'button'; button.setAttribute('aria-label', label);
+        const mark = createElement('i', `fa-solid ${icon}`); mark.setAttribute('aria-hidden', 'true');
+        button.append(mark, createElement('span', '', label));
+        button.addEventListener('click', () => {
+            returnToDesktopNavigation();
+            if (action === 'appearance') appearance.open();
+            else openChatTool(action, { container: document.querySelector('#chat'), selector: '.mes', isUser: element => element.getAttribute('is_user') === 'true', title: roleName });
+        }); shortcuts.append(button);
+    }
     rightDrawer.append(
         rightHead,
-        createElement('p', 'homer-drawer__role', String(launch?.conversation?.title || roleName)),
         settingList,
         createElement(
             'p',
             'homer-privacy-note',
             '角色卡世界书正文受创作者保护。你只能通过预设开关调整创作者允许开放的条目。',
         ),
+        shortcuts,
     );
 
     const panel = createElement('section', 'homer-preset-panel');
@@ -4364,6 +4581,7 @@ function buildRuntimeUi() {
         buildConversationManagerDialog(),
         buildNewConversationMenu(),
         buildAttachmentDialog(),
+        buildContinuationControls(),
         buildPresentationModeToggle(),
     );
     root.addEventListener('keydown', event => {
@@ -4373,6 +4591,13 @@ function buildRuntimeUi() {
         }
     });
     document.body.append(root);
+    // The runtime form shell may fill the viewport; anchor to the actual input
+    // form's geometry rather than the shell's percentage height.
+    continuationLayoutObserver?.disconnect();
+    continuationLayoutObserver = new ResizeObserver(positionContinuationControl);
+    const composerForm = document.querySelector('#send_form');
+    if (composerForm) continuationLayoutObserver.observe(composerForm);
+    requestAnimationFrame(positionContinuationControl);
     bindComposerAttachmentButton();
     renderPresetLists();
     flushHostNotices();
@@ -4428,8 +4653,8 @@ async function switchConversation(conversation) {
         setDrawerOpen();
         return;
     }
-    if (loadingLaunch || generationBusy) {
-        showHostNotice(generationBusy ? '回复生成完成后才能切换会话' : '会话正在切换，请稍候', 'warning');
+    if (loadingLaunch || generationBusy || rollbackBusy) {
+        showHostNotice(rollbackBusy ? '当前消息保存后才能切换会话' : generationBusy ? '回复生成完成后才能切换会话' : '会话正在切换，请稍候', 'warning');
         if (!loadingLaunch) notifyHostConversation('conversation-switch-failed');
         return;
     }
@@ -4699,6 +4924,7 @@ async function bootstrapLaunch(preloadedSession = null, administratorExtensionsP
         setRuntimeGate('梦境已就绪', '正在呈现完整对话界面…');
         await releaseRuntimeGate();
         document.documentElement.classList.add('homer-runtime-ready');
+        requestAnimationFrame(positionContinuationControl);
         performance.mark('homer-bootstrap-ready');
         notifyHostConversation();
         void applicationReadyPromise.then(async () => {

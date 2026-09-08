@@ -1858,6 +1858,14 @@ export function initBackgrounds() {
         });
     });
 
+    // The embedded document has a <base> and conversation query parameters.
+    // jQuery UI otherwise treats fragment tabs as remote URLs, downloads the
+    // entire runtime page, and executes its startup gate again inside a panel.
+    document.querySelectorAll('#bg_tabs a[href^="#"]').forEach(anchor => {
+        const target = new URL(window.location.href);
+        target.hash = anchor.getAttribute('href');
+        anchor.href = target.href;
+    });
     $('#bg_tabs').tabs();
     $('#bg_tabs').on('tabsactivate', () => updateGroupFolderControlsVisibility());
     updateGroupFolderControlsVisibility();

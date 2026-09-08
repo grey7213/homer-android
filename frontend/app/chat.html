@@ -704,6 +704,9 @@
       .preview-settings-button { width: 44px; min-height: 44px; }
     }
   </style>
+  <link rel="stylesheet" href="/assets/css/app-design.css?v=20260908-pr7">
+  <link rel="stylesheet" href="/assets/css/chat-design.css?v=20260908-pr7">
+  <script defer src="/assets/js/option-picker.js?v=20260908-pr7"></script>
 </head>
 <body class="has-preview">
   <main class="dialogue-host" aria-label="惑梦对话">
@@ -734,13 +737,13 @@
       </aside>
       <section class="preview-stage">
         <header class="preview-header">
-          <button id="preview-menu" class="preview-menu-button" type="button" aria-label="打开导航与历史会话"><span></span><span></span><span></span></button>
+          <button id="preview-menu" class="preview-menu-button" type="button" aria-label="打开导航与历史会话"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M5 6h14M5 12h9M5 18h14"/></svg></button>
           <img id="preview-avatar" class="preview-avatar" src="/assets/img/apk/avatar.webp?v=20260901-persistent-pages" alt="">
-          <div class="preview-heading" aria-hidden="true">
+          <div class="preview-heading">
             <h2 id="preview-title">角色对话</h2>
             <p id="preview-status">本地对话</p>
           </div>
-          <button id="preview-settings" class="preview-settings-button" type="button" aria-label="打开对话设置">⚙</button>
+          <button id="preview-settings" class="preview-settings-button" type="button" aria-label="打开对话设置"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M16 4H10a8 8 0 0 0-1 16v-3h2a7 7 0 0 0 7-7"/><path d="m20 2 1.1 2.9L24 6l-2.9 1.1L20 10l-1.1-2.9L16 6l2.9-1.1Z" fill="currentColor" stroke="none"/></svg></button>
         </header>
         <aside id="preview-network-banner" class="preview-network-banner" aria-live="polite">
           <img src="/assets/img/brand/network-error-512.png?v=20260901-persistent-pages" alt="">
@@ -748,21 +751,27 @@
           <button id="preview-network-retry" type="button">重试</button>
         </aside>
         <div id="preview-messages" class="preview-messages"></div>
+        <div class="preview-generation-row"><button type="button" aria-label="生成操作" data-runtime-section="generation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8 8 5 4-5 4Zm6 0 5 4-5 4Z" fill="currentColor" stroke="none"/></svg></button></div>
         <form id="preview-composer" class="preview-composer">
-          <textarea id="preview-input" rows="1" maxlength="10000" placeholder="输入想发送的消息"></textarea>
+          <button id="preview-add" type="button" aria-label="添加内容" data-runtime-section="attachments">+</button>
+          <textarea id="preview-input" rows="1" maxlength="10000" placeholder="随便聊聊..."></textarea>
           <button id="preview-send" type="submit">发送</button>
         </form>
       </section>
       <aside id="preview-settings-drawer" class="preview-settings-drawer" aria-label="对话设置" aria-hidden="true">
-        <header class="preview-drawer-head"><strong>对话设置</strong><button id="preview-settings-close" class="preview-drawer-close" type="button" aria-label="关闭设置">×</button></header>
+        <header class="preview-drawer-head"><div class="homer-chat-identity"><img id="preview-settings-avatar" class="homer-chat-identity__avatar" src="/assets/img/apk/avatar.webp" alt=""><strong id="preview-settings-title">角色对话</strong></div><button id="preview-settings-close" class="preview-drawer-close" type="button" aria-label="关闭设置">×</button></header>
         <div class="preview-setting-list">
           <button id="preview-model-settings" class="preview-setting-row" type="button"><span class="preview-setting-row__icon">◉</span><span class="preview-setting-row__copy"><strong>模型设置</strong><small id="preview-model-summary">当前会话模型</small></span><span>›</span></button>
           <button class="preview-setting-row" data-runtime-section="preset" type="button"><span class="preview-setting-row__icon">☷</span><span class="preview-setting-row__copy"><strong>预设开关</strong><small>仅作用于当前对话</small></span><span>›</span></button>
-          <a class="preview-setting-row" href="/app/favorites.html"><span class="preview-setting-row__icon">♡</span><span class="preview-setting-row__copy"><strong>收藏</strong><small>管理已收藏角色卡</small></span><span>›</span></a>
           <button class="preview-setting-row" data-runtime-section="memory" type="button"><span class="preview-setting-row__icon">∞</span><span class="preview-setting-row__copy"><strong>长记忆</strong><small>当前对话记忆</small></span><span>›</span></button>
           <button class="preview-setting-row" data-runtime-section="mod" type="button"><span class="preview-setting-row__icon">◇</span><span class="preview-setting-row__copy"><strong>Mod</strong><small>管理当前会话 Mod</small></span><span>›</span></button>
         </div>
         <p class="preview-privacy-note">角色卡世界书正文受创作者保护。这里只提供创作者允许开放的预设开关。</p>
+        <nav class="homer-chat-shortcuts" aria-label="对话快捷操作">
+          <button id="preview-appearance" type="button" aria-label="界面设置"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="8" cy="8" r="1"/><circle cx="15" cy="7" r="1"/><circle cx="7" cy="14" r="1"/><path d="M14 21c-4-6 8-2 6-8"/></svg><span>界面设置</span></button>
+          <button type="button" data-chat-tool="stats" aria-label="统计"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 4v16h17 M8 15v-5 M13 15V6 M18 15v-3"/></svg><span>统计</span></button>
+          <button type="button" data-chat-tool="search" aria-label="搜索"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 6 6"/></svg><span>搜索</span></button>
+        </nav>
       </aside>
       <button id="preview-scrim" class="preview-scrim" type="button" aria-label="关闭侧栏" hidden></button>
       <p id="preview-toast" class="preview-toast" hidden></p>
@@ -795,6 +804,6 @@
 
   <p id="dialogue-announcer" class="sr-only" aria-live="assertive"></p>
   <noscript>需要启用 JavaScript 才能进入对话。</noscript>
-<script type="module" src="/app/assets/js/chat.js?v=20260905-notices-v1"></script>
+<script type="module" src="/app/assets/js/chat.js?v=20260908-pr7"></script>
 </body>
 </html>

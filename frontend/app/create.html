@@ -11,8 +11,10 @@
   <link rel="stylesheet" href="/app/assets/css/worldbook-editor.css?v=20260713">
   <link rel="stylesheet" href="/app/assets/css/card-experience-editor.css?v=20260806-tavern-helper">
   <script src="/app/assets/vendor/jszip-3.10.1.min.js?v=3.10.1"></script>
-  <script type="module" src="/app/assets/js/create.js?v=20260905-notices-v1"></script>
+  <script type="module" src="/app/assets/js/create.js?v=20260908-pr7"></script>
   <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
+  <link rel="stylesheet" href="/assets/css/app-design.css?v=20260908-pr7">
+  <script defer src="/assets/js/option-picker.js?v=20260908-pr7"></script>
 </head>
 <body class="min-h-screen creator-editor-page">
   <div class="xy-stars-bg"></div>
@@ -40,7 +42,7 @@
         </button>
         <div class="grow"></div>
         <input type="file" accept=".json,.png,.zip,.tgp,.tpg,application/json,image/png,application/zip,application/x-zip-compressed" x-ref="importInput" @change="onImportFile" class="hidden" style="display:none">
-        <button class="editor-toolbar__btn" @click="triggerImport" :disabled="importing" :title="creatorText('import_pack_title', '导入角色卡 JSON/PNG 或包含世界书、正则、立绘、背景、BGM 的 ZIP/TGP/TPG 资源包')">
+        <button type="button" class="editor-toolbar__btn" @click="triggerImport" :disabled="importing" :aria-label="pendingCardPackImport ? '重试绑定' : '导入卡包'" :title="creatorText('import_pack_title', '导入角色卡 JSON/PNG 或包含世界书、正则、立绘、背景、BGM 的 ZIP/TGP/TPG 资源包')">
           <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v12m0 0l-4-4m4 4l4-4M5 20h14"/></svg>
           <span x-text="importing ? creatorText('importing_text', '导入中…') : (pendingCardPackImport ? '重试绑定' : creatorText('import_pack_text', '导入卡包'))"></span>
         </button>
@@ -945,7 +947,7 @@
       </div>
 
       <div class="xy-modal-mask" x-show="publishDialogOpen" x-transition.opacity @click="publishDialogOpen = false" x-cloak></div>
-      <section class="xy-modal" x-show="publishDialogOpen" x-transition @click.stop x-cloak aria-label="发布角色新版本">
+      <section class="xy-modal" x-show="publishDialogOpen" x-transition @click.stop x-cloak role="dialog" aria-modal="true" aria-label="发布角色新版本">
         <div class="xy-modal__head"><div><strong>发布新版本</strong><span>当前公开版本不会被直接覆盖；已有会话继续使用原版本。</span></div><button type="button" @click="publishDialogOpen = false">×</button></div>
         <div class="xy-modal__body" style="display:grid;gap:14px">
           <label class="editor-field"><span class="editor-field__label">版本名称</span><input class="xy-input" maxlength="80" x-model="versionName" placeholder="例如：v2.0 · 新剧情线"></label>

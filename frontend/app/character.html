@@ -8,8 +8,10 @@
   <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
   <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
   <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
-  <script type="module" src="/app/assets/js/character.js?v=20260905-notices-v1"></script>
+  <script type="module" src="/app/assets/js/character.js?v=20260908-pr7"></script>
   <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
+  <link rel="stylesheet" href="/assets/css/app-design.css?v=20260908-pr7">
+  <script defer src="/assets/js/option-picker.js?v=20260908-pr7"></script>
 </head>
 <body class="min-h-screen">
   <div class="xy-stars-bg"></div>
@@ -35,7 +37,6 @@
           <img :src="card?.cover || card?.icon || '/assets/img/apk/avatar.webp?v=20260901-persistent-pages'" :alt="card?.name" referrerpolicy="no-referrer" onerror="this.src='/assets/img/apk/avatar.webp?v=20260901-persistent-pages'">
           <div class="detail-cover__shade"></div>
           <div class="detail-cover__caption">
-            <span x-text="card?.source === 'user' ? characterText('user_badge', '用户角色') : characterText('official_badge', '官方角色')"></span>
             <code x-text="`#${card?.displayId || card?.id || ''}`"></code>
           </div>
         </div>
@@ -45,20 +46,6 @@
               <div>
                 <h2 class="text-3xl font-bold text-white mb-2" x-text="card?.name || characterText('unnamed_role', '未命名角色')"></h2>
                 <p class="text-violet-100/85 leading-relaxed" x-text="cardSummary()"></p>
-                <div class="character-capabilities" aria-label="角色能力">
-                  <div class="character-capability" :class="card?.hasOpening ? 'is-on' : 'is-off'">
-                    <span class="character-capability__mark" x-text="card?.hasOpening ? '✓' : '—'"></span>
-                    <span><strong>开场白</strong><small x-text="card?.hasOpening ? '已配置' : '未配置'"></small></span>
-                  </div>
-                  <div class="character-capability" :class="card?.hasWorldInfo ? 'is-on' : 'is-off'">
-                    <span class="character-capability__mark" x-text="card?.hasWorldInfo ? '✓' : '—'"></span>
-                    <span><strong>世界书</strong><small x-text="card?.hasWorldInfo ? '已配置' : '未配置'"></small></span>
-                  </div>
-                  <div class="character-capability" :class="card?.hasRegex ? 'is-on' : 'is-off'">
-                    <span class="character-capability__mark" x-text="card?.hasRegex ? '✓' : '—'"></span>
-                    <span><strong>正则</strong><small x-text="card?.hasRegex ? '已配置' : '未配置'"></small></span>
-                  </div>
-                </div>
                 <div class="detail-id-row">
                   <code x-text="`ID: ${card?.displayId || card?.id || ''}`"></code>
                   <button type="button" class="xy-btn xy-btn-ghost text-xs px-2 py-1" @click="copyCardId" x-text="characterText('copy_id_text', '复制 ID')">复制 ID</button>
@@ -69,23 +56,13 @@
                   <button type="button" class="xy-btn xy-btn-ghost text-xs" x-show="extraFlags?.contest_id" :class="{ 'is-active': extraFlags?.voted }" @click="toggleContestVote()" x-text="voteLabel()">投票</button>
                 </div>
               </div>
-              <span class="xy-badge xy-badge-purple character-source-badge" x-text="card?.source === 'user' ? characterText('user_badge', '用户角色') : characterText('official_badge', '角色设定')"></span>
             </div>
             <div class="flex flex-wrap gap-2 mt-5 character-category-tags">
               <template x-for="t in (card?.tags || [])" :key="t">
                 <span class="chip" x-text="t"></span>
               </template>
             </div>
-            <div class="character-copy-grid" x-show="card?.description_detail?.summary || card?.opening_detail?.summary">
-              <article x-show="card?.description_detail?.summary">
-                <span>角色设定</span>
-                <p x-text="card?.description_detail?.summary"></p>
-              </article>
-              <article x-show="card?.opening_detail?.summary">
-                <span>开场预览</span>
-                <p x-text="card?.opening_detail?.summary"></p>
-              </article>
-            </div>
+
             <div class="user-tags-box mt-5">
               <div class="user-tags-box__head">
                 <span x-text="characterText('user_tags_title', '我的标签')">我的标签</span>
@@ -113,18 +90,6 @@
             <div class="character-source-list">
               <template x-for="(entry, index) in (extraFlags?.open_source_entries || [])" :key="`${entry.group || ''}-${entry.name || ''}-${index}`">
                 <article class="character-source-entry"><strong x-text="entry.name || '未命名条目'"></strong><small x-text="entry.group || '条目'"></small><pre x-text="entry.content || ''"></pre></article>
-              </template>
-            </div>
-          </section>
-
-          <section class="character-extra-panel p-6" x-show="versions.length">
-            <div class="character-extra-panel__head"><div><h3>历史版本</h3><p>每次发布都会保留独立版本；进入会话后不能更换。</p></div><span class="character-version-count" x-text="`${versions.length} 个版本`"></span></div>
-            <div class="character-version-list">
-              <template x-for="version in versions" :key="version.id">
-                <article class="character-version-row">
-                  <div><strong><span x-text="versionName(version)"></span><span class="character-version-current ml-2 text-xs" x-show="isCurrentVersion(version)">当前</span></strong><small x-text="version.author_description || version.note || '作者未填写本版介绍'"></small><small x-text="formatTime(version.created_at)"></small></div>
-                  <button type="button" class="xy-btn xy-btn-ghost text-xs" @click="openVersionPicker(version.id)">游玩此版本</button>
-                </article>
               </template>
             </div>
           </section>
@@ -158,10 +123,17 @@
             </div>
           </div>
 
-          <div class="flex gap-3">
-            <button type="button" class="xy-btn xy-btn-primary flex-1 justify-center" @click="openVersionPicker()" x-text="characterText('start_chat_text', '开始聊天')"></button>
-            <a href="/app/create.html" class="xy-btn xy-btn-ghost" x-text="characterText('create_role_text', '创建角色')"></a>
-          </div>
+          <section class="character-extra-panel p-6" x-show="versions.length">
+            <div class="character-extra-panel__head"><div><h3>历史版本</h3><p>每次发布都会保留独立版本；进入会话后不能更换。</p></div><span class="character-version-count" x-text="`${versions.length} 个版本`"></span></div>
+            <div class="character-version-list">
+              <template x-for="version in versions" :key="version.id">
+                <article class="character-version-row">
+                  <div><strong><span x-text="versionName(version)"></span><span class="character-version-current ml-2 text-xs" x-show="isCurrentVersion(version)">当前</span></strong><small x-text="version.author_description || version.note || '作者未填写本版介绍'"></small><small x-text="formatTime(version.created_at)"></small></div>
+                  <button type="button" class="xy-btn xy-btn-ghost text-xs" @click="openVersionPicker(version.id)">游玩此版本</button>
+                </article>
+              </template>
+            </div>
+          </section>
         </div>
       </section>
 

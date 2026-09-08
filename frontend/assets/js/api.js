@@ -130,6 +130,8 @@ export class ApiError extends Error {
 
 export const api = {
   // 公共接口
+  socialReports: () => request('/console/api/web/social/reports'),
+  deleteSocialPost: id => request('/console/api/web/social/posts/' + encodeURIComponent(id), { method: 'DELETE' }),
   health: () => request('/health', { auth: false }),
   siteSettings: () => request('/console/api/public/site-settings', { auth: false }),
   sendEmailCode: (email, lang = 'zh-Hans') =>

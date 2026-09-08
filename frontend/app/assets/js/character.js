@@ -1,5 +1,5 @@
-import { api, requireAuth, getCachedUser, setCachedUser, formatDateTime, ApiError } from '/app/assets/js/app-core.js?v=20260905-notices-v1';
-import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260905-notices-v1';
+import { api, requireAuth, getCachedUser, setCachedUser, formatDateTime, ApiError } from '/app/assets/js/app-core.js?v=20260908-pr7';
+import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260908-pr7';
 
 const FIELD_LABELS = {
   name: '姓名',
@@ -493,7 +493,7 @@ function characterPage() {
       return parsedSummary
         || descriptionSummary
         || plainSummary
-        || this.characterText('summary_fallback', '点击开始对话。');
+        || '';
     },
   };
 }

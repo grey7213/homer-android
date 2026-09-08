@@ -1,5 +1,6 @@
-import { api, requireAuth, getCachedUser, setCachedUser, clearAuth, ApiError } from '/app/assets/js/app-core.js?v=20260905-notices-v1';
-import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260905-notices-v1';
+import { confirmAction, showMessage } from '/assets/js/dialogs.js?v=20260908-pr7';
+import { api, requireAuth, getCachedUser, setCachedUser, clearAuth, ApiError } from '/app/assets/js/app-core.js?v=20260908-pr7';
+import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260908-pr7';
 import { readPageCache, writePageCache } from './page-cache.js';
 
 async function loadUser(ctx) {
@@ -61,7 +62,12 @@ function formatTemplate(template, values = {}) {
 export function favoritesPage() {
   return {
     user: null, points: 0, loading: false, cards: [], searchKeyword: '', siteSettings: null,
-    async init() { injectLayout('favorites'); await loadSiteSettings(this); if (await loadUser(this)) await this.loadList(); },
+    async init() {
+      injectLayout('favorites');
+      if (!requireAuth()) return;
+      this.user = getCachedUser();
+      await Promise.allSettled([loadSiteSettings(this), loadUser(this), this.loadList()]);
+    },
     emptyText(key, fallback = '') { return emptyText(this, key, fallback); },
     appNavText(key, fallback = '') { return appNavText(this, key, fallback); },
     appHomeText(key, fallback = '') { return appHomeText(this, key, fallback); },
@@ -185,7 +191,7 @@ export function historiesPage() {
           like_count: Number(r?.data?.like_count ?? c.like_count ?? 0),
         });
       } catch (err) {
-        alert(err.message || '点赞失败');
+        await showMessage(err.message || '点赞失败');
       } finally {
         this.likingId = '';
       }
@@ -198,7 +204,7 @@ export function historiesPage() {
         const r = await api.toggleFavorite(c.app_id);
         this.patchConversation(c.id, { favorited: !!r?.data?.favorited });
       } catch (err) {
-        alert(err.message || '收藏失败');
+        await showMessage(err.message || '收藏失败');
       } finally {
         this.favoritingId = '';
       }
@@ -213,7 +219,7 @@ export function historiesPage() {
         await this.loadList();
         if (copied?.id) location.href = this.conversationHref(copied);
       } catch (err) {
-        alert(err.message || this.chatText('copy_failed_text', '复制失败'));
+        await showMessage(err.message || this.chatText('copy_failed_text', '复制失败'));
       } finally {
         this.copyingId = '';
       }
@@ -221,13 +227,13 @@ export function historiesPage() {
     async deleteConversation(c, event) {
       if (event) event.preventDefault();
       if (!c?.id || this.deletingId) return;
-      if (!confirm(this.chatText('delete_conversation_confirm', '删除这个对话？聊天记录将无法恢复。'))) return;
+      if (!await confirmAction(this.chatText('delete_conversation_confirm', '删除这个对话？聊天记录将无法恢复。'))) return;
       this.deletingId = c.id;
       try {
         await api.deleteConversation(c.id);
         await this.loadList();
       } catch (err) {
-        alert(err.message || this.chatText('delete_failed_text', '删除失败'));
+        await showMessage(err.message || this.chatText('delete_failed_text', '删除失败'));
       } finally {
         this.deletingId = '';
       }
@@ -238,26 +244,45 @@ export function historiesPage() {
 export function workshopPage() {
   return {
     user: null, points: 0, stats: null, myApps: [], myTotal: 0, siteSettings: null, ready: false,
-    creatorLeaderboard: [], creatorContest: null,
+    refreshing: false, appsLoaded: false, refreshError: '',
     async init() {
       injectLayout('workshop');
-      try {
-        await loadSiteSettings(this);
-        if (!(await loadUser(this))) return;
-        const [s, m, contests, leaderboard] = await Promise.all([
-          api.homeStats().catch(() => null),
-          api.myApps({ page: 1, page_size: 8 }).catch(() => null),
-          api.creatorContests().catch(() => null),
-          api.creatorLeaderboard({ limit: 10 }).catch(() => null),
-        ]);
-        this.stats = s?.data || null;
-        this.myApps = m?.data?.list || [];
-        this.myTotal = m?.data?.total ?? this.myApps.length;
-        this.creatorContest = contests?.data?.contest || contests?.contest || null;
-        this.creatorLeaderboard = leaderboard?.data?.list || contests?.data?.leaderboard || [];
-      } finally {
-        this.ready = true;
+      if (!requireAuth()) return;
+      this.user = getCachedUser();
+      const cached = readPageCache('workshop', this.user);
+      if (cached) {
+        this.stats = cached.stats || null;
+        this.myApps = cached.list || [];
+        this.myTotal = cached.total ?? this.myApps.length;
+        this.appsLoaded = Array.isArray(cached.list);
       }
+      // Local navigation and new-card tools do not depend on server statistics.
+      this.ready = true;
+      await Promise.allSettled([loadSiteSettings(this), (async () => {
+        const previousOwner = String(this.user?.id || this.user?.user_id || '');
+        if (!await loadUser(this)) return;
+        if (previousOwner !== String(this.user?.id || this.user?.user_id || '')) {
+          this.myApps = []; this.myTotal = 0; this.appsLoaded = false; this.stats = null;
+        }
+        await this.refreshWorkshop();
+      })()]);
+    },
+    async refreshWorkshop() {
+      if (this.refreshing) return;
+      const owner = getCachedUser();
+      this.refreshing = true;
+      this.refreshError = '';
+      await Promise.allSettled([
+        api.homeStats().then(s => { this.stats = s?.data || null; }),
+        api.myApps({ page: 1, page_size: 8 }).then(m => {
+          if (String(owner?.id || owner?.user_id || '') !== String(getCachedUser()?.id || getCachedUser()?.user_id || '')) return;
+          this.myApps = m?.data?.list || m?.data?.apps || [];
+          this.myTotal = m?.data?.total ?? this.myApps.length;
+          this.appsLoaded = true;
+          writePageCache('workshop', owner, { stats: this.stats, list: this.myApps, total: this.myTotal });
+        }).catch(() => { this.refreshError = '作品列表未能刷新，请重试；新建和导入仍可使用。'; }),
+      ]);
+      this.refreshing = false;
     },
     get publicCount() {
       return this.myApps.filter((a) => a?.is_public !== false).length;
@@ -272,6 +297,7 @@ export function workshopPage() {
     appNavText(key, fallback = '') { return appNavText(this, key, fallback); },
     myText(key, fallback = '') { return myText(this, key, fallback); },
     syncedLibraryText() {
+      if (!this.stats) return '浏览角色库';
       const prefix = this.emptyText('workshop_library_prefix', '已同步');
       const suffix = this.emptyText('workshop_library_suffix', '张卡');
       return `${prefix} ${this.stats?.apps?.total || 0} ${suffix}`;

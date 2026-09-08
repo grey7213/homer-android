@@ -8,8 +8,10 @@
   <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
   <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
   <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
-  <script type="module" src="/app/assets/js/hub-pages.js?v=20260905-notices-v1"></script>
+  <script type="module" src="/app/assets/js/hub-pages.js?v=20260908-pr7"></script>
   <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
+  <link rel="stylesheet" href="/assets/css/app-design.css?v=20260908-pr7">
+  <script defer src="/assets/js/option-picker.js?v=20260908-pr7"></script>
 </head>
 <body class="min-h-screen">
   <div class="xy-stars-bg"></div>
@@ -42,7 +44,7 @@
             <div class="char-card__body">
               <div class="char-card__author" x-text="card.author || appHomeText('official_author', '官方角色')"></div>
               <div class="char-card__name" x-text="card.name"></div>
-              <div class="char-card__desc" x-text="card.description || card.summary || appHomeText('summary_fallback', '点击开始对话')"></div>
+              <div class="char-card__desc" x-text="card.description || card.summary || ''"></div>
             </div>
             <div class="char-card__footer" x-show="(card.user_tags || []).length">
               <div class="char-card__chip-tags">

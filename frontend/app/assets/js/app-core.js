@@ -1,6 +1,6 @@
 // 惑梦（Homer） Web App 共享核心 - 在所有 /app/*.html 顶部加载
-import './notifications.js?v=20260905-notices-v1';
-import { api as baseApi, getToken, setToken, clearAuth, isLoggedIn, getCachedUser, setCachedUser, formatDateTime, ApiError } from '/assets/js/api.js?v=20260905-notices-v1';
+import './notifications.js?v=20260908-pr7';
+import { api as baseApi, getToken, setToken, clearAuth, isLoggedIn, getCachedUser, setCachedUser, formatDateTime, ApiError } from '/assets/js/api.js?v=20260908-pr7';
 
 function redirectAfterUnauthorized() {
   clearAuth();
@@ -163,6 +163,7 @@ export const api = {
     const qs = new URLSearchParams(params);
     return rawRequest(`/console/api/web/creator-leaderboard?${qs}`);
   },
+  social: (path, options = {}) => rawRequest('/console/api/web/social/' + path, options),
   creatorContests: () => rawRequest('/console/api/web/creator-contests'),
   favorites: (params = {}) => {
     const qs = new URLSearchParams(params);

@@ -1,6 +1,9 @@
-import { api, ApiError, getCachedUser } from '/app/assets/js/app-core.js?v=20260905-notices-v1';
+import { api, ApiError, getCachedUser } from '/app/assets/js/app-core.js?v=20260908-pr7';
+import { openChatTool } from '/assets/js/chat-tools.js';
+import { bindChatAppearance } from '/assets/js/chat-appearance.js';
 
 const HOST_CHANNEL = 'homer:dialogue-host:v1';
+try { if (localStorage.getItem('ai_xingyue_shell_theme') === 'dark') document.documentElement.setAttribute('data-theme', 'dark'); } catch {}
 const DEFAULT_RUNTIME_PATH = '/module/dialogue/';
 const LEGACY_RUNTIME_PATH = '/dialogue-core/';
 const READY_TIMEOUT_MS = 150_000;
@@ -185,10 +188,12 @@ function normalizeMessage(message, index = 0) {
   const isUser = message?.role === 'user' || message?.is_user === true;
   const raw = message?.content ?? message?.text ?? message?.mes;
   const content = isUser ? String(raw || '').trim().slice(0, 12_000) : visiblePreviewText(raw);
-  if (!content || message?.role === 'system' || message?.is_system === true) return null;
+  if (!content || ((message?.role === 'system' || message?.is_system === true) && !message?.extra?.homer_hidden && !message?.hidden)) return null;
   return {
     id: String(message?.id || message?.extra?.homer_message_id || `local-${index}`).slice(0, 180),
     role: isUser ? 'user' : 'assistant',
+    hidden: Boolean(message?.hidden || message?.extra?.homer_hidden),
+    collapsed: Boolean(message?.collapsed || message?.extra?.homer_collapsed),
     content,
     created_at: Number(message?.created_at || message?.extra?.homer_created_at || 0),
   };
@@ -271,12 +276,14 @@ function scopedKey(key) {
 
 function renderMessages(messages, { pending = '' } = {}) {
   previewMessages.replaceChildren();
-  for (const message of messages) {
-    const normalized = normalizeMessage(message);
+  for (const [index, message] of messages.entries()) {
+    const normalized = normalizeMessage(message, index);
     if (!normalized) continue;
     const bubble = document.createElement('article');
     bubble.className = `preview-message${normalized.role === 'user' ? ' is-user' : ''}`;
     bubble.dataset.messageId = normalized.id;
+    bubble.dataset.hidden = String(normalized.hidden);
+    bubble.dataset.collapsed = String(normalized.collapsed);
     bubble.textContent = normalized.content;
     previewMessages.append(bubble);
   }
@@ -301,7 +308,10 @@ function renderConversation(payload, { save = true } = {}) {
   if (!snapshot.app_id) snapshot.app_id = activeAppId;
   activeConversationId = snapshot.conversation_id || activeConversationId;
   activeAppId = snapshot.app_id || activeAppId;
+  appearance.refresh();
   previewTitle.textContent = snapshot.title || '角色对话';
+  document.querySelector('#preview-settings-title').textContent = previewTitle.textContent;
+  document.querySelector('#preview-settings-avatar').src = snapshot.avatar || '/assets/img/apk/avatar.webp';
   setDocumentTitle(snapshot.title);
   if (snapshot.avatar) previewAvatar.src = snapshot.avatar;
   renderMessages(snapshot.messages || [], { pending: pendingDraft });
@@ -451,6 +461,7 @@ function updateVisibleConversationUrl(appId, conversationId) {
   if (!safeAppId || !safeConversationId) return;
   activeAppId = safeAppId;
   activeConversationId = safeConversationId;
+  appearance.refresh();
   const next = new URL(location.href);
   next.searchParams.set('app_id', safeAppId);
   next.searchParams.set('conversation_id', safeConversationId);
@@ -710,6 +721,18 @@ historyList.addEventListener('click', event => {
   void switchConversation(button.dataset.appId, button.dataset.conversationId);
 });
 modelButton.addEventListener('click', openModelDialog);
+document.querySelector('#preview-settings-avatar').addEventListener('error', event => {
+  const fallback = new URL('/assets/img/apk/avatar.webp', location.href).href;
+  if (event.target.src !== fallback) event.target.src = fallback;
+});
+const appearance = bindChatAppearance(() => ({ owner: getCachedUser()?.id || getCachedUser()?.user_id, conversation: activeConversationId }));
+document.querySelector('#preview-appearance').addEventListener('click', () => { closeDrawers(); appearance.open(); });
+for (const button of document.querySelectorAll('[data-chat-tool]')) {
+  button.addEventListener('click', () => {
+    closeDrawers();
+    openChatTool(button.dataset.chatTool, { container: previewMessages, selector: '.preview-message', isUser: element => element.classList.contains('is-user'), title: previewTitle.textContent });
+  });
+}
 modelClose.addEventListener('click', () => modelDialog.close());
 modelCancel.addEventListener('click', () => modelDialog.close());
 for (const section of document.querySelectorAll('[data-runtime-section]')) {
@@ -768,3 +791,51 @@ document.documentElement.dataset.homerShellReady = 'true';
 nativeCall('notifyShellReady', location.href);
 
 void start();
+// The cached first frame exposes the same message actions as the live runtime.
+let previewPressTimer = null;
+let previewPressOrigin = null;
+function openPreviewMessageMenu(bubble) {
+  if (!bubble?.dataset.messageId) return;
+  document.querySelector('#preview-message-actions')?.remove();
+  const menu = document.createElement('dialog');
+  menu.id = 'preview-message-actions'; menu.className = 'preview-message-actions'; menu.setAttribute('aria-label', '消息操作');
+  const actions = [['copy','复制','M8 8h12v12H8z M16 8V4H4v12h4'],['edit','改写','m4 16 12-12 4 4L8 20H4v-4 M14 6l4 4'],['rollback','回溯','M9 4 4 9l5 5 M4 9h9a7 7 0 0 1 7 7v4'],['delete','删除','M3 6h18 M9 6V3h6v3 M6 6l1 15h10l1-15 M10 10v7 M14 10v7'],['hide',bubble.dataset.hidden === 'true' ? '取消隐藏' : '隐藏','M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12 M9 12a3 3 0 1 0 6 0 3 3 0 1 0-6 0'],['select','多选','M10 6h11 M10 12h11 M10 18h11 M3 5l2 2 3-3 M3 11l2 2 3-3 M3 17l2 2 3-3'],['collapse',bubble.dataset.collapsed === 'true' ? '展开' : '折叠',bubble.dataset.collapsed === 'true' ? 'm5 5 7 7 7-7 M5 19h14' : 'm5 13 7-7 7 7 M5 19h14']];
+  for (const [action,label,icon] of actions) {
+    const button = document.createElement('button'); button.type = 'button';
+    const mark = document.createElementNS('http://www.w3.org/2000/svg','svg');
+    for (const [key,value] of Object.entries({viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':'1.7','stroke-linecap':'round','stroke-linejoin':'round','aria-hidden':'true'})) mark.setAttribute(key,value);
+    const path = document.createElementNS('http://www.w3.org/2000/svg','path'); path.setAttribute('d',icon); mark.append(path);
+    const text = document.createElement('span'); text.textContent = label; button.append(mark,text);
+    button.addEventListener('click', async () => {
+      menu.close();
+      if (action === 'copy') {
+        try { await navigator.clipboard.writeText(bubble.textContent); showToast('已复制这条消息'); }
+        catch { showToast('复制失败，请重试'); }
+      } else {
+        postRuntimeCommand('message-action', { action, message_id: bubble.dataset.messageId });
+        if (runtimeReady) document.body.classList.add('is-ready');
+      }
+    }); menu.append(button);
+  }
+  menu.addEventListener('close',()=>menu.remove(),{once:true});
+  menu.addEventListener('click',event=>{if(event.target === menu)menu.close();});
+  document.body.append(menu); menu.showModal();
+  const box=bubble.getBoundingClientRect();
+  const left=bubble.classList.contains('is-user')?box.right-menu.offsetWidth:box.left;
+  const above=box.top-menu.offsetHeight-8;
+  menu.style.left=Math.max(10,Math.min(left,innerWidth-menu.offsetWidth-10))+'px';
+  menu.style.top=Math.max(10,Math.min(above>=10?above:box.bottom+8,innerHeight-menu.offsetHeight-10))+'px';
+}
+previewMessages.addEventListener('contextmenu',event=>{
+  const bubble=event.target.closest('.preview-message'); if(!bubble)return;
+  event.preventDefault();openPreviewMessageMenu(bubble);
+});
+previewMessages.addEventListener('pointerdown',event=>{
+  if(event.button>0)return;const bubble=event.target.closest('.preview-message');if(!bubble)return;
+  previewPressOrigin={x:event.clientX,y:event.clientY};
+  clearTimeout(previewPressTimer);previewPressTimer=setTimeout(()=>openPreviewMessageMenu(bubble),520);
+},{passive:true});
+previewMessages.addEventListener('pointermove',event=>{
+  if(previewPressOrigin && Math.hypot(event.clientX-previewPressOrigin.x,event.clientY-previewPressOrigin.y)>12)clearTimeout(previewPressTimer);
+},{passive:true});
+for(const name of ['pointerup','pointercancel'])previewMessages.addEventListener(name,()=>{clearTimeout(previewPressTimer);previewPressOrigin=null;});

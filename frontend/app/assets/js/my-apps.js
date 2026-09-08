@@ -1,5 +1,7 @@
-import { api, requireAuth, getCachedUser, setCachedUser, ApiError } from '/app/assets/js/app-core.js?v=20260905-notices-v1';
-import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260905-notices-v1';
+import { confirmAction, showMessage } from '/assets/js/dialogs.js?v=20260908-pr7';
+import { api, requireAuth, getCachedUser, setCachedUser, ApiError } from '/app/assets/js/app-core.js?v=20260908-pr7';
+import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260908-pr7';
+import { readPageCache, writePageCache } from './page-cache.js';
 
 function myAppsPage() {
   return {
@@ -16,23 +18,29 @@ function myAppsPage() {
 
     async init() {
       injectLayout('workshop');
-      this.siteSettings = await loadPublicSiteSettings().catch(() => null);
       if (!requireAuth()) return;
       const cached = getCachedUser();
       if (cached) this.user = cached;
+      const snapshot = readPageCache('my-apps', cached);
+      if (Array.isArray(snapshot?.list)) this.apps = snapshot.list;
       try {
-        const profile = await api.profile();
-        this.user = profile;
-        setCachedUser(profile);
-        const p = await api.points();
-        this.points = parseInt(p.points || p.data?.points || 0, 10);
+        await Promise.all([
+          loadPublicSiteSettings().then(s => { this.siteSettings = s; }).catch(() => {}),
+          api.profile().then(async r => {
+            const previousOwner = String(cached?.id || cached?.user_id || '');
+            this.user = r?.data || r;
+            setCachedUser(this.user);
+            if (previousOwner !== String(this.user?.id || this.user?.user_id || '')) this.apps = [];
+            await this.loadApps();
+          }),
+          api.points().then(p => { this.points = parseInt(p.points || p.data?.points || 0, 10); }).catch(() => {}),
+        ]);
       } catch (err) {
         if (err instanceof ApiError && err.code === 401) {
           location.replace('/app/login.html?next=' + encodeURIComponent(location.pathname));
           return;
         }
       }
-      await this.loadApps();
     },
 
     showToast(message, type = 'info', duration = 2800) {
@@ -54,14 +62,16 @@ function myAppsPage() {
     },
 
     async loadApps() {
+      const owner = getCachedUser();
       this.loading = true;
       try {
         const r = await api.myApps({ page: 1, page_size: 100 });
+        if (String(owner?.id || owner?.user_id || '') !== String(getCachedUser()?.id || getCachedUser()?.user_id || '')) return;
         const data = r?.data || r;
         this.apps = data.list || data.apps || [];
+        writePageCache('my-apps', owner, { list: this.apps });
       } catch (err) {
         this.showToast(err.message || this.myText('load_failed_text', '获取角色失败'), 'error');
-        this.apps = [];
       } finally {
         this.loading = false;
       }
@@ -122,7 +132,7 @@ function myAppsPage() {
     async remove(app) {
       const name = app.name || this.myText('unnamed_role', '未命名角色');
       const confirmText = this.formatTemplate(this.myText('delete_confirm_template', '删除「{name}」？'), { name });
-      if (!confirm(confirmText)) return;
+      if (!await confirmAction(confirmText)) return;
       try {
         await api.deleteApp(app.id);
         this.showToast(this.myText('deleted_success', '已删除'), 'success');

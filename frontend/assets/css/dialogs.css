@@ -1,0 +1,8 @@
+.homer-action-dialog{box-sizing:border-box;width:min(420px,calc(100vw - 40px));max-height:calc(100dvh - 48px);overflow:auto;border:0;border-radius:22px;padding:24px;background:#fff;color:#28232f;box-shadow:0 20px 80px #10072040;font:15px/1.65 system-ui,sans-serif}
+.homer-action-dialog::backdrop{background:#15102066;backdrop-filter:blur(2px)}
+.homer-action-dialog h2{margin:0 0 12px;font-size:19px;font-weight:650;color:var(--ui-text,#28232f)}
+.homer-action-dialog p{margin:0 0 24px;color:var(--ui-muted,#6a6272);overflow-wrap:anywhere;white-space:pre-wrap}
+.homer-action-dialog footer{display:flex;justify-content:flex-end;gap:12px}
+.homer-action-dialog button{min-height:44px;min-width:88px;padding:10px 20px;border:0;border-radius:24px;font:600 14px/1.5 system-ui,sans-serif;cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation;user-select:none}
+.homer-action-cancel{background:#f1eef4;color:#4f4659}.homer-action-confirm{background:#7655a4;color:#fff}
+.homer-action-dialog button:focus-visible{outline:2px solid #7655a4;outline-offset:3px}

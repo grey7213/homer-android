@@ -1,4 +1,4 @@
-import { api, isLoggedIn, ApiError } from '/app/assets/js/app-core.js?v=20260905-notices-v1';
+import { api, isLoggedIn, ApiError } from '/app/assets/js/app-core.js?v=20260908-pr7';
 
 const statusNode = document.querySelector('[data-resume-status]');
 

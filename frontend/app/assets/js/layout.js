@@ -1,4 +1,4 @@
-import { installDialoguePrewarm } from '/app/assets/js/dialogue-prewarm.js?v=20260905-notices-v1';
+import { installDialoguePrewarm } from '/app/assets/js/dialogue-prewarm.js?v=20260908-pr7';
 
 const NAV_ITEMS = [
   { key: 'explore', label: '探索', href: '/app/explore.html', icon: 'M3 12l9-9 9 9M5 10v10h14V10' },
@@ -28,7 +28,6 @@ const PULL_REFRESH_PATHS = new Set([
   '/app/explore.html',
   '/app/histories.html',
   '/app/favorites.html',
-  '/app/community.html',
   '/app/workshop.html',
   '/app/me.html',
   '/app/farm.html',

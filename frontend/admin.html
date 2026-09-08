@@ -10,8 +10,10 @@
   <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
   <link rel="stylesheet" href="/assets/css/custom.css?v=20260901-persistent-pages">
   <link rel="stylesheet" href="/assets/css/admin.css?v=20260817-mobile-model-pricing">
-  <script type="module" src="/assets/js/admin-app.js?v=20260905-notices-v1"></script>
+  <script type="module" src="/assets/js/admin-app.js?v=20260908-pr7"></script>
   <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
+  <link rel="stylesheet" href="/assets/css/app-design.css?v=20260908-pr7">
+  <script defer src="/assets/js/option-picker.js?v=20260908-pr7"></script>
 </head>
 <body class="xy-admin min-h-screen">
   <div class="xy-stars-bg"></div>
@@ -83,7 +85,7 @@
               <img src="/assets/img/logo-64.png?v=20260901-persistent-pages" alt="惑梦（Homer）" class="w-8 h-8">
               <span class="font-bold text-sm">管理后台</span>
             </div>
-            <select @change="switchTab($event.target.value)" class="xy-input text-sm py-2 px-3 bg-black/40">
+            <select aria-label="管理后台功能" @change="switchTab($event.target.value)" class="xy-input text-sm py-2 px-3 bg-black/40">
               <template x-for="tab in tabs" :key="tab.id">
                 <option :value="tab.id" :selected="activeTab === tab.id" x-text="tab.label"></option>
               </template>
@@ -618,18 +620,20 @@
               <button @click="loadLlmSettings" class="xy-btn xy-btn-ghost text-sm" :disabled="loading">刷新</button>
             </div>
 
-            <div class="grid lg:grid-cols-[1fr_320px] gap-6">
+            <div class="ui-model-workspace">
               <form class="xy-glass p-6 space-y-5" @submit.prevent="saveLlmSettings">
-                <div class="flex items-center justify-between gap-3">
+                <div class="ui-save-bar">
                   <label class="flex items-center gap-3 text-sm text-slate-200">
                     <input type="checkbox" x-model="llmForm.enabled" class="accent-violet-500">
                     启用站点模型 API
                   </label>
-                  <button type="button" @click="addModelPreset" class="xy-btn xy-btn-ghost text-sm">新增 API 节点</button>
+                  <div class="flex gap-2"><button type="button" @click="addModelPreset" class="xy-btn xy-btn-ghost text-sm">新增节点</button><button type="submit" class="xy-btn xy-btn-primary" :disabled="loading" x-text="loading ? '保存中…' : '保存全部节点'"></button></div>
                 </div>
-                <div class="space-y-4">
-                  <template x-for="(preset, idx) in llmForm.presets" :key="preset.id">
-                    <div class="rounded-xl border border-white/10 bg-white/5 p-4 space-y-4">
+                <nav class="segmented ui-model-sections" aria-label="配置类别"><button type="button" @click="uiModelSection='chat'" :class="uiModelSection==='chat' ? 'is-active' : ''">对话模型</button><button type="button" @click="uiModelSection='image'" :class="uiModelSection==='image' ? 'is-active' : ''">图片模型</button><button type="button" @click="uiModelSection='memory'" :class="uiModelSection==='memory' ? 'is-active' : ''">长记忆</button></nav>
+                <div class="ui-node-layout" x-show="uiModelSection === 'chat'">
+                  <nav class="ui-node-list" aria-label="API 节点"><template x-for="node in llmForm.presets" :key="node.id"><button type="button" class="ui-node-tab" :class="currentModelNodeId() === node.id ? 'is-active' : ''" @click="uiNodeId = node.id; uiModelSearch = ''"><strong x-text="node.name || '未命名节点'"></strong><small x-text="(node.enabled ? '已启用' : '已停用') + ' · ' + (node.modelConfigs || []).length + ' 个模型'"></small></button></template></nav>
+                  <div><template x-for="preset in visibleModelNodes()" :key="preset.id">
+                    <div class="ui-node-panel space-y-4">
                       <div class="flex items-center justify-between gap-3">
                         <div class="flex items-center gap-3">
                           <input type="radio" name="default_model_preset" :checked="llmForm.default_model_preset_id === preset.id" @change="setDefaultModelPreset(preset)" class="accent-violet-500">
@@ -646,7 +650,7 @@
                             <input type="checkbox" x-model="preset.enabled" class="accent-emerald-500">
                             启用
                           </label>
-                          <button type="button" @click="removeModelPreset(idx)" class="text-red-300 hover:text-red-200 text-xs">删除</button>
+                          <button type="button" @click="confirmRemoveModelNode(preset)" class="text-red-300 hover:text-red-200 text-xs">删除</button>
                         </div>
                       </div>
                       <div class="grid md:grid-cols-2 gap-3">
@@ -662,6 +666,11 @@
                           </select>
                         </div>
                       </div>
+                      <div class="grid md:grid-cols-2 gap-3 ui-node-credentials">
+                        <label><span class="xy-label">API Key</span><input type="password" class="xy-input" x-model="preset.api_key" autocomplete="new-password" :placeholder="preset.has_api_key ? '已配置，留空保留现有密钥' : '粘贴此节点的 API Key'"><span class="ui-field-hint">该节点下的模型共用此密钥</span></label>
+                        <label><span class="xy-label">默认温度</span><input type="number" step="0.05" min="0" max="2" class="xy-input" x-model.number="preset.temperature"></label>
+                      </div>
+                      <label class="ui-field-hint flex items-center gap-2"><input type="checkbox" x-model="preset.clear_api_key">保存时清除此节点密钥</label>
                       <div class="grid md:grid-cols-2 gap-3">
                         <div>
                           <label class="xy-label">Base URL</label>
@@ -685,11 +694,11 @@
                           </div>
                         </div>
                       </div>
-                      <div>
+                      <details class="ui-batch-models"><summary>批量添加 / 编辑模型 ID</summary><div>
                         <label class="xy-label">模型列表（每行一个，或用逗号分隔）</label>
                         <textarea class="xy-input" style="min-height:90px" x-model="preset.modelsText" @change="syncModelConfigs(preset)" placeholder="gpt-4o-mini&#10;gpt-4o&#10;gemini-2.5-flash"></textarea>
                         <div class="text-xs text-slate-500 mt-1">用户在编辑器里会看到「供应商 / 模型」的可搜索条目，所有模型共用这个供应商的 Base URL 和 API Key。</div>
-                      </div>
+                      </div></details>
                       <div class="rounded-xl border border-violet-300/20 bg-violet-400/5 p-4 space-y-3">
                         <div class="flex items-start justify-between gap-3 flex-wrap">
                           <div>
@@ -701,47 +710,14 @@
                         <template x-if="!(preset.modelConfigs || []).length">
                           <div class="text-xs text-slate-500 rounded-lg border border-dashed border-white/10 p-3">填写模型列表后点击“同步模型列表”。</div>
                         </template>
-                        <div class="space-y-3">
-                          <template x-for="config in (preset.modelConfigs || [])" :key="config.model">
-                            <div class="xy-admin-model-card rounded-lg border border-white/10 bg-white p-3 space-y-3">
-                              <div class="grid md:grid-cols-2 gap-3">
-                                <div>
-                                  <label class="xy-label">模型 ID</label>
-                                  <input class="xy-input" :value="config.model" disabled>
-                                </div>
-                                <div>
-                                  <label class="xy-label">用户看到的名称</label>
-                                  <input class="xy-input" x-model="config.display_name" :placeholder="config.model">
-                                </div>
-                              </div>
-                              <div>
-                                <label class="xy-label">该模型唯一使用的预设</label>
-                                <select class="xy-input" x-model="config.preset_id">
-                                  <template x-for="option in globalPromptPresetOptions()" :key="option.id">
-                                    <option :value="option.id" x-text="option.name || option.id"></option>
-                                  </template>
-                                </select>
-                              </div>
-                              <div class="grid md:grid-cols-3 gap-3">
-                                <div>
-                                  <label class="xy-label">计价方式</label>
-                                  <select class="xy-input" x-model="config.pricing.mode">
-                                    <option value="per_request">按次</option>
-                                    <option value="per_token">按量（1M Token）</option>
-                                  </select>
-                                </div>
-                                <div>
-                                  <label class="xy-label" x-text="config.pricing.mode === 'per_token' ? '输入价 / 1M Token' : '输入一次价格'"></label>
-                                  <input type="number" min="0" step="0.01" class="xy-input" x-model.number="config.pricing.input_price">
-                                </div>
-                                <div>
-                                  <label class="xy-label" x-text="config.pricing.mode === 'per_token' ? '输出价 / 1M Token' : '输出一次价格'"></label>
-                                  <input type="number" min="0" step="0.01" class="xy-input" x-model.number="config.pricing.output_price">
-                                </div>
-                              </div>
-                              <div class="text-xs text-violet-300" x-text="modelPricingHint(config)"></div>
-                            </div>
+                        <div class="ui-model-toolbar"><input class="xy-input" x-model="uiModelSearch" placeholder="搜索模型 ID 或名称" aria-label="搜索模型"><span x-text="`${filteredModelConfigs(preset).length} / ${(preset.modelConfigs || []).length} 个模型`"></span></div>
+                        <div class="ui-model-list" aria-label="模型列表">
+                          <template x-for="config in filteredModelConfigs(preset)" :key="config.model">
+                            <button type="button" class="ui-model-row" @click="openModelEditor(config)">
+                              <span><strong x-text="config.display_name || config.model"></strong><small x-text="config.model + ' · ' + modelPricingHint(config)"></small></span><span>配置 ›</span>
+                            </button>
                           </template>
+                          <div class="ui-state" x-show="!filteredModelConfigs(preset).length">没有匹配的模型，换个关键词试试。</div>
                         </div>
                       </div>
                       <template x-if="preset.catalog_meta || preset.probe_summary">
@@ -768,24 +744,11 @@
                           <div class="text-[11px] text-amber-200/75">首字表示用户开始看到回复的等待时间，完整表示测试回复全部结束的总耗时。检测会产生少量真实模型请求；通过后仍需点击页面底部“保存模型预设”才会对用户生效。</div>
                         </div>
                       </template>
-                      <div class="grid md:grid-cols-2 gap-3">
-                        <div>
-                          <label class="xy-label">Temperature</label>
-                          <input type="number" step="0.1" min="0" max="2" class="xy-input" x-model.number="preset.temperature">
-                        </div>
-                        <div>
-                          <label class="xy-label">API Key</label>
-                          <input type="password" class="xy-input" x-model="preset.api_key" autocomplete="new-password" :placeholder="preset.has_api_key ? ('留空保留 ' + (preset.api_key_preview || '已配置密钥')) : '填写该预设 API Key'">
-                        </div>
-                      </div>
-                      <label class="flex items-center gap-2 text-xs text-slate-400">
-                        <input type="checkbox" x-model="preset.clear_api_key" class="accent-red-500">
-                        清空该预设 API Key
-                      </label>
+
                     </div>
-                  </template>
+                  </template></div>
                 </div>
-                <div class="rounded-xl border border-sky-300/15 bg-sky-400/5 p-4 space-y-4">
+                <div class="rounded-xl border border-sky-300/15 bg-sky-400/5 p-4 space-y-4" x-show="uiModelSection === 'image'">
                   <div class="flex items-start justify-between gap-3 flex-wrap">
                     <div>
                       <h3 class="font-semibold text-white">图片模型</h3>
@@ -847,7 +810,7 @@
                     清空图片模型 API Key
                   </label>
                 </div>
-                <div class="rounded-xl border border-fuchsia-300/15 bg-fuchsia-400/5 p-4 space-y-4">
+                <div class="rounded-xl border border-fuchsia-300/15 bg-fuchsia-400/5 p-4 space-y-4" x-show="uiModelSection === 'memory'">
                   <div class="flex items-start justify-between gap-3 flex-wrap">
                     <div>
                       <h3 class="font-semibold text-white">长期记忆</h3>
@@ -906,7 +869,7 @@
                 </div>
               </form>
 
-              <aside class="xy-glass p-6 h-fit">
+              <aside class="xy-glass p-6 h-fit ui-model-status">
                 <h3 class="font-semibold mb-4">当前状态</h3>
                 <div class="space-y-3 text-sm">
                   <div class="flex justify-between gap-3">
@@ -942,6 +905,45 @@
             </div>
           </div>
 
+          <template x-if="uiModelEditor"><dialog class="ui-model-dialog" x-init="$el.showModal()" aria-label="模型配置" @close="uiModelEditor = null" @click.self="uiModelEditor = null"><section class="ui-admin-dialog__sheet"><header><div><p class="ui-eyebrow">独立配置 · 不影响其他模型</p><h2>模型设置</h2></div><button type="button" class="ui-icon-button" aria-label="关闭模型配置" @click="uiModelEditor = null">×</button></header><div class="xy-admin-model-card rounded-lg border border-white/10 bg-white p-3 space-y-3">
+                              <div class="grid md:grid-cols-2 gap-3">
+                                <div>
+                                  <label class="xy-label">模型 ID</label>
+                                  <input class="xy-input" :value="uiModelEditor.model" disabled>
+                                </div>
+                                <div>
+                                  <label class="xy-label">用户看到的名称</label>
+                                  <input class="xy-input" x-model="uiModelEditor.display_name" :placeholder="uiModelEditor.model">
+                                </div>
+                              </div>
+                              <div>
+                                <label class="xy-label">该模型唯一使用的预设</label>
+                                <select class="xy-input" x-model="uiModelEditor.preset_id">
+                                  <template x-for="option in globalPromptPresetOptions()" :key="option.id">
+                                    <option :value="option.id" x-text="option.name || option.id"></option>
+                                  </template>
+                                </select>
+                              </div>
+                              <div class="grid md:grid-cols-3 gap-3">
+                                <div>
+                                  <label class="xy-label">计价方式</label>
+                                  <select class="xy-input" x-model="uiModelEditor.pricing.mode">
+                                    <option value="per_request">按次</option>
+                                    <option value="per_token">按量（1M Token）</option>
+                                  </select>
+                                </div>
+                                <div>
+                                  <label class="xy-label" x-text="uiModelEditor.pricing.mode === 'per_token' ? '输入价 / 1M Token' : '输入一次价格'"></label>
+                                  <input type="number" min="0" step="0.01" class="xy-input" x-model.number="uiModelEditor.pricing.input_price">
+                                </div>
+                                <div>
+                                  <label class="xy-label" x-text="uiModelEditor.pricing.mode === 'per_token' ? '输出价 / 1M Token' : '输出一次价格'"></label>
+                                  <input type="number" min="0" step="0.01" class="xy-input" x-model.number="uiModelEditor.pricing.output_price">
+                                </div>
+                              </div>
+                              <div class="text-xs text-violet-300" x-text="modelPricingHint(uiModelEditor)"></div>
+                            </div><footer><button type="button" class="xy-btn xy-btn-primary" @click="uiModelEditor = null">完成编辑</button></footer><p class="ui-field-hint">修改暂存于当前页面，点击“保存全部节点”后生效。</p></section></dialog></template>
+
           <!-- 全局预设 -->
           <div x-show="activeTab === 'global-presets'">
             <div class="flex items-start justify-between gap-4 mb-6 flex-wrap">
@@ -967,13 +969,13 @@
               <button type="button" class="xy-btn text-sm" :class="globalPresetKind === 'regex' ? 'xy-btn-primary' : 'xy-btn-ghost'" @click="switchGlobalPresetKind('regex')">正则预设</button>
             </div>
 
-            <div class="grid xl:grid-cols-[300px_minmax(0,1fr)] gap-5">
-              <aside class="xy-glass p-4 h-fit space-y-3">
-                <div class="text-xs text-slate-400">预设列表</div>
+            <div class="ui-preset-layout">
+              <aside class="xy-glass p-4 h-fit space-y-3 ui-preset-library">
+                <div class="text-xs text-slate-400">预设库</div><input class="xy-input" x-model="uiPresetSearch" placeholder="搜索预设名称" aria-label="搜索预设库">
                 <template x-if="globalPresetItems().length === 0">
                   <div class="rounded-lg border border-white/10 bg-black/20 p-4 text-sm text-slate-400">还没有此类预设，请从本地文件导入。</div>
                 </template>
-                <template x-for="preset in globalPresetItems()" :key="preset.id">
+                <template x-for="preset in filteredPresetLibrary()" :key="preset.id">
                   <button type="button" class="w-full text-left rounded-xl border p-3 transition" :class="globalPresetEditor?.id === preset.id ? 'border-violet-400/50 bg-violet-500/10' : 'border-white/10 bg-black/20 hover:border-white/20'" @click="openGlobalPreset(globalPresetKind, preset.id)">
                     <div class="flex items-start justify-between gap-2">
                       <span class="font-medium text-sm break-all" x-text="preset.name || preset.id"></span>
@@ -1009,7 +1011,7 @@
                         <div><label class="xy-label">名称</label><input class="xy-input" x-model="globalPresetEditor.name"></div>
                         <div><label class="xy-label">来源</label><input class="xy-input" x-model="globalPresetEditor.source"></div>
                       </div>
-                      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                      <div class="ui-preset-stats">
                         <div class="rounded-lg bg-black/20 p-3"><div class="text-slate-500">全部条目</div><div class="text-lg text-white" x-text="globalPresetStats().total"></div></div>
                         <div class="rounded-lg bg-black/20 p-3"><div class="text-slate-500">启用条目</div><div class="text-lg text-emerald-300" x-text="globalPresetStats().enabled"></div></div>
                         <div class="rounded-lg bg-black/20 p-3"><div class="text-slate-500">Marker</div><div class="text-lg text-amber-300" x-text="globalPresetStats().markers"></div></div>
@@ -1027,10 +1029,10 @@
                           <option value="marker" x-show="globalPresetKind === 'prompt'">仅 Marker</option>
                         </select>
                       </div>
-                      <div class="space-y-3 max-h-[72vh] overflow-y-auto pr-1">
+                      <div class="space-y-3 ui-preset-entries overflow-y-auto pr-1">
                         <template x-for="entry in globalPresetEntries()" :key="entry.identifier || entry.id || entry.scriptName">
                           <details class="rounded-xl border border-white/10 bg-black/20 overflow-hidden">
-                            <summary class="cursor-pointer px-4 py-3 flex items-center justify-between gap-3">
+                            <summary class="cursor-pointer px-4 py-3 flex items-center justify-between gap-3" @click="closeOtherPresetEntries($event)">
                               <span class="min-w-0">
                                 <span class="block text-sm text-slate-100 break-all" x-text="entry.name || entry.scriptName || entry.identifier || entry.id"></span>
                                 <span class="block text-[11px] text-slate-500 mt-1 break-all" x-text="globalPresetKind === 'prompt' ? ((entry.in_order === false ? '未进顺序表' : ('顺序 ' + (entry.order ?? 0))) + (entry.marker ? ' · Marker' : '') + (entry.role ? (' · ' + entry.role) : '') + (entry.user_toggleable ? ' · 用户可见' : '')) : ('顺序 ' + entry.order + ' · placement ' + JSON.stringify(entry.placement || []))"></span>
@@ -1109,6 +1111,12 @@
           </div>
 
           <!-- 运营配置 -->
+          <section x-show="activeTab === 'community'" aria-label="社区管理">
+            <div class="flex items-center justify-between mb-6"><div><h2 class="text-xl font-bold">社区举报</h2><p class="text-sm text-slate-400 mt-2">核查用户反馈，处理不合适的公开帖子。</p></div><button class="xy-btn xy-btn-ghost" @click="loadSocialReports()">刷新</button></div>
+            <p class="text-red-400" role="alert" x-show="socialReportError" x-text="socialReportError"></p>
+            <p class="xy-glass p-6" x-show="!socialReportError && !socialReports.length">暂无待处理的举报</p>
+            <div class="space-y-3"><template x-for="report in socialReports" :key="report.id"><article class="xy-glass p-5"><h3 class="font-bold" x-text="report.title || '无标题帖子'"></h3><p class="whitespace-pre-wrap my-3" x-text="report.reason"></p><p class="text-sm text-slate-400" x-text="formatTime(report.created_at)"></p><button class="xy-btn xy-btn-ghost mt-3" :disabled="!!report.deleted" @click="removeReportedPost(report)" x-text="report.deleted ? '已下架' : '下架帖子'"></button></article></template></div>
+          </section>
           <section x-show="activeTab === 'notifications'" aria-label="通知管理">
             <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
               <div><h1 class="text-2xl font-bold xy-gradient-text">通知管理</h1>
@@ -1160,6 +1168,24 @@
 
             <template x-if="siteForm">
               <form class="space-y-6" @submit.prevent="saveSiteSettings">
+                <section class="xy-glass p-6">
+                  <div class="flex items-center justify-between gap-3 mb-5">
+                    <div>
+                      <h2 class="font-semibold text-white">群聊页</h2>
+                      <p class="text-xs text-slate-500 mt-1">管理群聊列表、创建面板、输入框、toast 和确认提示</p>
+                    </div>
+                    <a href="/app/group-chat.html" target="_blank" class="xy-link text-sm">打开群聊 →</a>
+                  </div>
+                  <div class="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
+                    <template x-for="item in groupChatCopyItems" :key="item.key">
+                      <div>
+                        <label class="xy-label" x-text="item.label"></label>
+                        <input class="xy-input" x-model="siteForm.group_chat[item.key]" :maxlength="item.max">
+                      </div>
+                    </template>
+                  </div>
+                </section>
+
                 <section class="xy-glass p-6">
                   <div class="flex items-center justify-between gap-3 mb-5">
                     <div>
@@ -1490,23 +1516,7 @@
                   </div>
                 </section>
 
-                <section class="xy-glass p-6">
-                  <div class="flex items-center justify-between gap-3 mb-5">
-                    <div>
-                      <h2 class="font-semibold text-white">群聊页</h2>
-                      <p class="text-xs text-slate-500 mt-1">管理群聊列表、创建面板、输入框、toast 和确认提示</p>
-                    </div>
-                    <a href="/app/group-chat.html" target="_blank" class="xy-link text-sm">打开群聊 →</a>
-                  </div>
-                  <div class="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
-                    <template x-for="item in groupChatCopyItems" :key="item.key">
-                      <div>
-                        <label class="xy-label" x-text="item.label"></label>
-                        <input class="xy-input" x-model="siteForm.group_chat[item.key]" :maxlength="item.max">
-                      </div>
-                    </template>
-                  </div>
-                </section>
+
 
                 <section class="xy-glass p-6">
                   <div class="flex items-center justify-between gap-3 mb-5">

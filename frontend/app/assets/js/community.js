@@ -1,5 +1,7 @@
-import { api, requireAuth, getCachedUser, setCachedUser, ApiError } from '/app/assets/js/app-core.js?v=20260905-notices-v1';
-import { injectLayout } from '/app/assets/js/layout.js?v=20260905-notices-v1';
+import { confirmAction, showMessage } from '/assets/js/dialogs.js?v=20260908-pr7';
+import { api, requireAuth, getCachedUser, setCachedUser, ApiError } from '/app/assets/js/app-core.js?v=20260908-pr7';
+import { injectLayout } from '/app/assets/js/layout.js?v=20260908-pr7';
+import { allowCommunityPreview } from './community-preview.js';
 
 const WORK_TYPES = ['mod', 'ui_template', 'preset'];
 const TYPE_LABELS = { mod: 'Mod', ui_template: 'UI 模板', preset: '预设' };
@@ -150,6 +152,7 @@ function communityPage() {
     contestForm: { title: '', content: '', reward: '', start_at: '', end_at: '' },
 
     async init() {
+      if (!await allowCommunityPreview()) return;
       injectLayout('workshop');
       if (!requireAuth()) return;
       const cached = getCachedUser();
@@ -341,7 +344,7 @@ function communityPage() {
     },
 
     async deleteWork() {
-      if (!this.detail?.is_owner || !confirm(`确认删除「${this.detail.name}」？`)) return;
+      if (!this.detail?.is_owner || !await confirmAction(`确认删除「${this.detail.name}」？`)) return;
       try {
         await api.deleteCommunityWork(this.detail.id);
         this.closeDetail();

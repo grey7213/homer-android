@@ -1,0 +1,10 @@
+<!doctype html><html lang="zh-CN"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>创作者比赛 · 惑梦</title>
+<link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages"><link rel="stylesheet" href="/assets/css/community-feed.css?v=20260908-pr7">
+<script type="module" src="/app/assets/js/community-contest.js?v=20260908-pr7"></script><script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
+<style>html:not([data-homer-community-preview="allowed"]) body{display:none!important}</style></head><body class="social-page"><script>if(new URLSearchParams(location.search).get('preview')!=='1')location.replace('/app/explore.html');</script><div class="app-shell" x-data="contestPage()" x-cloak><aside class="app-sidebar" data-app-sidebar></aside><main class="app-main social-main">
+<header class="social-dialog-header"><a href="/app/community.html" class="xy-btn xy-btn-ghost">‹ 社区</a><strong>本期创作者比赛</strong></header>
+<p class="social-feedback" role="status" x-show="loading">正在获取赛事…</p><div class="social-feedback" role="alert" x-show="error"><p x-text="error"></p><button @click="load()">重试</button></div>
+<article class="social-detail-content" x-show="contest"><small x-text="contest?.period || ''"></small><h1 x-text="contest?.title || '本期创作者比赛'"></h1><p x-text="contest?.description || contest?.content || ''"></p><h2 x-show="contest?.reward">赛事奖励</h2><p x-text="contest?.reward || ''"></p><h2 x-show="contest?.metrics?.length">评选方式</h2><p x-text="(contest?.metrics || []).join(' / ')"></p><small x-text="contest?.status || ''"></small><a href="/app/community-library.html?tab=contests" class="xy-btn xy-btn-primary" style="margin-top:24px">查看参赛作品与投票</a></article>
+<div class="social-empty" x-show="!loading && !error && !contest"><h2>当前暂无创作者比赛</h2><p>新一期比赛发布后会在这里展示。</p></div>
+</main><nav class="app-bottom-nav" data-app-bottom-nav></nav></div></body></html>

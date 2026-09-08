@@ -673,6 +673,7 @@ html, body { font-size: 16px; line-height: 1.5; color: var(--xy-app-text); }
 }
 
 .char-card__tags {
+  flex-wrap: wrap;
   position: absolute;
   top: 10px;
   left: 10px;
@@ -682,6 +683,8 @@ html, body { font-size: 16px; line-height: 1.5; color: var(--xy-app-text); }
   z-index: 3;
 }
 .char-card__tag {
+  white-space: nowrap;
+  flex: 0 0 auto;
   font-size: 11px;
   padding: 3px 8px;
   border-radius: 999px;
@@ -4631,3 +4634,4 @@ select.xy-input option,
     text-overflow: ellipsis;
   }
 }
+.ws-grid.ws-grid--creation{grid-template-columns:minmax(0,1fr)}

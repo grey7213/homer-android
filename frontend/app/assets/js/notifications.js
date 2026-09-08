@@ -70,11 +70,58 @@ export async function checkStartupNotifications() {
   } catch { /* A missing/offline notice service must never block the app. */ }
   finally { clearTimeout(timeout); pending = false; }
 }
+
+// Manual viewing deliberately ignores the daily automatic-popup preference.
+export async function openCurrentNotifications() {
+  if (dialog?.open) return;
+  const user = owner();
+  const sheet = document.createElement('dialog');
+  sheet.className = 'homer-notice';
+  sheet.setAttribute('aria-label', '当前通知');
+  const header = document.createElement('header'); header.textContent = '通知中心';
+  const content = document.createElement('section'); content.className = 'ui-state';
+  content.setAttribute('aria-live', 'polite'); content.textContent = '正在读取通知…';
+  const footer = document.createElement('footer');
+  const retry = document.createElement('button'); retry.type = 'button'; retry.textContent = '重试'; retry.hidden = true;
+  const close = document.createElement('button'); close.type = 'button'; close.textContent = '关闭';
+  footer.append(retry, close); sheet.append(header, content, footer);
+  dialog = sheet; document.body.append(sheet); sheet.showModal();
+  let controller;
+  close.onclick = () => sheet.close();
+  sheet.addEventListener('close', () => { controller?.abort(); sheet.remove(); if (dialog === sheet) dialog = null; }, {once:true});
+  const load = async () => {
+    controller?.abort(); controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    content.textContent = '正在读取通知…'; retry.hidden = true;
+    try {
+      const response = await fetch('/console/api/public/notifications', {credentials:'include',cache:'no-store',signal:controller.signal});
+      if (!response.ok) throw Error('通知暂时无法获取');
+      const body = await response.json();
+      if (!sheet.open || owner() !== user) return;
+      const list = (body?.data?.list || body?.list || []).filter(n => n && n.enabled !== false && typeof n.title === 'string' && typeof n.content === 'string');
+      content.replaceChildren(); content.className = '';
+      if (!list.length) { content.className = 'ui-state'; content.textContent = '暂无通知，有新消息会在这里显示。'; }
+      for (const notice of list) {
+        const article = document.createElement('article');
+        const title = document.createElement('h3'); title.textContent = notice.title;
+        const text = document.createElement('p'); text.textContent = notice.content;
+        article.append(title, text); content.append(article);
+      }
+    } catch {
+      if (sheet.open) { content.textContent = '未能读取通知，请检查网络后重试。'; retry.hidden = false; }
+    } finally { clearTimeout(timeout); }
+  };
+  retry.onclick = load;
+  await load();
+}
 if (!window.__homerNoticesInstalled) {
   window.__homerNoticesInstalled = true;
   window.addEventListener('homer:app-enter', () => void checkStartupNotifications());
   document.addEventListener('visibilitychange', () => void checkStartupNotifications());
   window.addEventListener('homer-account-cleared', () => dialog?.close());
+  document.addEventListener('click', event => {
+    if (event.target instanceof Element && event.target.closest('[data-open-notifications]')) void openCurrentNotifications();
+  });
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => void checkStartupNotifications(), {once:true});
   else setTimeout(() => void checkStartupNotifications(), 0);
 }

@@ -1,5 +1,5 @@
 // Public site settings hydrator. Static HTML stays usable if this request fails.
-import { api } from '/assets/js/api.js?v=20260905-notices-v1';
+import { api } from '/assets/js/api.js?v=20260908-pr7';
 
 function getPath(obj, path) {
   return String(path || '').split('.').reduce((cur, key) => (

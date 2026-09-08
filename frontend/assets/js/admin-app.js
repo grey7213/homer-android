@@ -1,5 +1,6 @@
+import { confirmAction, showMessage } from '/assets/js/dialogs.js?v=20260908-pr7';
 // 惑梦（Homer） 管理后台 Alpine.js 应用
-import { api, isLoggedIn, formatDateTime, ApiError } from '/assets/js/api.js?v=20260905-notices-v1';
+import { api, isLoggedIn, formatDateTime, ApiError } from '/assets/js/api.js?v=20260908-pr7';
 
 function adminPanel() {
   return {
@@ -9,6 +10,7 @@ function adminPanel() {
     toast: null,
     toastTimer: null,
     adminInfo: null,
+    socialReports: [], socialReportError: '',
     notifications: [],
     notificationForm: null,
     notificationBusy: false,
@@ -44,8 +46,7 @@ function adminPanel() {
       { key: 'info', label: '信息中心' },
     ],
     mobileNavLabelItems: [
-      { key: 'home', label: '首页' },
-      { key: 'group', label: '群聊' },
+      { key: 'group', label: '群聊' },      { key: 'home', label: '首页' },
       { key: 'workshop', label: '创作' },
       { key: 'favorites', label: '收藏' },
       { key: 'me', label: '我的' },
@@ -556,6 +557,7 @@ function adminPanel() {
       { key: 'png_export_failed', label: 'PNG 导出失败', max: 80 },
       { key: 'load_existing_failed', label: '读取角色失败', max: 80 },
     ],
+
     groupChatCopyItems: [
       { key: 'page_title', label: '页面标题', max: 40 },
       { key: 'empty_groups', label: '无群聊提示', max: 80 },
@@ -630,6 +632,11 @@ function adminPanel() {
     siteSettings: null,
     siteForm: null,
 
+    uiModelSection: 'chat',
+    uiNodeId: '',
+    uiModelSearch: '',
+    uiModelEditor: null,
+    uiPresetSearch: '',
     llmSettings: null,
     globalPresets: null,
     globalPresetKind: 'prompt',
@@ -858,8 +865,19 @@ function adminPanel() {
       return '普通用户';
     },
 
+    async loadSocialReports() {
+      this.socialReportError = '';
+      try { const data = await api.socialReports(); this.socialReports = data?.data?.list || []; }
+      catch (err) { this.socialReportError = err.message || '举报列表加载失败'; }
+    },
+    async removeReportedPost(report) {
+      if (!await confirmAction('下架被举报的帖子？下架后将不再公开展示。')) return;
+      try { await api.deleteSocialPost(report.post_id); await this.loadSocialReports(); }
+      catch (err) { this.socialReportError = err.message || '下架失败'; }
+    },
     async switchTab(id) {
       this.activeTab = id;
+      if (id === 'community') await this.loadSocialReports();
       if (id === 'notifications') await this.loadNotifications();
       if (id === 'stats' && !this.stats) await this.loadStats();
       if (id === 'users' && this.users.length === 0) await this.loadUsers(1);
@@ -903,7 +921,7 @@ function adminPanel() {
       finally { this.notificationBusy = false; }
     },
     async deleteNotification(item) {
-      if (this.notificationBusy || !confirm('确定删除这条通知？删除后用户将不再看到它。')) return;
+      if (this.notificationBusy || !await confirmAction('确定删除这条通知？删除后用户将不再看到它。')) return;
       this.notificationBusy = true;
       this.notificationError = '';
       try {
@@ -967,7 +985,7 @@ function adminPanel() {
     },
 
     async closeContest(contest) {
-      if (!contest?.id || contest.status === 'closed' || !confirm(`确定关闭赛事“${contest.title || contest.id}”？关闭后将停止报名和投票。`)) return;
+      if (!contest?.id || contest.status === 'closed' || !await confirmAction(`确定关闭赛事“${contest.title || contest.id}”？关闭后将停止报名和投票。`)) return;
       try {
         await api.admin.closeCommunityContest(contest.id);
         this.showToast('赛事已关闭', 'success');
@@ -1286,7 +1304,7 @@ function adminPanel() {
     },
 
     async disableRedeemCode(item) {
-      if (!item?.code || !confirm(`禁用兑换码 ${item.code}？`)) return;
+      if (!item?.code || !await confirmAction(`禁用兑换码 ${item.code}？`)) return;
       this.loading = true;
       try {
         await api.admin.disableRedeemCode(item.code);
@@ -1721,6 +1739,26 @@ function adminPanel() {
       };
     },
 
+    currentModelNodeId() { return this.llmForm.presets.some(p => p.id === this.uiNodeId) ? this.uiNodeId : this.llmForm.presets[0]?.id; },
+    visibleModelNodes() { return this.llmForm.presets.filter(p => p.id === this.currentModelNodeId()); },
+    filteredModelConfigs(preset) {
+      const query = this.uiModelSearch.trim().toLocaleLowerCase();
+      return (preset.modelConfigs || []).filter(item => !query || (item.model + ' ' + item.display_name).toLocaleLowerCase().includes(query));
+    },
+    openModelEditor(config) { this.uiModelEditor = config; this.$nextTick(() => document.querySelector('.ui-model-dialog input:not(:disabled)')?.focus()); },
+    async confirmRemoveModelNode(preset) {
+      if (!await confirmAction('删除节点“' + preset.name + '”？保存全部节点后生效。')) return;
+      this.removeModelPreset(this.llmForm.presets.findIndex(p => p.id === preset.id));
+    },
+    filteredPresetLibrary() {
+      const query = this.uiPresetSearch.trim().toLocaleLowerCase();
+      return this.globalPresetItems().filter(p => !query || (p.name + ' ' + p.id).toLocaleLowerCase().includes(query));
+    },
+    closeOtherPresetEntries(event) {
+      const selected = event.currentTarget.closest('details');
+      selected?.parentElement?.querySelectorAll(':scope > details[open]').forEach(node => { if (node !== selected) node.open = false; });
+    },
+
     syncModelConfigs(preset) {
       const models = this.parseModelsText(preset?.modelsText || preset?.model);
       const existing = new Map((preset?.modelConfigs || []).map(item => [String(item?.model || ''), item]));
@@ -1910,6 +1948,9 @@ function adminPanel() {
         probe_results: [],
         modelConfigs: [],
       });
+      this.uiModelSection = 'chat';
+      this.uiNodeId = id;
+      this.uiModelSearch = '';
       if (!this.llmForm.default_model_preset_id) this.llmForm.default_model_preset_id = id;
     },
 
@@ -2134,7 +2175,7 @@ function adminPanel() {
 
     async deleteTavoPlugin(plugin) {
       if (!plugin?.id) return;
-      if (!confirm(`删除对话扩展「${plugin.display_name || plugin.name || plugin.id}」？`)) return;
+      if (!await confirmAction(`删除对话扩展「${plugin.display_name || plugin.name || plugin.id}」？`)) return;
       this.loading = true;
       try {
         await api.admin.deleteTavoPlugin(plugin.id);
@@ -2324,7 +2365,7 @@ function adminPanel() {
         this.showToast(err.message || '批量参数解析失败', 'error');
         return;
       }
-      if (!confirm(`确认批量修改 ${payload.ids.length} 张角色卡？`)) return;
+      if (!await confirmAction(`确认批量修改 ${payload.ids.length} 张角色卡？`)) return;
       this.loading = true;
       try {
         const r = await api.admin.bulkUpdateApps(payload);
@@ -2465,7 +2506,7 @@ function adminPanel() {
     },
 
     async deleteApp(app) {
-      if (!confirm(`删除角色卡「${app.name || app.id}」？来源：${app.source || '-'}。此操作不可恢复。`)) return;
+      if (!await confirmAction(`删除角色卡「${app.name || app.id}」？来源：${app.source || '-'}。此操作不可恢复。`)) return;
       this.loading = true;
       try {
         await api.admin.deleteApp(app.id);
@@ -2611,7 +2652,7 @@ function adminPanel() {
         return;
       }
       const action = next ? '开放管理员权限给' : '撤销管理员权限：';
-      if (!confirm(`${action}${user.email || user.name || user.id}？`)) return;
+      if (!await confirmAction(`${action}${user.email || user.name || user.id}？`)) return;
       this.loading = true;
       try {
         await api.admin.setUserAdmin(user.id, next);
@@ -2639,7 +2680,7 @@ function adminPanel() {
       if (!user?.id) return;
       const next = !user?.advanced_creation?.admin_override;
       const action = next ? '后台开放高级创作给' : '收回后台高级创作权限：';
-      if (!confirm(`${action}${user.email || user.name || user.id}？`)) return;
+      if (!await confirmAction(`${action}${user.email || user.name || user.id}？`)) return;
       this.loading = true;
       try {
         await api.admin.setAdvancedCreation(user.id, next);

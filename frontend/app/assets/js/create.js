@@ -1,5 +1,6 @@
-import { api, requireAuth, getCachedUser, setCachedUser, ApiError } from '/app/assets/js/app-core.js?v=20260905-notices-v1';
-import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260905-notices-v1';
+import { confirmAction, showMessage } from '/assets/js/dialogs.js?v=20260908-pr7';
+import { api, requireAuth, getCachedUser, setCachedUser, ApiError } from '/app/assets/js/app-core.js?v=20260908-pr7';
+import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260908-pr7';
 import {
   applyBubbleStyle,
   applyStageTheme,
@@ -193,7 +194,6 @@ function createPage() {
 
     async init() {
       injectLayout('workshop');
-      this.siteSettings = await loadPublicSiteSettings().catch(() => null);
       if (!requireAuth()) return;
       // Edit mode? read ?id=
       const params = new URLSearchParams(location.search);
@@ -201,20 +201,20 @@ function createPage() {
       const cached = getCachedUser();
       if (cached) this.user = cached;
       try {
-        const profile = await api.profile();
-        this.user = profile;
-        setCachedUser(profile);
-        const p = await api.points();
-        this.points = parseInt(p.points || p.data?.points || 0, 10);
-        await this.loadCreatorAccess();
         if (!this.editingId) this.tavernHelperScriptsLoaded = true;
-        await this.loadModelPresets();
-        await this.loadTtsVoices();
-        await this.loadCommunityFavorites();
-        if (this.editingId) {
-          await this.loadExisting();
-          await Promise.all([this.loadCardExtraFlags(), this.loadCardVersions()]);
-        }
+        await Promise.all([
+          loadPublicSiteSettings().then(s => { this.siteSettings = s; }).catch(() => {}),
+          api.profile().then(r => { this.user = r?.data || r; setCachedUser(this.user); }),
+          api.points().then(p => { this.points = parseInt(p.points || p.data?.points || 0, 10); }).catch(() => {}),
+          this.loadModelPresets(), this.loadTtsVoices(), this.loadCommunityFavorites(),
+          // Access controls must resolve before hydrating protected script fields.
+          this.loadCreatorAccess().then(async () => {
+            if (this.editingId) {
+              await this.loadExisting();
+              await Promise.all([this.loadCardExtraFlags(), this.loadCardVersions()]);
+            }
+          }),
+        ]);
       } catch (err) {
         if (err instanceof ApiError && err.code === 401) {
           location.replace('/app/login.html?next=' + encodeURIComponent(location.pathname + location.search));
@@ -1082,7 +1082,7 @@ function createPage() {
       try {
         const parsed = JSON.parse(await file.text());
         const imported = normalizeTavernHelperScripts(extractTavernHelperScripts(parsed));
-        if (this.form.tavern_helper_scripts.length && !confirm('导入会替换当前 TavernHelper 脚本，是否继续？')) return;
+        if (this.form.tavern_helper_scripts.length && !await confirmAction('导入会替换当前 TavernHelper 脚本，是否继续？')) return;
         this.form.tavern_helper_scripts = imported.scripts.map((item, index) => prepareTavernHelperEditorItem(item, index));
         this.tavernHelperScriptsDirty = true;
         this.tavernHelperScriptCount = imported.count;
@@ -1101,8 +1101,8 @@ function createPage() {
         this.showToast(err.message || 'TavernHelper 脚本导出失败', 'error');
       }
     },
-    clearTavernHelperScripts() {
-      if (!this.form.tavern_helper_scripts.length || confirm('确定清空本角色的 TavernHelper 脚本？保存角色后生效。')) {
+    async clearTavernHelperScripts() {
+      if (!this.form.tavern_helper_scripts.length || await confirmAction('确定清空本角色的 TavernHelper 脚本？保存角色后生效。')) {
         this.form.tavern_helper_scripts = [];
         this.markTavernHelperDirty(true);
       }
@@ -1280,7 +1280,9 @@ function createPage() {
         this.retryPendingCardPackImport();
         return;
       }
-      if (this.$refs.importInput) this.$refs.importInput.click();
+      const input = this.$refs.importInput;
+      if (!input) { this.showToast('导入入口尚未就绪，请重新打开编辑器', 'error'); return; }
+      input.click();
     },
 
     async beginCardPackImport(file) {
@@ -1374,6 +1376,7 @@ function createPage() {
           r = await api.importCard(card);
         }
         const app = r?.data || r;
+        if (!app?.id) throw new Error('服务器未返回有效的角色卡 ID，请重试导入');
         this.showToast(this.creatorText('import_success', '导入成功，正在打开…'), 'success', 1200);
         setTimeout(() => { location.href = `/app/create.html?id=${encodeURIComponent(app.id)}`; }, 500);
       } catch (err) {
@@ -1497,7 +1500,7 @@ function createPage() {
 
     async remove() {
       if (!this.editingId) return;
-      if (!confirm(this.creatorText('delete_confirm', '确定删除这个角色？此操作无法撤销。'))) return;
+      if (!await confirmAction(this.creatorText('delete_confirm', '确定删除这个角色？此操作无法撤销。'))) return;
       this.loading = true;
       try {
         await api.deleteApp(this.editingId);
