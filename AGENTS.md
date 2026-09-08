@@ -10,8 +10,11 @@
 - Java bridge calls must retain the injected receiver: `window.HomerNative.method(...)`.
 - `PatchManager` data patches override bundled web assets; an APK release must account for old slots as well as update the published data patch when needed.
 - Current task map: `specs/in-app-update-20260905/`.
+- Latest PR review/release work: `specs/pr7-release-20260908/`. Community preview requires `/admin/api/me`; the new social backend was not included and its moderation entry remains disabled.
 
 ## Verified pitfalls
+
+- Symptom: Android Back leaves a page instead of cancelling its new HTML dialog. Cause: WebView Activity history handling does not invoke the web overlay handler. Fix: Ask the active document and its fixed same-origin dialogue iframe to cancel the top overlay first; honor the DOM cancel event. Verify: API 33 confirmation cancellation, multiple-choice discard, a prevented cancellation, and nested dialogue modal all passed without navigation.
 
 - Symptom: An APK upgrade can still load an older activated data patch. Cause: Patch slots outrank bundled assets. Fix: Clear only activation metadata when the bundled APK version changes; require a patch's `min_app_version` to match that version. Verify: `PatchUpgradeTest` on API 33 preserves a separate account sentinel and keeps a current-version slot on ordinary restart.
 - Symptom: Shell `uiautomator dump` appears to show a stale update dialog during downloads. Cause: Frequent progress accessibility events prevent its idle wait from completing, leaving the previous XML on disk. Fix: Remove the previous task-owned dump before capture; exercise progress cancellation with Android Back after observing an actual download and screenshot. Verify: Ten emulator update scenarios passed, including cancellation and removal of the partial file.
