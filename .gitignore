@@ -3,6 +3,7 @@
 /frontend/
 /sillytavern-runtime/
 /.web-cache/
+/output/
 
 # Gradle / Android 构建产物
 .gradle/

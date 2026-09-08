@@ -21,11 +21,23 @@ public final class PersistentPageNavigationTest {
     }
 
     @Test
-    public void reloadsPersistentViewWhenConversationTargetChanges() {
+    public void detectsChangedTargetsWithoutForcingConversationReload() {
         String first = "https://example.test/app/chat.html?app_id=card-1&conversation_id=conv-1";
         String second = "https://example.test/app/chat.html?app_id=card-1&conversation_id=conv-2";
         assertFalse(HomerActivity.shouldLoadPersistentTarget(first, first));
         assertTrue(HomerActivity.shouldLoadPersistentTarget(first, second));
         assertTrue(HomerActivity.shouldLoadPersistentTarget(null, second));
+        assertTrue(HomerActivity.canSwitchConversationInPlace(first, second));
+        assertTrue(HomerActivity.canSwitchConversationInPlace(first,
+                "https://example.test/app/chat.html?conv_id=conv-2&app_id=card-2"));
+        assertFalse(HomerActivity.canSwitchConversationInPlace(null, second));
+        assertFalse(HomerActivity.canSwitchConversationInPlace(first,
+                "https://other.test/app/chat.html?app_id=card-1&conversation_id=conv-2"));
+        assertFalse(HomerActivity.canSwitchConversationInPlace(first,
+                "https://example.test/app/chat.html?app_id=card-new"));
+        assertFalse(HomerActivity.canSwitchConversationInPlace(first,
+                "https://example.test/app/chat.html?app_id=&conversation_id=conv-2"));
+        assertFalse(HomerActivity.canSwitchConversationInPlace(first,
+                "https://example.test/app/explore.html"));
     }
 }

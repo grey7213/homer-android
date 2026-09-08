@@ -40,6 +40,7 @@ public final class PatchManager {
     private static final String PREVIOUS_SLOT = "previous_slot";
     private static final String PENDING_SLOT = "pending_slot";
     private static final String INSTALLED_VERSION = "installed_version";
+    private static final String BUNDLED_APP_VERSION = "bundled_app_version";
     private static final int MAX_MANIFEST_BYTES = 1024 * 1024;
     private static final long MAX_PACKAGE_BYTES = 256L * 1024L * 1024L;
     private static final int MAX_FILES = 4096;
@@ -53,6 +54,12 @@ public final class PatchManager {
     public PatchManager(Context context) {
         this.context = context.getApplicationContext();
         this.preferences = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        if (preferences.getInt(BUNDLED_APP_VERSION, -1) != BuildConfig.VERSION_CODE) {
+            // Old web overrides must not hide fixes shipped inside a new APK.
+            // Keep account/session databases and cookies entirely separate.
+            preferences.edit().remove(ACTIVE_SLOT).remove(PREVIOUS_SLOT).remove(PENDING_SLOT)
+                    .remove(INSTALLED_VERSION).putInt(BUNDLED_APP_VERSION, BuildConfig.VERSION_CODE).commit();
+        }
         this.patchesRoot = new File(context.getFilesDir(), "patches");
         if (!patchesRoot.exists()) patchesRoot.mkdirs();
     }
@@ -108,7 +115,7 @@ public final class PatchManager {
             try {
                 ManifestData manifest = downloadManifest();
                 String installed = preferences.getString(INSTALLED_VERSION, "bundled");
-                if (manifest.version.equals(installed) || manifest.minAppVersion > BuildConfig.VERSION_CODE) {
+                if (manifest.version.equals(installed) || manifest.minAppVersion != BuildConfig.VERSION_CODE) {
                     callback.onNoUpdate();
                     return;
                 }

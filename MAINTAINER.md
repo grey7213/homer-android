@@ -126,6 +126,21 @@ cd E:\homer-apk-1140\android-app
 必须比线上大、签名指纹必须一致，然后 SFTP 原子上传并重写 `release.json`。
 别手改服务器文件。
 
+### 1.15.0 起的应用内更新
+
+正式更新源仍为官网 `/download/release.json`；原生客户端自动检查（间隔 6 小时），
+登录页和「我的」也有「检查更新」。下载使用不可变的版本 URL，校验大小、SHA-256、
+包名、递增 versionCode 与现有安装的签名证书，用户经 Android 系统安装器确认升级。
+首次需要在系统设置中允许惑梦安装应用。旧版没有这个入口的用户需要先手动覆盖安装 1.15.0。
+
+发布时用 `--notes-file <UTF-8文本>` 提供用户可读的更新说明；同一个 versionCode 不能
+换成不同字节的 APK（完全相同的重试除外），版本化文件名也不能覆盖。release.json 应返回
+`Cache-Control: no-cache`。不要只在 GitHub 上传 APK 而忘记官网元数据。
+
+新 APK 启动会撤销上一版的数据补丁槽，避免旧网页盖住新包资源；登录、账号和会话库不清除。
+若未来启用签名数据补丁，其 `min_app_version` 必须等于目标 APK 的 versionCode。
+本轮生产 APK 的补丁公钥仍为空，没有另外启用数据补丁渠道。
+
 ## 推进 web 基线
 
 我这边 web 端有新改动后，贡献者要能拉到。推 `web-base` 分支：
@@ -134,9 +149,12 @@ cd E:\homer-apk-1140\android-app
 python E:\homer-android\tools\push_web_base.py
 ```
 
-它从主仓库当前 HEAD 取那两棵树，造一个孤立提交推上去，并更新
+它从主仓库当前 HEAD 取那两棵树，创建一份新的 web 基线提交，并更新
 `homer-android/web-base.json` 的 pin。之后记得把 `web-base.json` 的改动提交到 `main`，
 否则贡献者的 bootstrap 会报「基线动了而 pin 没跟上」。
+
+2026-09-05 起每份 web 基线保留前一份快照为父提交，使用正常快进 push；不再强推覆盖
+历史。bootstrap 仍是浅检出，下载量不增加；运行时依赖按锁文件执行 `npm ci`。
 
 **基线推进之后，`web-patches/` 里已经落地的补丁必须一起删掉。** 那些补丁的改动
 已经包含在新基线里，留着会让 `apply_web_patches.py --strict` 报「基线不符」，

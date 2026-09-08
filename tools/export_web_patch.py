@@ -41,10 +41,10 @@ def git(*args: str, check: bool = True) -> str:
     result = subprocess.run(
         ["git", *args], cwd=TREE, check=False, text=True,
         encoding="utf-8", errors="replace",
-        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
     )
     if check and result.returncode != 0:
-        die(f"git {' '.join(args)} 失败：\n{(result.stdout or '').strip()[-800:]}")
+        die(f"git {' '.join(args)} 失败：\n{((result.stderr or '') + (result.stdout or '')).strip()[-800:]}")
     return result.stdout or ""
 
 

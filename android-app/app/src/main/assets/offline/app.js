@@ -15,6 +15,7 @@
   const statusTitle = document.querySelector('#status-title');
   const statusDetail = document.querySelector('#status-detail');
   const retry = document.querySelector('#retry');
+  document.querySelector('#check-update').addEventListener('click', () => window.HomerNative?.checkForAppUpdate?.());
   const scrim = document.querySelector('#scrim');
 
   function readSnapshot() {
