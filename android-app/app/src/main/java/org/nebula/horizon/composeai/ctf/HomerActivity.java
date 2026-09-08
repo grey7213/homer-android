@@ -49,6 +49,28 @@ import java.util.Set;
 
 public final class HomerActivity extends Activity {
     private volatile String appVisitId = java.util.UUID.randomUUID().toString();
+    private boolean handlingWebBack;
+
+    private static final String CLOSE_WEB_OVERLAY_SCRIPT = """
+            (() => {
+              const close = scope => {
+                try {
+                  if (scope.location.origin !== location.origin) return false;
+                  if (typeof scope.HomerCloseOverlay === 'function' && scope.HomerCloseOverlay()) return true;
+                  const dialogs = [...scope.document.querySelectorAll('dialog[open]')]
+                    .filter(el => el.getClientRects().length);
+                  const dialog = dialogs.at(-1);
+                  if (!dialog) return false;
+                  if (dialog.dispatchEvent(new scope.Event('cancel', {cancelable:true}))) dialog.close();
+                  return true;
+                } catch (_) { return false; }
+              };
+              if (close(window)) return true;
+              const frame = document.body.classList.contains('is-ready')
+                ? document.querySelector('#dialogue-frame') : null;
+              return Boolean(frame && close(frame.contentWindow));
+            })()
+            """;
 
     String getAppVisitId() { return appVisitId; }
 
@@ -710,6 +732,21 @@ public final class HomerActivity extends Activity {
 
     @Override
     public void onBackPressed() {
+        if (handlingWebBack) return;
+        if (liveRevealed && liveView != null) {
+            final WebView current = liveView;
+            handlingWebBack = true;
+            current.evaluateJavascript(CLOSE_WEB_OVERLAY_SCRIPT, result -> {
+                handlingWebBack = false;
+                if (isFinishing() || isDestroyed() || liveView != current) return;
+                if (!"true".equals(result)) navigateBack();
+            });
+            return;
+        }
+        navigateBack();
+    }
+
+    private void navigateBack() {
         if (liveRevealed && liveView.canGoBack()) {
             liveView.goBack();
             return;

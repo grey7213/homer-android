@@ -106,8 +106,8 @@ android {
         applicationId "org.nebula.horizon.composeai"
         minSdk 26
         targetSdk 35
-        versionCode 270
-        versionName "1.15.0"
+        versionCode 271
+        versionName "1.15.1"
         buildConfigField "String", "PATCH_PUBLIC_KEY_B64", javaString(configuredPatchKey)
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }

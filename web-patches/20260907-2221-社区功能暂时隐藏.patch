@@ -1,7 +1,7 @@
 # homer-android web 补丁
 # 基线 commit: 736853e8647722671cb35a07c10c92d123ca12f9
 # 基线仓库:   https://github.com/grey7213/homer-android.git
-# 导出时间:   2026-09-07 22:21
+# 导出时间:   2026-09-08 maintainer review
 # 说明:       社区功能暂时隐藏
 #
 # 维护者落地方式（在 AIXingYue 工作区）：
@@ -10,15 +10,18 @@
 # 冲突会明确报出来。不要用整目录覆盖代替这一步。
 
 diff --git a/frontend/admin.html b/frontend/admin.html
-index 72339bdd2c8e4a73fd9e554bf6c01efefa8f2af1..e750d464a51965f7f222d89962d9ba2c1c850ddf 100644
+index 72339bdd2c8e4a73fd9e554bf6c01efefa8f2af1..8ca6e77d4edaba90a3d2b45433bf72c50d193e8d 100644
 --- a/frontend/admin.html
 +++ b/frontend/admin.html
-@@ -12,6 +12,8 @@
+@@ -10,8 +10,10 @@
+   <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
+   <link rel="stylesheet" href="/assets/css/custom.css?v=20260901-persistent-pages">
    <link rel="stylesheet" href="/assets/css/admin.css?v=20260817-mobile-model-pricing">
-   <script type="module" src="/assets/js/admin-app.js?v=20260905-notices-v1"></script>
+-  <script type="module" src="/assets/js/admin-app.js?v=20260905-notices-v1"></script>
++  <script type="module" src="/assets/js/admin-app.js?v=20260908-pr7"></script>
    <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
-+  <link rel="stylesheet" href="/assets/css/app-design.css?v=20260905-ui-r1">
-+  <script defer src="/assets/js/option-picker.js?v=20260906-r2"></script>
++  <link rel="stylesheet" href="/assets/css/app-design.css?v=20260908-pr7">
++  <script defer src="/assets/js/option-picker.js?v=20260908-pr7"></script>
  </head>
  <body class="xy-admin min-h-screen">
    <div class="xy-stars-bg"></div>
@@ -293,7 +296,32 @@ index 72339bdd2c8e4a73fd9e554bf6c01efefa8f2af1..e750d464a51965f7f222d89962d9ba2c
            <section x-show="activeTab === 'notifications'" aria-label="通知管理">
              <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
                <div><h1 class="text-2xl font-bold xy-gradient-text">通知管理</h1>
-@@ -1490,23 +1498,7 @@
+@@ -1160,6 +1168,24 @@
+ 
+             <template x-if="siteForm">
+               <form class="space-y-6" @submit.prevent="saveSiteSettings">
++                <section class="xy-glass p-6">
++                  <div class="flex items-center justify-between gap-3 mb-5">
++                    <div>
++                      <h2 class="font-semibold text-white">群聊页</h2>
++                      <p class="text-xs text-slate-500 mt-1">管理群聊列表、创建面板、输入框、toast 和确认提示</p>
++                    </div>
++                    <a href="/app/group-chat.html" target="_blank" class="xy-link text-sm">打开群聊 →</a>
++                  </div>
++                  <div class="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
++                    <template x-for="item in groupChatCopyItems" :key="item.key">
++                      <div>
++                        <label class="xy-label" x-text="item.label"></label>
++                        <input class="xy-input" x-model="siteForm.group_chat[item.key]" :maxlength="item.max">
++                      </div>
++                    </template>
++                  </div>
++                </section>
++
+                 <section class="xy-glass p-6">
+                   <div class="flex items-center justify-between gap-3 mb-5">
+                     <div>
+@@ -1490,23 +1516,7 @@
                    </div>
                  </section>
  
@@ -345,9 +373,18 @@ index dec3ea91f02edfebc3c761d319bf2d500ef5cb9a..0ce35f678e26b4dab4d186b1e4abbdc3
  }
 +.ws-grid.ws-grid--creation{grid-template-columns:minmax(0,1fr)}
 diff --git a/frontend/app/assets/js/app-core.js b/frontend/app/assets/js/app-core.js
-index 8472f870e4cb96f6f75f9c44074cc619c8e29977..e088af27ecf2c904b4351cfafd4160493fc22936 100644
+index 8472f870e4cb96f6f75f9c44074cc619c8e29977..a756cf96429d91d0d40b2205d106cdc1e240dc4c 100644
 --- a/frontend/app/assets/js/app-core.js
 +++ b/frontend/app/assets/js/app-core.js
+@@ -1,6 +1,6 @@
+ // 惑梦（Homer） Web App 共享核心 - 在所有 /app/*.html 顶部加载
+-import './notifications.js?v=20260905-notices-v1';
+-import { api as baseApi, getToken, setToken, clearAuth, isLoggedIn, getCachedUser, setCachedUser, formatDateTime, ApiError } from '/assets/js/api.js?v=20260905-notices-v1';
++import './notifications.js?v=20260908-pr7';
++import { api as baseApi, getToken, setToken, clearAuth, isLoggedIn, getCachedUser, setCachedUser, formatDateTime, ApiError } from '/assets/js/api.js?v=20260908-pr7';
+ 
+ function redirectAfterUnauthorized() {
+   clearAuth();
 @@ -163,6 +163,7 @@ export const api = {
      const qs = new URLSearchParams(params);
      return rawRequest(`/console/api/web/creator-leaderboard?${qs}`);
@@ -356,24 +393,18 @@ index 8472f870e4cb96f6f75f9c44074cc619c8e29977..e088af27ecf2c904b4351cfafd416049
    creatorContests: () => rawRequest('/console/api/web/creator-contests'),
    favorites: (params = {}) => {
      const qs = new URLSearchParams(params);
-@@ -302,13 +303,6 @@ export const api = {
-   editMessage: (messageId, content) => rawRequest(`/console/api/web/messages/${encodeURIComponent(messageId)}/edit`, { method: 'POST', body: { content } }),
-   rollbackMessage: (messageId) => rawRequest(`/console/api/web/messages/${encodeURIComponent(messageId)}/rollback`, { method: 'POST', body: {} }),
-   deleteMessage: (messageId) => rawRequest(`/console/api/web/messages/${encodeURIComponent(messageId)}/delete`, { method: 'POST', body: {} }),
--  // 群聊
--  groupChats: () => rawRequest('/console/api/web/group-chats'),
--  createGroupChat: (payload) => rawRequest('/console/api/web/group-chats', { method: 'POST', body: payload }),
--  groupChat: (groupId) => rawRequest(`/console/api/web/group-chats/${encodeURIComponent(groupId)}`),
--  deleteGroupChat: (groupId) => rawRequest(`/console/api/web/group-chats/${encodeURIComponent(groupId)}/delete`, { method: 'POST', body: {} }),
--  sendGroupMessage: (groupId, payload) => rawRequest(`/console/api/web/group-chats/${encodeURIComponent(groupId)}/message`, { method: 'POST', body: payload }),
--  groupReply: (groupId, payload = {}) => rawRequest(`/console/api/web/group-chats/${encodeURIComponent(groupId)}/reply`, { method: 'POST', body: payload }),
-   // 人设 persona
-   getPersona: () => rawRequest('/console/api/web/persona'),
-   setPersona: (name, description) => rawRequest('/console/api/web/persona', { method: 'POST', body: { name, description } }),
 diff --git a/frontend/app/assets/js/character.js b/frontend/app/assets/js/character.js
-index 078cbc65ac60f28da090a01e052d42ab821b82ca..f5bb658e2682e935e2e4992591c52aa0e83ac42e 100644
+index 078cbc65ac60f28da090a01e052d42ab821b82ca..fc9e6cc2be1546f05423dc0a8d5fdbcd5e3af7d2 100644
 --- a/frontend/app/assets/js/character.js
 +++ b/frontend/app/assets/js/character.js
+@@ -1,5 +1,5 @@
+-import { api, requireAuth, getCachedUser, setCachedUser, formatDateTime, ApiError } from '/app/assets/js/app-core.js?v=20260905-notices-v1';
+-import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260905-notices-v1';
++import { api, requireAuth, getCachedUser, setCachedUser, formatDateTime, ApiError } from '/app/assets/js/app-core.js?v=20260908-pr7';
++import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260908-pr7';
+ 
+ const FIELD_LABELS = {
+   name: '姓名',
 @@ -493,7 +493,7 @@ function characterPage() {
        return parsedSummary
          || descriptionSummary
@@ -384,11 +415,12 @@ index 078cbc65ac60f28da090a01e052d42ab821b82ca..f5bb658e2682e935e2e4992591c52aa0
    };
  }
 diff --git a/frontend/app/assets/js/chat.js b/frontend/app/assets/js/chat.js
-index 50e029ba674debd7b3571d8433cea65a6280b7a6..dceb2573850e05dec9ba63d47c318ab14694aa02 100644
+index 50e029ba674debd7b3571d8433cea65a6280b7a6..ec288adeda44280dbc13c40f3ac517753dd50706 100644
 --- a/frontend/app/assets/js/chat.js
 +++ b/frontend/app/assets/js/chat.js
 @@ -1,6 +1,9 @@
- import { api, ApiError, getCachedUser } from '/app/assets/js/app-core.js?v=20260905-notices-v1';
+-import { api, ApiError, getCachedUser } from '/app/assets/js/app-core.js?v=20260905-notices-v1';
++import { api, ApiError, getCachedUser } from '/app/assets/js/app-core.js?v=20260908-pr7';
 +import { openChatTool } from '/assets/js/chat-tools.js';
 +import { bindChatAppearance } from '/assets/js/chat-appearance.js';
  
@@ -428,16 +460,18 @@ index 50e029ba674debd7b3571d8433cea65a6280b7a6..dceb2573850e05dec9ba63d47c318ab1
      bubble.textContent = normalized.content;
      previewMessages.append(bubble);
    }
-@@ -302,6 +309,8 @@ function renderConversation(payload, { save = true } = {}) {
+@@ -301,7 +308,10 @@ function renderConversation(payload, { save = true } = {}) {
+   if (!snapshot.app_id) snapshot.app_id = activeAppId;
    activeConversationId = snapshot.conversation_id || activeConversationId;
    activeAppId = snapshot.app_id || activeAppId;
++  appearance.refresh();
    previewTitle.textContent = snapshot.title || '角色对话';
 +  document.querySelector('#preview-settings-title').textContent = previewTitle.textContent;
 +  document.querySelector('#preview-settings-avatar').src = snapshot.avatar || '/assets/img/apk/avatar.webp';
    setDocumentTitle(snapshot.title);
    if (snapshot.avatar) previewAvatar.src = snapshot.avatar;
    renderMessages(snapshot.messages || [], { pending: pendingDraft });
-@@ -451,6 +460,7 @@ function updateVisibleConversationUrl(appId, conversationId) {
+@@ -451,6 +461,7 @@ function updateVisibleConversationUrl(appId, conversationId) {
    if (!safeAppId || !safeConversationId) return;
    activeAppId = safeAppId;
    activeConversationId = safeConversationId;
@@ -445,7 +479,7 @@ index 50e029ba674debd7b3571d8433cea65a6280b7a6..dceb2573850e05dec9ba63d47c318ab1
    const next = new URL(location.href);
    next.searchParams.set('app_id', safeAppId);
    next.searchParams.set('conversation_id', safeConversationId);
-@@ -710,6 +720,18 @@ historyList.addEventListener('click', event => {
+@@ -710,6 +721,18 @@ historyList.addEventListener('click', event => {
    void switchConversation(button.dataset.appId, button.dataset.conversationId);
  });
  modelButton.addEventListener('click', openModelDialog);
@@ -464,7 +498,7 @@ index 50e029ba674debd7b3571d8433cea65a6280b7a6..dceb2573850e05dec9ba63d47c318ab1
  modelClose.addEventListener('click', () => modelDialog.close());
  modelCancel.addEventListener('click', () => modelDialog.close());
  for (const section of document.querySelectorAll('[data-runtime-section]')) {
-@@ -768,3 +790,51 @@ document.documentElement.dataset.homerShellReady = 'true';
+@@ -768,3 +791,51 @@ document.documentElement.dataset.homerShellReady = 'true';
  nativeCall('notifyShellReady', location.href);
  
  void start();
@@ -518,27 +552,29 @@ index 50e029ba674debd7b3571d8433cea65a6280b7a6..dceb2573850e05dec9ba63d47c318ab1
 +for(const name of ['pointerup','pointercancel'])previewMessages.addEventListener(name,()=>{clearTimeout(previewPressTimer);previewPressOrigin=null;});
 diff --git a/frontend/app/assets/js/community-contest.js b/frontend/app/assets/js/community-contest.js
 new file mode 100644
-index 0000000000000000000000000000000000000000..d434644cfbc5a17676cc1d7d6400c3fef216b6c4
+index 0000000000000000000000000000000000000000..1d3c810142a88a0ad54b61c682d7a68a8cf4ecbb
 --- /dev/null
 +++ b/frontend/app/assets/js/community-contest.js
-@@ -0,0 +1,7 @@
-+import { api, requireAuth, getCachedUser } from './app-core.js?v=20260905-notices-v1';
-+import { injectLayout } from './layout.js?v=20260905-notices-v1';
+@@ -0,0 +1,8 @@
++import { api, requireAuth, getCachedUser } from './app-core.js?v=20260908-pr7';
++import { injectLayout } from './layout.js?v=20260908-pr7';
++import { allowCommunityPreview } from './community-preview.js';
 +window.contestPage = () => ({
 +  user:null,points:0,contest:null,loading:false,error:'',
-+  init(){injectLayout('community');this.user=getCachedUser();if(requireAuth())this.load();},
++  async init(){if(!await allowCommunityPreview())return;injectLayout('community');this.user=getCachedUser();if(requireAuth())await this.load();},
 +  async load(){if(this.loading)return;this.loading=true;this.error='';try{const result=await api.creatorContests();this.contest=result?.data?.contest || result?.contest || null;}catch(err){this.error=err.message || '获取赛事失败';}finally{this.loading=false;}}
 +});
 diff --git a/frontend/app/assets/js/community-feed.js b/frontend/app/assets/js/community-feed.js
 new file mode 100644
-index 0000000000000000000000000000000000000000..4d0e430ba1cd2795022cf94596c6deecdddabf29
+index 0000000000000000000000000000000000000000..9b51110c3f86e80f486b3df391239f2f35af8574
 --- /dev/null
 +++ b/frontend/app/assets/js/community-feed.js
-@@ -0,0 +1,177 @@
-+import { api, requireAuth, getCachedUser } from './app-core.js?v=20260905-notices-v1';
-+import { injectLayout } from './layout.js?v=20260905-notices-v1';
+@@ -0,0 +1,179 @@
++import { api, requireAuth, getCachedUser } from './app-core.js?v=20260908-pr7';
++import { injectLayout } from './layout.js?v=20260908-pr7';
 +import { readPageCache, writePageCache } from './page-cache.js';
-+import { confirmAction } from '/assets/js/dialogs.js?v=20260906-r2';
++import { confirmAction } from '/assets/js/dialogs.js?v=20260908-pr7';
++import { allowCommunityPreview } from './community-preview.js';
 +
 +const unwrap = result => result?.data ?? result ?? {};
 +const uuid = () => crypto.randomUUID();
@@ -563,6 +599,7 @@ index 0000000000000000000000000000000000000000..4d0e430ba1cd2795022cf94596c6deec
 +    draft:initialDraft(),editingId:'',publishing:false,uploading:false,editorError:'',actionPost:null,
 +    reportReason:'',reportError:'',reporting:false,toast:'',
 +    async init() {
++      if (!await allowCommunityPreview()) return;
 +      injectLayout('community'); if (!requireAuth()) return;
 +      this.user=getCachedUser();
 +      this.posts=(readPageCache('social-feed',this.user)?.posts || []).map(normalizePost);
@@ -712,16 +749,62 @@ index 0000000000000000000000000000000000000000..4d0e430ba1cd2795022cf94596c6deec
 +  };
 +}
 +window.socialPage=socialPage;
+diff --git a/frontend/app/assets/js/community-preview.js b/frontend/app/assets/js/community-preview.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..455387a7b4ab18dfe3a0c1edc8f1bd191f4a005f
+--- /dev/null
++++ b/frontend/app/assets/js/community-preview.js
+@@ -0,0 +1,27 @@
++// Preview is a maintenance surface. A query string alone is not authorization.
++let decision;
++export function allowCommunityPreview() {
++  if (decision) return decision;
++  decision = (async () => {
++    if (new URLSearchParams(location.search).get('preview') === '1') {
++      const controller = new AbortController();
++      const timeout = setTimeout(() => controller.abort(), 8000);
++      try {
++        const response = await fetch('/admin/api/me', {
++          credentials: 'include', cache: 'no-store', signal: controller.signal,
++        });
++        if (response.ok && (response.headers.get('content-type') || '').includes('application/json')) {
++          const body = await response.json();
++          if ((body?.data || body)?.id) {
++            document.documentElement.dataset.homerCommunityPreview = 'allowed';
++            return true;
++          }
++        }
++      } catch { /* Fail closed when the administrative session cannot be verified. */ }
++      finally { clearTimeout(timeout); }
++    }
++    location.replace('/app/explore.html');
++    return false;
++  })();
++  return decision;
++}
 diff --git a/frontend/app/assets/js/community.js b/frontend/app/assets/js/community.js
-index 87cf3666224aecc537fb6253b0559379fefc70e5..b423749968571f580bafcb4a0375652be8c340ca 100644
+index 87cf3666224aecc537fb6253b0559379fefc70e5..3ecf251e447c12c6c3fbf2b252f443d0aec10928 100644
 --- a/frontend/app/assets/js/community.js
 +++ b/frontend/app/assets/js/community.js
-@@ -1,3 +1,4 @@
-+import { confirmAction, showMessage } from '/assets/js/dialogs.js?v=20260906-r2';
- import { api, requireAuth, getCachedUser, setCachedUser, ApiError } from '/app/assets/js/app-core.js?v=20260905-notices-v1';
- import { injectLayout } from '/app/assets/js/layout.js?v=20260905-notices-v1';
+@@ -1,5 +1,7 @@
+-import { api, requireAuth, getCachedUser, setCachedUser, ApiError } from '/app/assets/js/app-core.js?v=20260905-notices-v1';
+-import { injectLayout } from '/app/assets/js/layout.js?v=20260905-notices-v1';
++import { confirmAction, showMessage } from '/assets/js/dialogs.js?v=20260908-pr7';
++import { api, requireAuth, getCachedUser, setCachedUser, ApiError } from '/app/assets/js/app-core.js?v=20260908-pr7';
++import { injectLayout } from '/app/assets/js/layout.js?v=20260908-pr7';
++import { allowCommunityPreview } from './community-preview.js';
  
-@@ -341,7 +342,7 @@ function communityPage() {
+ const WORK_TYPES = ['mod', 'ui_template', 'preset'];
+ const TYPE_LABELS = { mod: 'Mod', ui_template: 'UI 模板', preset: '预设' };
+@@ -150,6 +152,7 @@ function communityPage() {
+     contestForm: { title: '', content: '', reward: '', start_at: '', end_at: '' },
+ 
+     async init() {
++      if (!await allowCommunityPreview()) return;
+       injectLayout('workshop');
+       if (!requireAuth()) return;
+       const cached = getCachedUser();
+@@ -341,7 +344,7 @@ function communityPage() {
      },
  
      async deleteWork() {
@@ -731,14 +814,18 @@ index 87cf3666224aecc537fb6253b0559379fefc70e5..b423749968571f580bafcb4a0375652b
          await api.deleteCommunityWork(this.detail.id);
          this.closeDetail();
 diff --git a/frontend/app/assets/js/create.js b/frontend/app/assets/js/create.js
-index 14ec5bf0dde9a01e6e38c7a22e31f78e3129cb24..6660d32f171708d45b7935fedbadc210e3924ea3 100644
+index 14ec5bf0dde9a01e6e38c7a22e31f78e3129cb24..ae663ff2ce65d7582a019f15c25da5e9b9e37859 100644
 --- a/frontend/app/assets/js/create.js
 +++ b/frontend/app/assets/js/create.js
-@@ -1,3 +1,4 @@
-+import { confirmAction, showMessage } from '/assets/js/dialogs.js?v=20260906-r2';
- import { api, requireAuth, getCachedUser, setCachedUser, ApiError } from '/app/assets/js/app-core.js?v=20260905-notices-v1';
- import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260905-notices-v1';
+@@ -1,5 +1,6 @@
+-import { api, requireAuth, getCachedUser, setCachedUser, ApiError } from '/app/assets/js/app-core.js?v=20260905-notices-v1';
+-import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260905-notices-v1';
++import { confirmAction, showMessage } from '/assets/js/dialogs.js?v=20260908-pr7';
++import { api, requireAuth, getCachedUser, setCachedUser, ApiError } from '/app/assets/js/app-core.js?v=20260908-pr7';
++import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260908-pr7';
  import {
+   applyBubbleStyle,
+   applyStageTheme,
 @@ -193,7 +194,6 @@ function createPage() {
  
      async init() {
@@ -830,9 +917,19 @@ index 14ec5bf0dde9a01e6e38c7a22e31f78e3129cb24..6660d32f171708d45b7935fedbadc210
        try {
          await api.deleteApp(this.editingId);
 diff --git a/frontend/app/assets/js/explore.js b/frontend/app/assets/js/explore.js
-index 096b2431bbb045cfd68c659be078b96b2fcafb15..2785bd553ad8229f0183c77e199820d6545cd7cb 100644
+index 096b2431bbb045cfd68c659be078b96b2fcafb15..85e83ffff88549aca6044ddfe45157e8b6792b1b 100644
 --- a/frontend/app/assets/js/explore.js
 +++ b/frontend/app/assets/js/explore.js
+@@ -1,6 +1,6 @@
+-import { api, requireAuth, getCachedUser, setCachedUser, ApiError } from '/app/assets/js/app-core.js?v=20260905-notices-v1';
+-import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260905-notices-v1';
+-import { readPageCache, writePageCache } from '/app/assets/js/page-cache.js?v=20260905-notices-v1';
++import { api, requireAuth, getCachedUser, setCachedUser, ApiError } from '/app/assets/js/app-core.js?v=20260908-pr7';
++import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260908-pr7';
++import { readPageCache, writePageCache } from '/app/assets/js/page-cache.js?v=20260908-pr7';
+ 
+ const DEFAULT_PAGE_SIZE = 12;
+ const INITIAL_RANDOM_SEED = Math.floor(Math.random() * 2147483647);
 @@ -33,6 +33,7 @@ function explorePage() {
      stats: null,
      sidebarOpen: false,
@@ -863,175 +960,53 @@ index 096b2431bbb045cfd68c659be078b96b2fcafb15..2785bd553ad8229f0183c77e199820d6
        } finally {
          if (requestEpoch === this._listEpoch && this._listAbortController === requestController) {
            this._listAbortController = null;
+diff --git a/frontend/app/assets/js/farm.js b/frontend/app/assets/js/farm.js
+index a82feb23e7a55441afddb575263d4331df9dc99b..680a08b5f7c078f1538ed05705fc8a0497fc8338 100644
+--- a/frontend/app/assets/js/farm.js
++++ b/frontend/app/assets/js/farm.js
+@@ -1,5 +1,5 @@
+-import { api, requireAuth, getCachedUser, setCachedUser, ApiError } from '/app/assets/js/app-core.js?v=20260905-notices-v1';
+-import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260905-notices-v1';
++import { api, requireAuth, getCachedUser, setCachedUser, ApiError } from '/app/assets/js/app-core.js?v=20260908-pr7';
++import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260908-pr7';
+ 
+ const BASE_SEEDS = [
+   { kind: 'carrot', apiKind: 'code_carrot', name: '代码胡萝卜', cost: 50, rewardCoins: 90, rewardXp: 10, durationSeconds: 3 * 3600, durationLabel: '3 小时' },
 diff --git a/frontend/app/assets/js/group-chat.js b/frontend/app/assets/js/group-chat.js
-deleted file mode 100644
-index 12e33c70a51c18cf2cc43c8c418356860c105f2c..0000000000000000000000000000000000000000
+index 12e33c70a51c18cf2cc43c8c418356860c105f2c..111ad1563b6e35eba62867cc20974311eee4e637 100644
 --- a/frontend/app/assets/js/group-chat.js
-+++ /dev/null
-@@ -1,154 +0,0 @@
++++ b/frontend/app/assets/js/group-chat.js
+@@ -1,5 +1,5 @@
 -import { api, requireAuth, getCachedUser } from '/app/assets/js/app-core.js?v=20260905-notices-v1';
 -import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260905-notices-v1';
--
--function groupChatPage() {
--  return {
--    user: null,
--    points: 0,
--    groups: [],
--    current: null,
--    messages: [],
--    candidates: [],
--    selected: [],
--    query: '',
--    groupName: '',
--    draft: '',
--    busy: false,
--    toast: null,
--    siteSettings: null,
--
--    async init() {
--      if (!requireAuth()) return;
--      injectLayout('group');
--      this.siteSettings = await loadPublicSiteSettings().catch(() => null);
--      this.user = getCachedUser();
--      try {
--        const credits = await api.credits();
--        const data = credits?.data || credits || {};
--        this.points = Number(data.points || data.total_points || 0);
--      } catch {}
--      await Promise.all([this.loadGroups(), this.searchRoles()]);
--    },
--
--    showToast(message, type = 'info') {
--      this.toast = { message, type };
--      clearTimeout(this.toastTimer);
--      this.toastTimer = setTimeout(() => { this.toast = null; }, 2600);
--    },
--
--    groupText(key, fallback = '') {
--      return this.siteSettings?.group_chat?.[key] || fallback;
--    },
--
--    async loadGroups() {
--      const r = await api.groupChats();
--      const data = r?.data || r || {};
--      this.groups = data.list || [];
--      if (!this.current && this.groups.length) await this.openGroup(this.groups[0]);
--    },
--
--    async searchRoles() {
--      const r = await api.exploreSearch({ q: this.query || '', page: 1, page_size: 24 });
--      const data = r?.data || r || {};
--      this.candidates = data.list || data.apps || data.items || [];
--    },
--
--    addRole(card) {
--      if (!card?.id || this.selected.some(x => x.id === card.id)) return;
--      if (this.selected.length >= 8) return this.showToast(this.groupText('max_roles_error', '一个群最多 8 个角色'), 'error');
--      this.selected.push(card);
--    },
--
--    removeRole(id) {
--      this.selected = this.selected.filter(x => x.id !== id);
--    },
--
--    async createGroup() {
--      if (this.selected.length < 2) return this.showToast(this.groupText('min_roles_error', '至少选择 2 个角色'), 'error');
--      this.busy = true;
--      try {
--        const r = await api.createGroupChat({
--          name: this.groupName || this.selected.slice(0, 3).map(x => x.name).join('、'),
--          app_ids: this.selected.map(x => x.id),
--        });
--        const data = r?.data || r || {};
--        this.groups.unshift(data.group);
--        this.selected = [];
--        this.groupName = '';
--        await this.openGroup(data.group);
--        this.showToast(this.groupText('create_success', '群聊已创建'), 'success');
--      } catch (err) {
--        this.showToast(err.message || this.groupText('create_failed', '创建失败'), 'error');
--      } finally {
--        this.busy = false;
--      }
--    },
--
--    async openGroup(group) {
--      if (!group?.id) return;
--      const r = await api.groupChat(group.id);
--      const data = r?.data || r || {};
--      this.current = data.group;
--      this.messages = data.messages || [];
--      this.$nextTick(() => this.scrollBottom());
--    },
--
--    async deleteGroup(group) {
--      const tpl = this.groupText('delete_confirm_template', '删除群聊「{name}」？');
--      if (!group?.id || !confirm(tpl.replace('{name}', group.name || ''))) return;
--      await api.deleteGroupChat(group.id);
--      this.groups = this.groups.filter(x => x.id !== group.id);
--      if (this.current?.id === group.id) {
--        this.current = null;
--        this.messages = [];
--      }
--      this.showToast(this.groupText('delete_success', '已删除'), 'success');
--    },
--
--    async send() {
--      if (!this.current?.id || !this.draft.trim() || this.busy) return;
--      const content = this.draft.trim();
--      this.draft = '';
--      this.busy = true;
--      try {
--        const r = await api.sendGroupMessage(this.current.id, { content, auto_reply: true });
--        const data = r?.data || r || {};
--        this.current = data.group || this.current;
--        this.messages = data.messages || this.messages;
--        await this.loadGroups();
--        this.$nextTick(() => this.scrollBottom());
--      } catch (err) {
--        this.showToast(err.message || this.groupText('send_failed', '发送失败'), 'error');
--      } finally {
--        this.busy = false;
--      }
--    },
--
--    async replyAs(member) {
--      if (!this.current?.id || !member?.app_id || this.busy) return;
--      this.busy = true;
--      try {
--        const r = await api.groupReply(this.current.id, { app_id: member.app_id });
--        const data = r?.data || r || {};
--        this.current = data.group || this.current;
--        this.messages = data.messages || this.messages;
--        await this.loadGroups();
--        this.$nextTick(() => this.scrollBottom());
--      } catch (err) {
--        this.showToast(err.message || this.groupText('reply_failed', '回复失败'), 'error');
--      } finally {
--        this.busy = false;
--      }
--    },
--
--    scrollBottom() {
--      const el = this.$refs.messages;
--      if (el) el.scrollTop = el.scrollHeight;
--    },
--  };
--}
--
--window.groupChatPage = groupChatPage;
--document.addEventListener('alpine:init', () => {
--  if (window.Alpine?.data) window.Alpine.data('groupChatPage', groupChatPage);
--});
++import { api, requireAuth, getCachedUser } from '/app/assets/js/app-core.js?v=20260908-pr7';
++import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260908-pr7';
+ 
+ function groupChatPage() {
+   return {
+diff --git a/frontend/app/assets/js/home.js b/frontend/app/assets/js/home.js
+index 526cf06fec4e786e8f90ecf5ac839835938d0ea4..8fc2257f62531a0d61ec7e19c9adc0e05413d422 100644
+--- a/frontend/app/assets/js/home.js
++++ b/frontend/app/assets/js/home.js
+@@ -1,4 +1,4 @@
+-import { api, isLoggedIn, ApiError } from '/app/assets/js/app-core.js?v=20260905-notices-v1';
++import { api, isLoggedIn, ApiError } from '/app/assets/js/app-core.js?v=20260908-pr7';
+ 
+ const statusNode = document.querySelector('[data-resume-status]');
+ 
 diff --git a/frontend/app/assets/js/hub-pages.js b/frontend/app/assets/js/hub-pages.js
-index 9907a5b1500f52977edf694728ebb2a1cd4e3ef7..1bae6176d45d114f098af0854acc89a38691ef70 100644
+index 9907a5b1500f52977edf694728ebb2a1cd4e3ef7..ff5a2d64719b7e31408b1cbd2ffb40a3cb4314c1 100644
 --- a/frontend/app/assets/js/hub-pages.js
 +++ b/frontend/app/assets/js/hub-pages.js
-@@ -1,3 +1,4 @@
-+import { confirmAction, showMessage } from '/assets/js/dialogs.js?v=20260906-r2';
- import { api, requireAuth, getCachedUser, setCachedUser, clearAuth, ApiError } from '/app/assets/js/app-core.js?v=20260905-notices-v1';
- import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260905-notices-v1';
+@@ -1,5 +1,6 @@
+-import { api, requireAuth, getCachedUser, setCachedUser, clearAuth, ApiError } from '/app/assets/js/app-core.js?v=20260905-notices-v1';
+-import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260905-notices-v1';
++import { confirmAction, showMessage } from '/assets/js/dialogs.js?v=20260908-pr7';
++import { api, requireAuth, getCachedUser, setCachedUser, clearAuth, ApiError } from '/app/assets/js/app-core.js?v=20260908-pr7';
++import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260908-pr7';
  import { readPageCache, writePageCache } from './page-cache.js';
+ 
+ async function loadUser(ctx) {
 @@ -61,7 +62,12 @@ function formatTemplate(template, values = {}) {
  export function favoritesPage() {
    return {
@@ -1089,7 +1064,7 @@ index 9907a5b1500f52977edf694728ebb2a1cd4e3ef7..1bae6176d45d114f098af0854acc89a3
        } finally {
          this.deletingId = '';
        }
-@@ -238,26 +244,37 @@ export function historiesPage() {
+@@ -238,26 +244,45 @@ export function historiesPage() {
  export function workshopPage() {
    return {
      user: null, points: 0, stats: null, myApps: [], myTotal: 0, siteSettings: null, ready: false,
@@ -1124,7 +1099,14 @@ index 9907a5b1500f52977edf694728ebb2a1cd4e3ef7..1bae6176d45d114f098af0854acc89a3
        }
 +      // Local navigation and new-card tools do not depend on server statistics.
 +      this.ready = true;
-+      await Promise.allSettled([loadSiteSettings(this), loadUser(this), this.refreshWorkshop()]);
++      await Promise.allSettled([loadSiteSettings(this), (async () => {
++        const previousOwner = String(this.user?.id || this.user?.user_id || '');
++        if (!await loadUser(this)) return;
++        if (previousOwner !== String(this.user?.id || this.user?.user_id || '')) {
++          this.myApps = []; this.myTotal = 0; this.appsLoaded = false; this.stats = null;
++        }
++        await this.refreshWorkshop();
++      })()]);
 +    },
 +    async refreshWorkshop() {
 +      if (this.refreshing) return;
@@ -1134,6 +1116,7 @@ index 9907a5b1500f52977edf694728ebb2a1cd4e3ef7..1bae6176d45d114f098af0854acc89a3
 +      await Promise.allSettled([
 +        api.homeStats().then(s => { this.stats = s?.data || null; }),
 +        api.myApps({ page: 1, page_size: 8 }).then(m => {
++          if (String(owner?.id || owner?.user_id || '') !== String(getCachedUser()?.id || getCachedUser()?.user_id || '')) return;
 +          this.myApps = m?.data?.list || m?.data?.apps || [];
 +          this.myTotal = m?.data?.total ?? this.myApps.length;
 +          this.appsLoaded = true;
@@ -1144,7 +1127,7 @@ index 9907a5b1500f52977edf694728ebb2a1cd4e3ef7..1bae6176d45d114f098af0854acc89a3
      },
      get publicCount() {
        return this.myApps.filter((a) => a?.is_public !== false).length;
-@@ -272,6 +289,7 @@ export function workshopPage() {
+@@ -272,6 +297,7 @@ export function workshopPage() {
      appNavText(key, fallback = '') { return appNavText(this, key, fallback); },
      myText(key, fallback = '') { return myText(this, key, fallback); },
      syncedLibraryText() {
@@ -1153,26 +1136,16 @@ index 9907a5b1500f52977edf694728ebb2a1cd4e3ef7..1bae6176d45d114f098af0854acc89a3
        const suffix = this.emptyText('workshop_library_suffix', '张卡');
        return `${prefix} ${this.stats?.apps?.total || 0} ${suffix}`;
 diff --git a/frontend/app/assets/js/layout.js b/frontend/app/assets/js/layout.js
-index 3c4ab6051465ae108dfd704249e2ec29f4d62c87..432238855502a34b9e382ae231b4bed57635c9d4 100644
+index 3c4ab6051465ae108dfd704249e2ec29f4d62c87..d0bf8ce8c34ba0d92de5c2c1142b9e2d467a5ec0 100644
 --- a/frontend/app/assets/js/layout.js
 +++ b/frontend/app/assets/js/layout.js
-@@ -4,7 +4,6 @@ const NAV_ITEMS = [
-   { key: 'explore', label: '探索', href: '/app/explore.html', icon: 'M3 12l9-9 9 9M5 10v10h14V10' },
-   { key: 'workshop', label: '创作工坊', href: '/app/workshop.html', icon: 'M12 5v14m7-7H5' },
-   { key: 'histories', label: '历史会话', href: '/app/histories.html', icon: 'M12 8v4l3 3M21 12a9 9 0 11-18 0 9 9 0 0118 0z' },
--  { key: 'group', label: '群聊', href: '/app/group-chat.html', icon: 'M17 20h5v-2a4 4 0 00-4-4h-1M9 20H4v-2a4 4 0 014-4h1m0-4a4 4 0 118 0 4 4 0 01-8 0zm8 2a3 3 0 100-6' },
-   { key: 'me', label: '我的', href: '/app/me.html', icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM4 21a8 8 0 0116 0' },
-   { key: 'favorites', label: '我的收藏', href: '/app/favorites.html', icon: 'M11.48 3.5l.52 1.06.52-1.06a5.5 5.5 0 017.78 7.78L12 20.08l-8.8-8.8a5.5 5.5 0 017.78-7.78z' },
-   { key: 'image', label: '图片聊天', href: '/app/image-chat.html', icon: 'M4 16l4-4 3 3 5-6 4 7M4 6h16v12H4z' },
-@@ -16,7 +15,6 @@ const NAV_ITEMS = [
+@@ -1,4 +1,4 @@
+-import { installDialoguePrewarm } from '/app/assets/js/dialogue-prewarm.js?v=20260905-notices-v1';
++import { installDialoguePrewarm } from '/app/assets/js/dialogue-prewarm.js?v=20260908-pr7';
  
- const MOBILE_ITEMS = [
-   { key: 'explore', label: '探索', href: '/app/explore.html', icon: NAV_ITEMS[0].icon },
--  { key: 'group', label: '群聊', href: '/app/group-chat.html', icon: NAV_ITEMS[3].icon },
-   { key: 'workshop', label: '创作', href: '/app/workshop.html', icon: NAV_ITEMS[1].icon },
-   { key: 'histories', label: '历史对话', href: '/app/histories.html', icon: NAV_ITEMS[2].icon },
-   { key: 'me', label: '我的', href: '/app/me.html', icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM4 21a8 8 0 0116 0' },
-@@ -28,7 +26,6 @@ const PULL_REFRESH_PATHS = new Set([
+ const NAV_ITEMS = [
+   { key: 'explore', label: '探索', href: '/app/explore.html', icon: 'M3 12l9-9 9 9M5 10v10h14V10' },
+@@ -28,7 +28,6 @@ const PULL_REFRESH_PATHS = new Set([
    '/app/explore.html',
    '/app/histories.html',
    '/app/favorites.html',
@@ -1180,19 +1153,47 @@ index 3c4ab6051465ae108dfd704249e2ec29f4d62c87..432238855502a34b9e382ae231b4bed5
    '/app/workshop.html',
    '/app/me.html',
    '/app/farm.html',
+diff --git a/frontend/app/assets/js/login.js b/frontend/app/assets/js/login.js
+index 4cbf0cdd6094dd9a359387f6adea1a206c5bb384..324b2bd58f2418c05dfd6c5ff43c2471394e1400 100644
+--- a/frontend/app/assets/js/login.js
++++ b/frontend/app/assets/js/login.js
+@@ -1,5 +1,5 @@
+-import { api, setToken, clearAuth, isLoggedIn, ApiError } from '/app/assets/js/app-core.js?v=20260905-notices-v1';
+-import { loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260905-notices-v1';
++import { api, setToken, clearAuth, isLoggedIn, ApiError } from '/app/assets/js/app-core.js?v=20260908-pr7';
++import { loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260908-pr7';
+ 
+ function safeNextPath() {
+   const value = new URLSearchParams(location.search).get('next') || '/app/';
+diff --git a/frontend/app/assets/js/me.js b/frontend/app/assets/js/me.js
+index 6254c44f83383644a722788824861e39c00c65f6..d8ae3dc6aa7fefb117a7dbd8f74f47fb6f7bc0a4 100644
+--- a/frontend/app/assets/js/me.js
++++ b/frontend/app/assets/js/me.js
+@@ -1,6 +1,6 @@
+-import { api, requireAuth, getCachedUser, setCachedUser, clearAuth, formatDateTime, ApiError } from '/app/assets/js/app-core.js?v=20260905-notices-v1';
+-import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260905-notices-v1';
+-import { clearPageCache, readPageCache, writePageCache } from '/app/assets/js/page-cache.js?v=20260905-notices-v1';
++import { api, requireAuth, getCachedUser, setCachedUser, clearAuth, formatDateTime, ApiError } from '/app/assets/js/app-core.js?v=20260908-pr7';
++import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260908-pr7';
++import { clearPageCache, readPageCache, writePageCache } from '/app/assets/js/page-cache.js?v=20260908-pr7';
+ 
+ const ME_CACHE_SCOPE = 'me';
+ 
 diff --git a/frontend/app/assets/js/my-apps.js b/frontend/app/assets/js/my-apps.js
-index 6ac83baa98407e6a861129504fb6a78841b09700..c8a9ae9a46f0f0999b7b6e4c486c725fe37cecc3 100644
+index 6ac83baa98407e6a861129504fb6a78841b09700..5b2919cc9cab618fb5c835e554c75acaa1dea01b 100644
 --- a/frontend/app/assets/js/my-apps.js
 +++ b/frontend/app/assets/js/my-apps.js
 @@ -1,5 +1,7 @@
-+import { confirmAction, showMessage } from '/assets/js/dialogs.js?v=20260906-r2';
- import { api, requireAuth, getCachedUser, setCachedUser, ApiError } from '/app/assets/js/app-core.js?v=20260905-notices-v1';
- import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260905-notices-v1';
+-import { api, requireAuth, getCachedUser, setCachedUser, ApiError } from '/app/assets/js/app-core.js?v=20260905-notices-v1';
+-import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260905-notices-v1';
++import { confirmAction, showMessage } from '/assets/js/dialogs.js?v=20260908-pr7';
++import { api, requireAuth, getCachedUser, setCachedUser, ApiError } from '/app/assets/js/app-core.js?v=20260908-pr7';
++import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260908-pr7';
 +import { readPageCache, writePageCache } from './page-cache.js';
  
  function myAppsPage() {
    return {
-@@ -16,23 +18,24 @@ function myAppsPage() {
+@@ -16,23 +18,29 @@ function myAppsPage() {
  
      async init() {
        injectLayout('workshop');
@@ -1210,9 +1211,14 @@ index 6ac83baa98407e6a861129504fb6a78841b09700..c8a9ae9a46f0f0999b7b6e4c486c725f
 -        this.points = parseInt(p.points || p.data?.points || 0, 10);
 +        await Promise.all([
 +          loadPublicSiteSettings().then(s => { this.siteSettings = s; }).catch(() => {}),
-+          api.profile().then(r => { this.user = r?.data || r; setCachedUser(this.user); }),
++          api.profile().then(async r => {
++            const previousOwner = String(cached?.id || cached?.user_id || '');
++            this.user = r?.data || r;
++            setCachedUser(this.user);
++            if (previousOwner !== String(this.user?.id || this.user?.user_id || '')) this.apps = [];
++            await this.loadApps();
++          }),
 +          api.points().then(p => { this.points = parseInt(p.points || p.data?.points || 0, 10); }).catch(() => {}),
-+          this.loadApps(),
 +        ]);
        } catch (err) {
          if (err instanceof ApiError && err.code === 401) {
@@ -1224,7 +1230,7 @@ index 6ac83baa98407e6a861129504fb6a78841b09700..c8a9ae9a46f0f0999b7b6e4c486c725f
      },
  
      showToast(message, type = 'info', duration = 2800) {
-@@ -54,14 +57,15 @@ function myAppsPage() {
+@@ -54,14 +62,16 @@ function myAppsPage() {
      },
  
      async loadApps() {
@@ -1232,6 +1238,7 @@ index 6ac83baa98407e6a861129504fb6a78841b09700..c8a9ae9a46f0f0999b7b6e4c486c725f
        this.loading = true;
        try {
          const r = await api.myApps({ page: 1, page_size: 100 });
++        if (String(owner?.id || owner?.user_id || '') !== String(getCachedUser()?.id || getCachedUser()?.user_id || '')) return;
          const data = r?.data || r;
          this.apps = data.list || data.apps || [];
 +        writePageCache('my-apps', owner, { list: this.apps });
@@ -1241,7 +1248,7 @@ index 6ac83baa98407e6a861129504fb6a78841b09700..c8a9ae9a46f0f0999b7b6e4c486c725f
        } finally {
          this.loading = false;
        }
-@@ -122,7 +126,7 @@ function myAppsPage() {
+@@ -122,7 +132,7 @@ function myAppsPage() {
      async remove(app) {
        const name = app.name || this.myText('unnamed_role', '未命名角色');
        const confirmText = this.formatTemplate(this.myText('delete_confirm_template', '删除「{name}」？'), { name });
@@ -1314,15 +1321,18 @@ index cab390bfd151aa27282a3ee3b4a92924faee8b9f..b3cc1e84163a08089970f6bf16730b27
    else setTimeout(() => void checkStartupNotifications(), 0);
  }
 diff --git a/frontend/app/character.html b/frontend/app/character.html
-index 7cd1db3ed01c83637f9c02112c3e86a454129e96..9e73305c109a60a65b4b659a9875a1a7e18c31e7 100644
+index 7cd1db3ed01c83637f9c02112c3e86a454129e96..012244ff2dbdd4922e835055dd619bd45449dfbd 100644
 --- a/frontend/app/character.html
 +++ b/frontend/app/character.html
-@@ -10,6 +10,8 @@
+@@ -8,8 +8,10 @@
+   <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
+   <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
    <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
-   <script type="module" src="/app/assets/js/character.js?v=20260905-notices-v1"></script>
+-  <script type="module" src="/app/assets/js/character.js?v=20260905-notices-v1"></script>
++  <script type="module" src="/app/assets/js/character.js?v=20260908-pr7"></script>
    <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
-+  <link rel="stylesheet" href="/assets/css/app-design.css?v=20260905-ui-r1">
-+  <script defer src="/assets/js/option-picker.js?v=20260906-r2"></script>
++  <link rel="stylesheet" href="/assets/css/app-design.css?v=20260908-pr7">
++  <script defer src="/assets/js/option-picker.js?v=20260908-pr7"></script>
  </head>
  <body class="min-h-screen">
    <div class="xy-stars-bg"></div>
@@ -1355,7 +1365,7 @@ index 7cd1db3ed01c83637f9c02112c3e86a454129e96..9e73305c109a60a65b4b659a9875a1a7
                  <div class="detail-id-row">
                    <code x-text="`ID: ${card?.displayId || card?.id || ''}`"></code>
                    <button type="button" class="xy-btn xy-btn-ghost text-xs px-2 py-1" @click="copyCardId" x-text="characterText('copy_id_text', '复制 ID')">复制 ID</button>
-@@ -69,35 +56,13 @@
+@@ -69,23 +56,13 @@
                    <button type="button" class="xy-btn xy-btn-ghost text-xs" x-show="extraFlags?.contest_id" :class="{ 'is-active': extraFlags?.voted }" @click="toggleContestVote()" x-text="voteLabel()">投票</button>
                  </div>
                </div>
@@ -1376,23 +1386,11 @@ index 7cd1db3ed01c83637f9c02112c3e86a454129e96..9e73305c109a60a65b4b659a9875a1a7
 -                <p x-text="card?.opening_detail?.summary"></p>
 -              </article>
 -            </div>
--            <div class="user-tags-box mt-5">
--              <div class="user-tags-box__head">
--                <span x-text="characterText('user_tags_title', '我的标签')">我的标签</span>
--                <button type="button" class="xy-btn xy-btn-ghost text-xs" :disabled="userTagSaving" @click="saveUserTags" x-text="userTagSaving ? characterText('saving_text', '保存中') : characterText('save_text', '保存')">保存</button>
--              </div>
--              <input class="xy-input text-sm" x-model="userTagDraft" :placeholder="characterText('user_tags_placeholder', '例如：已测、喜欢、慢热；逗号分隔')">
--              <div class="flex flex-wrap gap-2 mt-3" x-show="card?.user_tags?.length">
--                <template x-for="t in (card?.user_tags || [])" :key="t">
--                  <span class="chip chip-static" x-text="t"></span>
--                </template>
--              </div>
--            </div>
 +
-           </div>
- 
-           <section class="character-extra-panel p-6" x-show="extraFlags?.contest_id">
-@@ -117,18 +82,6 @@
+             <div class="user-tags-box mt-5">
+               <div class="user-tags-box__head">
+                 <span x-text="characterText('user_tags_title', '我的标签')">我的标签</span>
+@@ -117,18 +94,6 @@
              </div>
            </section>
  
@@ -1411,7 +1409,7 @@ index 7cd1db3ed01c83637f9c02112c3e86a454129e96..9e73305c109a60a65b4b659a9875a1a7
            <div class="xy-glass p-7">
              <h3 class="font-semibold mb-3 text-violet-100 flex items-center gap-2"><span class="text-pink-300">✦</span> <span x-text="characterText('comment_title', '评论区')"></span></h3>
              <form class="space-y-3" @submit.prevent="submitComment">
-@@ -158,10 +111,17 @@
+@@ -158,10 +123,17 @@
              </div>
            </div>
  
@@ -1434,16 +1432,16 @@ index 7cd1db3ed01c83637f9c02112c3e86a454129e96..9e73305c109a60a65b4b659a9875a1a7
        </section>
  
 diff --git a/frontend/app/chat.html b/frontend/app/chat.html
-index 3154a07193285b9f5de90a7107dfec9d5850286e..f2ebf6d3c003b183f90e4d0c27c94364a29eaac3 100644
+index 3154a07193285b9f5de90a7107dfec9d5850286e..63e49591fccf4998207813459108ebdac85edac6 100644
 --- a/frontend/app/chat.html
 +++ b/frontend/app/chat.html
 @@ -704,6 +704,9 @@
        .preview-settings-button { width: 44px; min-height: 44px; }
      }
    </style>
-+  <link rel="stylesheet" href="/assets/css/app-design.css?v=20260905-ui-r1">
-+  <link rel="stylesheet" href="/assets/css/chat-design.css?v=20260905-ui-r1">
-+  <script defer src="/assets/js/option-picker.js?v=20260906-r2"></script>
++  <link rel="stylesheet" href="/assets/css/app-design.css?v=20260908-pr7">
++  <link rel="stylesheet" href="/assets/css/chat-design.css?v=20260908-pr7">
++  <script defer src="/assets/js/option-picker.js?v=20260908-pr7"></script>
  </head>
  <body class="has-preview">
    <main class="dialogue-host" aria-label="惑梦对话">
@@ -1495,17 +1493,25 @@ index 3154a07193285b9f5de90a7107dfec9d5850286e..f2ebf6d3c003b183f90e4d0c27c94364
        </aside>
        <button id="preview-scrim" class="preview-scrim" type="button" aria-label="关闭侧栏" hidden></button>
        <p id="preview-toast" class="preview-toast" hidden></p>
+@@ -795,6 +804,6 @@
+ 
+   <p id="dialogue-announcer" class="sr-only" aria-live="assertive"></p>
+   <noscript>需要启用 JavaScript 才能进入对话。</noscript>
+-<script type="module" src="/app/assets/js/chat.js?v=20260905-notices-v1"></script>
++<script type="module" src="/app/assets/js/chat.js?v=20260908-pr7"></script>
+ </body>
+ </html>
 diff --git a/frontend/app/community-contest.html b/frontend/app/community-contest.html
 new file mode 100644
-index 0000000000000000000000000000000000000000..8b54374ea1b18ef86f3e7e67aa616e5a34c41d0f
+index 0000000000000000000000000000000000000000..7c008377760fe892a96b625bad9c6a636a342ab5
 --- /dev/null
 +++ b/frontend/app/community-contest.html
 @@ -0,0 +1,10 @@
 +<!doctype html><html lang="zh-CN"><head>
 +<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>创作者比赛 · 惑梦</title>
-+<link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages"><link rel="stylesheet" href="/assets/css/community-feed.css?v=20260906-r2">
-+<script type="module" src="/app/assets/js/community-contest.js?v=20260906-r2"></script><script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
-+</head><body class="social-page"><script>if(new URLSearchParams(location.search).get('preview')!=='1')location.replace('/app/explore.html');</script><div class="app-shell" x-data="contestPage()" x-cloak><aside class="app-sidebar" data-app-sidebar></aside><main class="app-main social-main">
++<link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages"><link rel="stylesheet" href="/assets/css/community-feed.css?v=20260908-pr7">
++<script type="module" src="/app/assets/js/community-contest.js?v=20260908-pr7"></script><script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
++<style>html:not([data-homer-community-preview="allowed"]) body{display:none!important}</style></head><body class="social-page"><script>if(new URLSearchParams(location.search).get('preview')!=='1')location.replace('/app/explore.html');</script><div class="app-shell" x-data="contestPage()" x-cloak><aside class="app-sidebar" data-app-sidebar></aside><main class="app-main social-main">
 +<header class="social-dialog-header"><a href="/app/community.html" class="xy-btn xy-btn-ghost">‹ 社区</a><strong>本期创作者比赛</strong></header>
 +<p class="social-feedback" role="status" x-show="loading">正在获取赛事…</p><div class="social-feedback" role="alert" x-show="error"><p x-text="error"></p><button @click="load()">重试</button></div>
 +<article class="social-detail-content" x-show="contest"><small x-text="contest?.period || ''"></small><h1 x-text="contest?.title || '本期创作者比赛'"></h1><p x-text="contest?.description || contest?.content || ''"></p><h2 x-show="contest?.reward">赛事奖励</h2><p x-text="contest?.reward || ''"></p><h2 x-show="contest?.metrics?.length">评选方式</h2><p x-text="(contest?.metrics || []).join(' / ')"></p><small x-text="contest?.status || ''"></small><a href="/app/community-library.html?tab=contests" class="xy-btn xy-btn-primary" style="margin-top:24px">查看参赛作品与投票</a></article>
@@ -1513,7 +1519,7 @@ index 0000000000000000000000000000000000000000..8b54374ea1b18ef86f3e7e67aa616e5a
 +</main><nav class="app-bottom-nav" data-app-bottom-nav></nav></div></body></html>
 diff --git a/frontend/app/community-library.html b/frontend/app/community-library.html
 new file mode 100644
-index 0000000000000000000000000000000000000000..9253ab36a0117428b5eb75105bd3866fd4b9eb85
+index 0000000000000000000000000000000000000000..980c10fcf4725ae04f4a42b78a3502f9526ef00f
 --- /dev/null
 +++ b/frontend/app/community-library.html
 @@ -0,0 +1,235 @@
@@ -1528,7 +1534,7 @@ index 0000000000000000000000000000000000000000..9253ab36a0117428b5eb75105bd3866f
 +  <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
 +  <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
 +  <script>if(new URLSearchParams(location.search).get('preview')!=='1')location.replace('/app/explore.html');</script>
-+  <script type="module" src="/app/assets/js/community.js?v=20260905-notices-v1"></script>
++  <script type="module" src="/app/assets/js/community.js?v=20260908-pr7"></script>
 +  <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
 +  <style>
 +    .cm-page { width: min(1180px, 100%); margin: 0 auto; }
@@ -1591,9 +1597,9 @@ index 0000000000000000000000000000000000000000..9253ab36a0117428b5eb75105bd3866f
 +    .cm-notice { position: fixed; right: 22px; bottom: 22px; z-index: 1300; max-width: min(360px, calc(100vw - 44px)); padding: 12px 15px; border: 1px solid rgba(251,113,133,.35); border-radius: 13px; color: #fff; background: rgba(32,24,42,.96); box-shadow: 0 12px 40px rgba(0,0,0,.32); font-size: 13px; }
 +    @media (max-width: 620px) { .cm-rank { grid-template-columns: 32px 42px minmax(0,1fr); } .cm-rank > button { grid-column: 2 / -1; justify-content: center; } .cm-demo { height: 360px; } }
 +  </style>
-+  <link rel="stylesheet" href="/assets/css/app-design.css?v=20260905-ui-r1">
-+  <script defer src="/assets/js/option-picker.js?v=20260906-r2"></script>
-+</head>
++  <link rel="stylesheet" href="/assets/css/app-design.css?v=20260908-pr7">
++  <script defer src="/assets/js/option-picker.js?v=20260908-pr7"></script>
++<style>html:not([data-homer-community-preview="allowed"]) body{display:none!important}</style></head>
 +<body class="min-h-screen">
 +  <div class="xy-stars-bg"></div>
 +  <div class="xy-meteor"></div>
@@ -1753,7 +1759,7 @@ index 0000000000000000000000000000000000000000..9253ab36a0117428b5eb75105bd3866f
 +</body>
 +</html>
 diff --git a/frontend/app/community.html b/frontend/app/community.html
-index eb4b388977ffe34b0ee5a3826d21a8f6e1d0f4e5..196ca7d46670e1729104084bd547fe535543725a 100644
+index eb4b388977ffe34b0ee5a3826d21a8f6e1d0f4e5..45358230af9712c7519513fecbd7ad7a4d62d63b 100644
 --- a/frontend/app/community.html
 +++ b/frontend/app/community.html
 @@ -1,232 +1,62 @@
@@ -1771,10 +1777,10 @@ index eb4b388977ffe34b0ee5a3826d21a8f6e1d0f4e5..196ca7d46670e1729104084bd547fe53
 +  <title>社区 · 惑梦</title>
    <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
 -  <script type="module" src="/app/assets/js/community.js?v=20260905-notices-v1"></script>
-+  <link rel="stylesheet" href="/assets/css/community-feed.css?v=20260906-r2">
++  <link rel="stylesheet" href="/assets/css/community-feed.css?v=20260908-pr7">
 +  <script>if(new URLSearchParams(location.search).get('preview')!=='1')location.replace('/app/explore.html');</script>
-+  <script defer src="/assets/js/option-picker.js?v=20260906-r2"></script>
-+  <script type="module" src="/app/assets/js/community-feed.js?v=20260906-r2"></script>
++  <script defer src="/assets/js/option-picker.js?v=20260908-pr7"></script>
++  <script type="module" src="/app/assets/js/community-feed.js?v=20260908-pr7"></script>
    <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
 -  <style>
 -    .cm-page { width: min(1180px, 100%); margin: 0 auto; }
@@ -1837,7 +1843,7 @@ index eb4b388977ffe34b0ee5a3826d21a8f6e1d0f4e5..196ca7d46670e1729104084bd547fe53
 -    .cm-notice { position: fixed; right: 22px; bottom: 22px; z-index: 1300; max-width: min(360px, calc(100vw - 44px)); padding: 12px 15px; border: 1px solid rgba(251,113,133,.35); border-radius: 13px; color: #fff; background: rgba(32,24,42,.96); box-shadow: 0 12px 40px rgba(0,0,0,.32); font-size: 13px; }
 -    @media (max-width: 620px) { .cm-rank { grid-template-columns: 32px 42px minmax(0,1fr); } .cm-rank > button { grid-column: 2 / -1; justify-content: center; } .cm-demo { height: 360px; } }
 -  </style>
- </head>
+-</head>
 -<body class="min-h-screen">
 -  <div class="xy-stars-bg"></div>
 -  <div class="xy-meteor"></div>
@@ -1996,6 +2002,7 @@ index eb4b388977ffe34b0ee5a3826d21a8f6e1d0f4e5..196ca7d46670e1729104084bd547fe53
 -  </div>
 -</body>
 -</html>
++<style>html:not([data-homer-community-preview="allowed"]) body{display:none!important}</style></head>
 +<body class="social-page">
 +<div class="app-shell" x-data="socialPage()" x-cloak>
 +  <aside class="app-sidebar" data-app-sidebar></aside>
@@ -2047,15 +2054,18 @@ index eb4b388977ffe34b0ee5a3826d21a8f6e1d0f4e5..196ca7d46670e1729104084bd547fe53
 +</div>
 +</body></html>
 diff --git a/frontend/app/create.html b/frontend/app/create.html
-index cce94e3ddac8c0297268827f78565dd77a5c98b4..0983698abf296acc9ccdb5db41bdeffc7028a73e 100644
+index cce94e3ddac8c0297268827f78565dd77a5c98b4..8d4c2af4b1a373faaaaa66a622bba13f9ce70cdc 100644
 --- a/frontend/app/create.html
 +++ b/frontend/app/create.html
-@@ -13,6 +13,8 @@
+@@ -11,8 +11,10 @@
+   <link rel="stylesheet" href="/app/assets/css/worldbook-editor.css?v=20260713">
+   <link rel="stylesheet" href="/app/assets/css/card-experience-editor.css?v=20260806-tavern-helper">
    <script src="/app/assets/vendor/jszip-3.10.1.min.js?v=3.10.1"></script>
-   <script type="module" src="/app/assets/js/create.js?v=20260905-notices-v1"></script>
+-  <script type="module" src="/app/assets/js/create.js?v=20260905-notices-v1"></script>
++  <script type="module" src="/app/assets/js/create.js?v=20260908-pr7"></script>
    <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
-+  <link rel="stylesheet" href="/assets/css/app-design.css?v=20260905-ui-r1">
-+  <script defer src="/assets/js/option-picker.js?v=20260906-r2"></script>
++  <link rel="stylesheet" href="/assets/css/app-design.css?v=20260908-pr7">
++  <script defer src="/assets/js/option-picker.js?v=20260908-pr7"></script>
  </head>
  <body class="min-h-screen creator-editor-page">
    <div class="xy-stars-bg"></div>
@@ -2078,28 +2088,38 @@ index cce94e3ddac8c0297268827f78565dd77a5c98b4..0983698abf296acc9ccdb5db41bdeffc
          <div class="xy-modal__body" style="display:grid;gap:14px">
            <label class="editor-field"><span class="editor-field__label">版本名称</span><input class="xy-input" maxlength="80" x-model="versionName" placeholder="例如：v2.0 · 新剧情线"></label>
 diff --git a/frontend/app/data-merge.html b/frontend/app/data-merge.html
-index 2a4f3c4b6e6cb448cfc11eb4202bbd9939a2d2b9..03c0be62518f99d9b96d612bbece799217b463f9 100644
+index 2a4f3c4b6e6cb448cfc11eb4202bbd9939a2d2b9..867b9161f3bf96658ea0dfd31562306651d845d7 100644
 --- a/frontend/app/data-merge.html
 +++ b/frontend/app/data-merge.html
 @@ -89,6 +89,8 @@
        .dm-file { flex-direction: column; align-items: stretch; }
      }
    </style>
-+  <link rel="stylesheet" href="/assets/css/app-design.css?v=20260905-ui-r1">
-+  <script defer src="/assets/js/option-picker.js?v=20260906-r2"></script>
++  <link rel="stylesheet" href="/assets/css/app-design.css?v=20260908-pr7">
++  <script defer src="/assets/js/option-picker.js?v=20260908-pr7"></script>
  </head>
  <body>
    <main class="dm-wrap">
 diff --git a/frontend/app/explore.html b/frontend/app/explore.html
-index 12fb80b3eff32aa14fc647753db5a02348922c67..c3835d980874e9e39bd4a37065118140d08de0ac 100644
+index 12fb80b3eff32aa14fc647753db5a02348922c67..99e274532a87751e256d78211044340831ddf41e 100644
 --- a/frontend/app/explore.html
 +++ b/frontend/app/explore.html
-@@ -13,8 +13,10 @@
+@@ -7,14 +7,16 @@
+   <link rel="icon" type="image/png" sizes="32x32" href="/assets/img/favicon-32.png?v=20260901-persistent-pages">
+   <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
+   <link rel="preload" as="script" href="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1">
+-  <link rel="modulepreload" href="/assets/js/api.js?v=20260905-notices-v1">
+-  <link rel="modulepreload" href="/app/assets/js/app-core.js?v=20260905-notices-v1">
+-  <link rel="modulepreload" href="/app/assets/js/layout.js?v=20260905-notices-v1">
++  <link rel="modulepreload" href="/assets/js/api.js?v=20260908-pr7">
++  <link rel="modulepreload" href="/app/assets/js/app-core.js?v=20260908-pr7">
++  <link rel="modulepreload" href="/app/assets/js/layout.js?v=20260908-pr7">
    <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
-   <script type="module" src="/app/assets/js/explore.js?v=20260905-notices-v1"></script>
+-  <script type="module" src="/app/assets/js/explore.js?v=20260905-notices-v1"></script>
++  <script type="module" src="/app/assets/js/explore.js?v=20260908-pr7"></script>
    <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
-+  <link rel="stylesheet" href="/assets/css/explore-cards.css?v=20260906-r2">
-+  <script defer src="/assets/js/option-picker.js?v=20260906-r2"></script>
++  <link rel="stylesheet" href="/assets/css/explore-cards.css?v=20260908-pr7">
++  <script defer src="/assets/js/option-picker.js?v=20260908-pr7"></script>
  </head>
 -<body class="min-h-screen">
 +<body class="min-h-screen explore-page">
@@ -2194,28 +2214,34 @@ index 12fb80b3eff32aa14fc647753db5a02348922c67..c3835d980874e9e39bd4a37065118140
              </a>
              <button class="char-card__fav" :class="{ 'is-active': card.favorited }" @click="toggleFavorite(card, $event)" :aria-label="appHomeText('favorite_label', '收藏')">♥</button>
 diff --git a/frontend/app/farm.html b/frontend/app/farm.html
-index 8f92443aadde99dae5e75b8db6d507b5629690b9..cc2a6387b6fe4f8496062cde5a85ed83b289d5f1 100644
+index 8f92443aadde99dae5e75b8db6d507b5629690b9..ba06f712f18e6686c0f5a53e4ec0e7afeb0b4890 100644
 --- a/frontend/app/farm.html
 +++ b/frontend/app/farm.html
-@@ -10,6 +10,8 @@
+@@ -8,8 +8,10 @@
+   <link rel="icon" type="image/png" sizes="32x32" href="/assets/img/favicon-32.png?v=20260901-persistent-pages">
+   <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
    <link rel="stylesheet" href="/app/assets/css/farm.css?v=20260901-persistent-pages">
-   <script type="module" src="/app/assets/js/farm.js?v=20260905-notices-v1"></script>
+-  <script type="module" src="/app/assets/js/farm.js?v=20260905-notices-v1"></script>
++  <script type="module" src="/app/assets/js/farm.js?v=20260908-pr7"></script>
    <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
-+  <link rel="stylesheet" href="/assets/css/app-design.css?v=20260905-ui-r1">
-+  <script defer src="/assets/js/option-picker.js?v=20260906-r2"></script>
++  <link rel="stylesheet" href="/assets/css/app-design.css?v=20260908-pr7">
++  <script defer src="/assets/js/option-picker.js?v=20260908-pr7"></script>
  </head>
  <body class="min-h-screen farm-page">
    <div class="app-shell" x-data="farmPage()" x-cloak>
 diff --git a/frontend/app/favorites.html b/frontend/app/favorites.html
-index 9307a18885e9e661253ce4b6033cb59ef47c10ab..fe830da82517ff878e72f5733242c3ce7ff35dc6 100644
+index 9307a18885e9e661253ce4b6033cb59ef47c10ab..a98772e8162d40186bdd23a81880e91ad1e0e102 100644
 --- a/frontend/app/favorites.html
 +++ b/frontend/app/favorites.html
-@@ -10,6 +10,8 @@
+@@ -8,8 +8,10 @@
+   <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
+   <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
    <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
-   <script type="module" src="/app/assets/js/hub-pages.js?v=20260905-notices-v1"></script>
+-  <script type="module" src="/app/assets/js/hub-pages.js?v=20260905-notices-v1"></script>
++  <script type="module" src="/app/assets/js/hub-pages.js?v=20260908-pr7"></script>
    <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
-+  <link rel="stylesheet" href="/assets/css/app-design.css?v=20260905-ui-r1">
-+  <script defer src="/assets/js/option-picker.js?v=20260906-r2"></script>
++  <link rel="stylesheet" href="/assets/css/app-design.css?v=20260908-pr7">
++  <script defer src="/assets/js/option-picker.js?v=20260908-pr7"></script>
  </head>
  <body class="min-h-screen">
    <div class="xy-stars-bg"></div>
@@ -2229,432 +2255,30 @@ index 9307a18885e9e661253ce4b6033cb59ef47c10ab..fe830da82517ff878e72f5733242c3ce
              <div class="char-card__footer" x-show="(card.user_tags || []).length">
                <div class="char-card__chip-tags">
 diff --git a/frontend/app/group-chat.html b/frontend/app/group-chat.html
-index 07c5bee9edeb8ad9f134c1828c7b2b772be0d4e7..1579d81714238ef645a20b39bc27ff6ed2be726a 100644
+index 07c5bee9edeb8ad9f134c1828c7b2b772be0d4e7..3e372e3b46bec24cd86ed6cc762fc387d18704c0 100644
 --- a/frontend/app/group-chat.html
 +++ b/frontend/app/group-chat.html
-@@ -1,411 +1,2 @@
--<!DOCTYPE html>
--<html lang="zh-CN">
--<head>
--  <meta charset="UTF-8">
--  <meta name="viewport" content="width=device-width, initial-scale=1.0">
--  <title>群聊 · 惑梦（Homer）</title>
--  <link rel="icon" type="image/png" sizes="32x32" href="/assets/img/favicon-32.png?v=20260901-persistent-pages">
--  <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
--  <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
--  <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
--  <style>
--    .group-layout { display:grid; grid-template-columns:260px minmax(0,1fr) 320px; height:100vh; }
--    .group-panel { border-right:1px solid rgba(196,181,253,.14); background:rgba(12,6,34,.62); backdrop-filter:blur(14px); overflow:hidden; display:flex; flex-direction:column; }
--    .group-panel.right { border-right:none; border-left:1px solid rgba(196,181,253,.14); }
--    .group-head { padding:16px; border-bottom:1px solid rgba(196,181,253,.12); font-weight:800; color:#fff; }
--    .group-scroll { overflow:auto; flex:1; padding:12px; }
--    .group-item { width:100%; text-align:left; padding:11px; border-radius:14px; border:1px solid transparent; color:#e8e2ff; transition:.16s; }
--    .group-item:hover, .group-item.is-active { background:rgba(168,85,247,.14); border-color:rgba(240,171,252,.24); }
--    .role-card { display:flex; gap:10px; align-items:center; padding:9px; border-radius:13px; border:1px solid rgba(196,181,253,.13); background:rgba(255,255,255,.04); cursor:pointer; }
--    .role-card img, .role-avatar { width:38px; height:38px; border-radius:50%; object-fit:cover; background:linear-gradient(135deg,#8b5cf6,#ec4899); color:white; display:flex; align-items:center; justify-content:center; font-weight:800; flex-shrink:0; }
--    .chat-main { display:flex; flex-direction:column; min-width:0; }
--    .chat-top { padding:16px 22px; border-bottom:1px solid rgba(196,181,253,.13); background:rgba(10,4,32,.58); }
--    .group-messages { flex:1; overflow:auto; padding:24px; display:flex; flex-direction:column; gap:13px; }
--    .gmsg { max-width:76%; display:flex; flex-direction:column; gap:4px; }
--    .gmsg.user { align-self:flex-end; align-items:flex-end; }
--    .gmsg.assistant { align-self:flex-start; }
--    .gmsg .speaker { font-size:12px; color:rgba(232,226,255,.58); padding:0 6px; }
--    .gmsg .bubble { padding:12px 15px; border-radius:18px; line-height:1.65; font-size:14px; word-break:break-word; }
--    .gmsg.user .bubble { background:linear-gradient(135deg,#8b5cf6,#d946ef 65%,#fb7185); color:#fff; border-bottom-right-radius:5px; }
--    .gmsg.assistant .bubble { background:rgba(255,255,255,.06); border:1px solid rgba(196,181,253,.18); color:#f4efff; border-bottom-left-radius:5px; }
--    .group-input { padding:14px 18px; border-top:1px solid rgba(196,181,253,.13); display:flex; gap:10px; background:rgba(10,4,32,.75); }
--    .group-input textarea { flex:1; resize:none; min-height:44px; max-height:140px; border-radius:15px; padding:12px 14px; background:rgba(255,255,255,.05); border:1px solid rgba(196,181,253,.22); color:white; }
--    .chip { display:inline-flex; align-items:center; gap:6px; padding:6px 9px; border-radius:999px; background:rgba(168,85,247,.15); color:#f5d0fe; font-size:12px; margin:4px; }
--    @media (max-width: 1024px) {
--      .group-layout { grid-template-columns:1fr; height:auto; min-height:100vh; }
--      .group-panel { display:none; }
--      .group-panel.right { display:flex; min-height:360px; border-left:none; border-top:1px solid rgba(196,181,253,.14); }
--      .chat-main { min-height:calc(100vh - 430px); }
--      .group-input { padding-bottom:78px; }
--    }
--    /* Fengyue clone group chat skin. */
--    .group-layout { background: var(--fy-bg); }
--    .group-panel {
--      border-color: var(--fy-border);
--      background: var(--fy-panel);
--      backdrop-filter: none;
--      -webkit-backdrop-filter: none;
--    }
--    .group-panel.right { border-left-color: var(--fy-border); }
--    .group-head {
--      border-bottom-color: var(--fy-border);
--      color: var(--fy-text);
--      background: var(--fy-panel);
--    }
--    .group-item {
--      color: var(--fy-text);
--      border-radius: 12px;
--    }
--    .group-item:hover,
--    .group-item.is-active {
--      background: var(--fy-accent-soft);
--      border-color: var(--fy-accent);
--      color: var(--fy-accent-2);
--    }
--    .role-card {
--      border-color: var(--fy-border);
--      background: var(--fy-panel-2);
--    }
--    .role-card:hover {
--      border-color: var(--fy-accent);
--      background: var(--fy-accent-soft);
--    }
--    .role-card img,
--    .role-avatar {
--      background: linear-gradient(135deg, #f0a868, #e8834e);
--    }
--    .chat-top {
--      border-bottom-color: var(--fy-border);
--      background: var(--fy-panel);
--    }
--    .group-messages {
--      background: var(--fy-bg);
--    }
--    .gmsg .speaker {
--      color: var(--fy-text-mute);
--    }
--    .gmsg.user .bubble {
--      background: var(--fy-accent-2);
--      color: #fff;
--      border-bottom-right-radius: 5px;
--    }
--    .gmsg.assistant .bubble {
--      background: var(--fy-panel);
--      border: 1px solid var(--fy-border);
--      color: var(--fy-text);
--      border-bottom-left-radius: 5px;
--    }
--    .group-input {
--      border-top-color: var(--fy-border);
--      background: var(--fy-panel);
--    }
--    .group-input textarea {
--      background: var(--fy-panel-2);
--      border-color: var(--fy-border);
--      color: var(--fy-text);
--    }
--    .group-input textarea:focus {
--      outline: none;
--      border-color: var(--fy-accent);
--      box-shadow: 0 0 0 3px rgba(239,154,95,.16);
--      background: #fff;
--    }
--    .chip {
--      background: var(--fy-accent-soft);
--      color: var(--fy-accent-2);
--    }
--    .px-5.py-2.border-t {
--      border-top-color: var(--fy-border) !important;
--      background: var(--fy-panel);
--    }
--    @media (max-width: 1024px) {
--      .group-panel.right {
--        border-top-color: var(--fy-border);
--      }
--    }
--
--    /* 2026-07-11 reference-editor redesign. */
--    body { background:#f5f5f7; color:rgba(0,0,0,.85); }
--    .xy-stars-bg { display:none; }
--    .group-layout {
--      --group-accent:#ff2e63;
--      --group-accent-hover:#e92556;
--      --group-accent-soft:#fff0f4;
--      --group-canvas:#f5f5f7;
--      --group-panel:#fff;
--      --group-border:#e6e6ea;
--      --group-text:rgba(0,0,0,.85);
--      --group-soft:rgba(0,0,0,.55);
--      --group-muted:rgba(0,0,0,.38);
--      grid-template-columns:240px minmax(0,1fr) 300px;
--      background:var(--group-canvas);
--    }
--    .group-panel,
--    .group-panel.right {
--      border-color:var(--group-border);
--      background:var(--group-panel);
--    }
--    .group-head {
--      min-height:64px;
--      padding:0 18px;
--      display:flex;
--      align-items:center;
--      border-bottom-color:var(--group-border);
--      color:var(--group-text);
--      background:#fff;
--      font-size:15px;
--      font-weight:750;
--    }
--    .group-scroll { padding:12px; }
--    .group-item {
--      padding:11px 12px;
--      border-radius:9px;
--      color:var(--group-text);
--    }
--    .group-item:hover,
--    .group-item.is-active {
--      color:var(--group-text);
--      border-color:rgba(255,46,99,.30);
--      background:var(--group-accent-soft);
--    }
--    .group-item .text-violet-200\/50,
--    .group-item .text-violet-200\/55 { color:var(--group-muted)!important; }
--    .chat-main { min-height:0; background:var(--group-canvas); }
--    .chat-top {
--      min-height:64px;
--      padding:11px 20px;
--      border-bottom-color:var(--group-border);
--      background:rgba(255,255,255,.96);
--      box-shadow:0 4px 18px rgba(0,0,0,.035);
--    }
--    .chat-top h1 { color:var(--group-text)!important; font-size:17px; font-weight:750; }
--    .chat-top p { color:var(--group-muted)!important; }
--    .group-messages {
--      padding:24px clamp(18px,4vw,48px);
--      gap:16px;
--      background:var(--group-canvas);
--      scrollbar-gutter:stable;
--    }
--    .gmsg { width:100%; max-width:800px; margin-inline:auto; }
--    .gmsg.user { align-items:flex-end; }
--    .gmsg.assistant { align-items:flex-start; }
--    .gmsg .speaker { color:var(--group-muted); }
--    .gmsg .bubble {
--      width:auto;
--      max-width:78%;
--      padding:11px 14px;
--      border-radius:12px;
--      line-height:1.72;
--      box-shadow:0 2px 12px rgba(0,0,0,.045);
--    }
--    .gmsg.user .bubble {
--      color:#fff;
--      border:1px solid var(--group-accent);
--      border-radius:12px 12px 4px 12px;
--      background:var(--group-accent);
--    }
--    .gmsg.assistant .bubble {
--      color:var(--group-text);
--      border-color:var(--group-border);
--      border-radius:12px 12px 12px 4px;
--      background:#fff;
--    }
--    .px-5.py-2.border-t {
--      padding:10px 18px!important;
--      border-top-color:var(--group-border)!important;
--      background:#fff;
--    }
--    .px-5.py-2.border-t .text-violet-200\/60 { color:var(--group-muted)!important; }
--    .chip {
--      margin:3px;
--      padding:6px 9px;
--      border:1px solid rgba(255,46,99,.18);
--      border-radius:8px;
--      color:var(--group-accent);
--      background:var(--group-accent-soft);
--    }
--    .group-input {
--      margin:0 clamp(14px,3vw,32px) 18px;
--      padding:9px;
--      gap:8px;
--      border:1px solid var(--group-border);
--      border-radius:14px;
--      background:#fff;
--      box-shadow:0 8px 28px rgba(0,0,0,.08);
--    }
--    .group-input textarea {
--      min-height:44px;
--      padding:11px 13px;
--      border-color:transparent;
--      border-radius:9px;
--      color:var(--group-text);
--      background:#f7f7f9;
--    }
--    .group-input textarea::placeholder { color:var(--group-muted); }
--    .group-input textarea:focus {
--      color:var(--group-text);
--      border-color:rgba(255,46,99,.46);
--      background:#fff;
--      box-shadow:0 0 0 2px rgba(255,46,99,.12);
--    }
--    .xy-btn { border-radius:8px; }
--    .xy-btn-primary { color:#fff!important; border-color:var(--group-accent)!important; background:var(--group-accent)!important; box-shadow:none!important; }
--    .xy-btn-primary:hover { border-color:var(--group-accent-hover)!important; background:var(--group-accent-hover)!important; transform:none!important; }
--    .xy-btn-ghost { color:var(--group-soft)!important; border-color:var(--group-border)!important; background:#fff!important; }
--    .xy-btn-ghost:hover { color:var(--group-accent)!important; border-color:rgba(255,46,99,.38)!important; background:var(--group-accent-soft)!important; }
--    .role-card {
--      padding:9px;
--      border-radius:10px;
--      border-color:var(--group-border);
--      background:#f9f9fa;
--    }
--    .role-card:hover { border-color:rgba(255,46,99,.36); background:var(--group-accent-soft); }
--    .role-card img,
--    .role-avatar { width:40px; height:40px; border-radius:9px; background:linear-gradient(135deg,#ff6b8b,#ff2e63); }
--    .role-card .text-white { color:var(--group-text)!important; }
--    .role-card .text-violet-200\/55 { color:var(--group-muted)!important; }
--    .group-panel .xy-input {
--      min-height:40px;
--      border-radius:8px;
--      border-color:var(--group-border);
--      color:var(--group-text);
--      background:#f7f7f9;
--    }
--    .group-panel .xy-input:focus { border-color:rgba(255,46,99,.46); box-shadow:0 0 0 2px rgba(255,46,99,.12); background:#fff; }
--
--    @media (max-width:1024px) {
--      .group-layout { grid-template-columns:1fr; height:auto; min-height:100vh; gap:12px; padding:12px 12px 78px; }
--      .group-panel,
--      .group-panel.right,
--      .chat-main { border:1px solid var(--group-border); border-radius:12px; overflow:hidden; background:#fff; }
--      .group-panel { display:flex; max-height:184px; }
--      .group-panel.right { display:flex; min-height:0; max-height:none; border-top:1px solid var(--group-border); }
--      .group-scroll { min-height:0; }
--      .group-panel:first-child .group-scroll { display:flex; gap:8px; overflow-x:auto; overflow-y:hidden; }
--      .group-panel:first-child .group-item { min-width:180px; margin-bottom:0!important; }
--      .chat-main { min-height:62vh; }
--      .group-messages { min-height:340px; padding:18px 14px; }
--      .group-input { margin:0 10px 10px; padding-bottom:9px; }
--    }
--    @media (max-width:640px) {
--      .group-layout { padding:8px 8px 76px; gap:8px; }
--      .group-head { min-height:52px; padding:0 14px; }
--      .chat-top { min-height:58px; padding:9px 12px; }
--      .chat-top h1 { font-size:16px; }
--      .gmsg .bubble { max-width:88%; }
--      .group-input textarea { min-width:0; }
--      .group-input .xy-btn { min-width:54px; padding-inline:10px; }
--    }
--    @media (prefers-reduced-motion:reduce) {
--      .group-item,
--      .role-card,
--      .xy-btn { transition:none!important; }
--    }
--  </style>
+@@ -302,7 +302,7 @@
+       .xy-btn { transition:none!important; }
+     }
+   </style>
 -  <script type="module" src="/app/assets/js/group-chat.js?v=20260905-notices-v1"></script>
--  <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
--</head>
--<body class="min-h-screen">
--  <div class="xy-stars-bg"></div>
--  <div class="app-shell" x-data="groupChatPage()" x-cloak>
--    <aside class="app-sidebar" data-app-sidebar></aside>
--    <main class="app-main">
--      <div class="group-layout">
--        <aside class="group-panel">
--          <div class="group-head" x-text="groupText('page_title', '群聊')"></div>
--          <div class="group-scroll">
--            <template x-if="!groups.length">
--              <div class="text-xs text-violet-200/60 text-center py-10" x-text="groupText('empty_groups', '还没有群聊')"></div>
--            </template>
--            <template x-for="g in groups" :key="g.id">
--              <button class="group-item mb-2" :class="{ 'is-active': current?.id === g.id }" @click="openGroup(g)">
--                <div class="flex items-center justify-between gap-2">
--                  <div class="font-semibold truncate" x-text="g.name"></div>
--                  <span class="text-xs text-violet-200/50" x-text="(g.members||[]).length + groupText('member_count_suffix', '人')"></span>
--                </div>
--                <div class="text-xs text-violet-200/55 truncate mt-1" x-text="g.last_message || groupText('last_message_default', '点击打开')"></div>
--              </button>
--            </template>
--          </div>
--        </aside>
--
--        <section class="chat-main">
--          <div class="chat-top">
--            <div class="flex items-center justify-between gap-3">
--              <div>
--                <h1 class="text-xl font-extrabold text-white" x-text="current?.name || groupText('empty_current_title', '创建或选择一个群聊')"></h1>
--                <p class="text-xs text-violet-200/60 mt-1" x-text="current ? (current.members||[]).map(m=>m.app_name).join('、') : groupText('empty_current_hint', '选择至少 2 个角色开始多人对话')"></p>
--              </div>
--              <button class="xy-btn xy-btn-ghost text-sm" x-show="current" @click="deleteGroup(current)" x-text="groupText('delete_group_button', '删除群聊')"></button>
--            </div>
--          </div>
--
--          <div class="group-messages" x-ref="messages">
--            <template x-if="!current">
--              <div class="m-auto text-center text-violet-200/70">
--                <img src="/assets/img/apk/empty_view.webp?v=20260901-persistent-pages" class="w-32 mx-auto opacity-60 mb-4">
--                <p class="text-sm" x-text="groupText('no_current_text', '从右侧选择角色创建群聊')"></p>
--              </div>
--            </template>
--            <template x-for="m in messages" :key="m.id">
--              <div class="gmsg" :class="m.role === 'user' ? 'user' : 'assistant'">
--                <div class="speaker" x-text="m.speaker_name || (m.role === 'user' ? groupText('user_speaker', '我') : groupText('assistant_speaker', '角色'))"></div>
--                <div class="bubble" x-text="m.content"></div>
--              </div>
--            </template>
--            <template x-if="busy && current">
--              <div class="gmsg assistant"><div class="speaker" x-text="groupText('loading_speaker', '生成中')"></div><div class="bubble">...</div></div>
--            </template>
--          </div>
--
--          <div class="px-5 py-2 border-t border-violet-200/10" x-show="current">
--            <div class="text-xs text-violet-200/60 mb-2" x-text="groupText('force_reply_label', '指定角色发言')"></div>
--            <template x-for="m in current?.members || []" :key="m.app_id">
--              <button class="chip" @click="replyAs(m)" :disabled="busy" x-text="m.app_name"></button>
--            </template>
--          </div>
--
--          <div class="group-input" x-show="current">
--            <textarea x-model="draft" rows="1" @keydown.enter.prevent="send" :placeholder="groupText('input_placeholder', '发送群聊消息，下一位角色会自动回复...')"></textarea>
--            <button class="xy-btn xy-btn-primary" @click="send" :disabled="busy || !draft.trim()" x-text="groupText('send_button', '发送')"></button>
--          </div>
--        </section>
--
--        <aside class="group-panel right">
--          <div class="group-head" x-text="groupText('create_panel_title', '创建群聊')"></div>
--          <div class="group-scroll">
--            <input class="xy-input text-sm mb-2" x-model="groupName" :placeholder="groupText('group_name_placeholder', '群聊名称')">
--            <div class="mb-3">
--              <template x-for="r in selected" :key="r.id">
--                <span class="chip"><span x-text="r.name"></span><button @click="removeRole(r.id)">×</button></span>
--              </template>
--            </div>
--            <button class="xy-btn xy-btn-primary w-full justify-center mb-4" @click="createGroup" :disabled="busy || selected.length < 2" x-text="groupText('create_button', '创建群聊')"></button>
--
--            <div class="flex gap-2 mb-3">
--              <input class="xy-input text-sm" x-model="query" @keydown.enter.prevent="searchRoles" :placeholder="groupText('search_placeholder', '搜索角色')">
--              <button class="xy-btn xy-btn-ghost" @click="searchRoles" x-text="groupText('search_button', '搜索')"></button>
--            </div>
--            <div class="grid gap-2">
--              <template x-for="c in candidates" :key="c.id">
--                <div class="role-card" @click="addRole(c)">
--                  <img x-show="c.cover || c.cover_url" :src="c.cover || c.cover_url" referrerpolicy="no-referrer" onerror="this.style.display='none'">
--                  <div class="role-avatar" x-show="!(c.cover || c.cover_url)" x-text="(c.name || '?').slice(0,1)"></div>
--                  <div class="min-w-0">
--                    <div class="text-sm text-white font-semibold truncate" x-text="c.name"></div>
--                    <div class="text-xs text-violet-200/55 truncate" x-text="c.summary || c.description || groupText('role_card_fallback', '角色卡')"></div>
--                  </div>
--                </div>
--              </template>
--            </div>
--          </div>
--        </aside>
--      </div>
--    </main>
--    <nav class="app-bottom-nav" data-app-bottom-nav></nav>
--    <div class="fixed top-4 right-4 z-[80]" x-show="toast">
--      <div class="px-4 py-3 rounded-xl border text-sm" :class="toast?.type === 'error' ? 'bg-rose-950/90 border-rose-400/40 text-rose-100' : 'bg-violet-950/90 border-violet-300/30 text-violet-100'" x-text="toast?.message"></div>
--    </div>
--  </div>
--</body>
--</html>
-+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>探索</title><meta http-equiv="refresh" content="0;url=/app/explore.html">  <script defer src="/assets/js/option-picker.js?v=20260906-r2"></script>
-+</head><body><a href="/app/explore.html">返回探索</a></body></html>
++  <script type="module" src="/app/assets/js/group-chat.js?v=20260908-pr7"></script>
+   <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
+ </head>
+ <body class="min-h-screen">
 diff --git a/frontend/app/histories.html b/frontend/app/histories.html
-index 8f58fc975c5127be536b2ee48a4df4049d4a72a4..6578fc7e532eaf08b3875e2b1b0b0b85085a7473 100644
+index 8f58fc975c5127be536b2ee48a4df4049d4a72a4..50ec0e67937aecfe18e2db4f34b467a96180c58a 100644
 --- a/frontend/app/histories.html
 +++ b/frontend/app/histories.html
-@@ -10,6 +10,7 @@
+@@ -8,8 +8,9 @@
+   <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
+   <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
    <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
-   <script type="module" src="/app/assets/js/hub-pages.js?v=20260905-notices-v1"></script>
+-  <script type="module" src="/app/assets/js/hub-pages.js?v=20260905-notices-v1"></script>
++  <script type="module" src="/app/assets/js/hub-pages.js?v=20260908-pr7"></script>
    <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
-+  <script defer src="/assets/js/option-picker.js?v=20260906-r2"></script>
++  <script defer src="/assets/js/option-picker.js?v=20260908-pr7"></script>
  </head>
  <body class="min-h-screen">
    <div class="xy-stars-bg"></div>
@@ -2668,80 +2292,99 @@ index 8f58fc975c5127be536b2ee48a4df4049d4a72a4..6578fc7e532eaf08b3875e2b1b0b0b85
          <div class="list-panel">
            <template x-if="!loading && conversations.length === 0">
 diff --git a/frontend/app/image-chat.html b/frontend/app/image-chat.html
-index f24891c04e1e27a67b4a87182dcb741b714da58d..574af0d466143faf48d2002a74b4b2a35e9aed7f 100644
+index f24891c04e1e27a67b4a87182dcb741b714da58d..ec091bdf617dcada9e8f43621a47f55fd2b2ef5e 100644
 --- a/frontend/app/image-chat.html
 +++ b/frontend/app/image-chat.html
-@@ -10,6 +10,8 @@
+@@ -8,8 +8,10 @@
+   <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
+   <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
    <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
-   <script type="module" src="/app/assets/js/hub-pages.js?v=20260905-notices-v1"></script>
+-  <script type="module" src="/app/assets/js/hub-pages.js?v=20260905-notices-v1"></script>
++  <script type="module" src="/app/assets/js/hub-pages.js?v=20260908-pr7"></script>
    <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
-+  <link rel="stylesheet" href="/assets/css/app-design.css?v=20260905-ui-r1">
-+  <script defer src="/assets/js/option-picker.js?v=20260906-r2"></script>
++  <link rel="stylesheet" href="/assets/css/app-design.css?v=20260908-pr7">
++  <script defer src="/assets/js/option-picker.js?v=20260908-pr7"></script>
  </head>
  <body class="min-h-screen">
    <div class="xy-stars-bg"></div>
 diff --git a/frontend/app/index.html b/frontend/app/index.html
-index dff01d75ffb667c21c4ff8fd015cb99798f486c9..0195fd087550a18e1089997658668057d6cf44d8 100644
+index dff01d75ffb667c21c4ff8fd015cb99798f486c9..afac6d155d0c6759116172ed680c241af4731a8b 100644
 --- a/frontend/app/index.html
 +++ b/frontend/app/index.html
-@@ -8,6 +8,8 @@
+@@ -7,7 +7,9 @@
+   <link rel="icon" type="image/png" sizes="32x32" href="/assets/img/favicon-32.png?v=20260901-persistent-pages">
    <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
    <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
-   <script type="module" src="/app/assets/js/home.js?v=20260905-notices-v1"></script>
-+  <link rel="stylesheet" href="/assets/css/app-design.css?v=20260905-ui-r1">
-+  <script defer src="/assets/js/option-picker.js?v=20260906-r2"></script>
+-  <script type="module" src="/app/assets/js/home.js?v=20260905-notices-v1"></script>
++  <script type="module" src="/app/assets/js/home.js?v=20260908-pr7"></script>
++  <link rel="stylesheet" href="/assets/css/app-design.css?v=20260908-pr7">
++  <script defer src="/assets/js/option-picker.js?v=20260908-pr7"></script>
  </head>
  <body class="min-h-screen">
    <div class="xy-stars-bg"></div>
 diff --git a/frontend/app/info.html b/frontend/app/info.html
-index 34754a958836eed7827e6e646be3509149293269..6811f1448ca909406a4193dc8e30ef79fc7d5bfa 100644
+index 34754a958836eed7827e6e646be3509149293269..f8bdf36b338338545031a2c7694274c79e85c757 100644
 --- a/frontend/app/info.html
 +++ b/frontend/app/info.html
-@@ -10,6 +10,8 @@
+@@ -8,8 +8,10 @@
+   <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
+   <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
    <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
-   <script type="module" src="/app/assets/js/hub-pages.js?v=20260905-notices-v1"></script>
+-  <script type="module" src="/app/assets/js/hub-pages.js?v=20260905-notices-v1"></script>
++  <script type="module" src="/app/assets/js/hub-pages.js?v=20260908-pr7"></script>
    <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
-+  <link rel="stylesheet" href="/assets/css/app-design.css?v=20260905-ui-r1">
-+  <script defer src="/assets/js/option-picker.js?v=20260906-r2"></script>
++  <link rel="stylesheet" href="/assets/css/app-design.css?v=20260908-pr7">
++  <script defer src="/assets/js/option-picker.js?v=20260908-pr7"></script>
  </head>
  <body class="min-h-screen hub-page hub-page--info">
    <div class="xy-stars-bg"></div>
 diff --git a/frontend/app/login.html b/frontend/app/login.html
-index c7fc35856337a0eacb5b2589816ba5dffe9c3cb2..58c0036ff117f1d9c30ce93d20834639f8736e1b 100644
+index c7fc35856337a0eacb5b2589816ba5dffe9c3cb2..8cedf53d990df02fbbd7abd66aba1a9900a19107 100644
 --- a/frontend/app/login.html
 +++ b/frontend/app/login.html
-@@ -11,6 +11,8 @@
-   <script type="module" src="/app/assets/js/login.js?v=20260905-notices-v1"></script>
+@@ -8,9 +8,11 @@
+   <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
+   <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
+   <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
+-  <script type="module" src="/app/assets/js/login.js?v=20260905-notices-v1"></script>
++  <script type="module" src="/app/assets/js/login.js?v=20260908-pr7"></script>
    <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
    <script type="module" src="/app/assets/js/apk-updates.js?v=20260905-apk-update"></script>
-+  <link rel="stylesheet" href="/assets/css/app-design.css?v=20260905-ui-r1">
-+  <script defer src="/assets/js/option-picker.js?v=20260906-r2"></script>
++  <link rel="stylesheet" href="/assets/css/app-design.css?v=20260908-pr7">
++  <script defer src="/assets/js/option-picker.js?v=20260908-pr7"></script>
  </head>
  <body class="min-h-screen bg-[#0a0420]">
    <div class="xy-stars-bg"></div>
 diff --git a/frontend/app/logs.html b/frontend/app/logs.html
-index 9391284d1eb0dd07f5921ea506cf23561b274430..ef7904e461895d149f9414757d2f18d6751b4f94 100644
+index 9391284d1eb0dd07f5921ea506cf23561b274430..452ccd7d4b153a9daaa045b49d0d7ac792c7fbe9 100644
 --- a/frontend/app/logs.html
 +++ b/frontend/app/logs.html
-@@ -10,6 +10,8 @@
+@@ -8,8 +8,10 @@
+   <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
+   <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
    <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
-   <script type="module" src="/app/assets/js/hub-pages.js?v=20260905-notices-v1"></script>
+-  <script type="module" src="/app/assets/js/hub-pages.js?v=20260905-notices-v1"></script>
++  <script type="module" src="/app/assets/js/hub-pages.js?v=20260908-pr7"></script>
    <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
-+  <link rel="stylesheet" href="/assets/css/app-design.css?v=20260905-ui-r1">
-+  <script defer src="/assets/js/option-picker.js?v=20260906-r2"></script>
++  <link rel="stylesheet" href="/assets/css/app-design.css?v=20260908-pr7">
++  <script defer src="/assets/js/option-picker.js?v=20260908-pr7"></script>
  </head>
  <body class="min-h-screen">
    <div class="xy-stars-bg"></div>
 diff --git a/frontend/app/me.html b/frontend/app/me.html
-index 15e9203e10c4df9a0c1a1603f43a2add87451a91..363669accf77adaffd0635bdcb0693facf8edaaf 100644
+index 15e9203e10c4df9a0c1a1603f43a2add87451a91..6ef82f78185b92ca5b3a13f4b5335dbee808eddc 100644
 --- a/frontend/app/me.html
 +++ b/frontend/app/me.html
-@@ -11,6 +11,8 @@
-   <script type="module" src="/app/assets/js/me.js?v=20260905-notices-v1"></script>
+@@ -8,9 +8,11 @@
+   <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
+   <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
+   <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
+-  <script type="module" src="/app/assets/js/me.js?v=20260905-notices-v1"></script>
++  <script type="module" src="/app/assets/js/me.js?v=20260908-pr7"></script>
    <script type="module" src="/app/assets/js/apk-updates.js?v=20260905-apk-update"></script>
    <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
-+  <link rel="stylesheet" href="/assets/css/app-design.css?v=20260905-ui-r1">
-+  <script defer src="/assets/js/option-picker.js?v=20260906-r2"></script>
++  <link rel="stylesheet" href="/assets/css/app-design.css?v=20260908-pr7">
++  <script defer src="/assets/js/option-picker.js?v=20260908-pr7"></script>
  </head>
  <body class="min-h-screen profile-center-page">
    <div class="app-shell" x-data="mePage()" x-cloak>
@@ -2770,15 +2413,18 @@ index 15e9203e10c4df9a0c1a1603f43a2add87451a91..363669accf77adaffd0635bdcb0693fa
      </main>
      <nav class="app-bottom-nav" data-app-bottom-nav></nav>
 diff --git a/frontend/app/my-apps.html b/frontend/app/my-apps.html
-index ec298317f1c5fa700274edb34d7da272d9d95445..1645ea50e578e544518c5241db9f89a6e416cc43 100644
+index ec298317f1c5fa700274edb34d7da272d9d95445..0672ec11ddc442aabefb0d8177b2debddab0bda2 100644
 --- a/frontend/app/my-apps.html
 +++ b/frontend/app/my-apps.html
-@@ -10,6 +10,8 @@
+@@ -8,8 +8,10 @@
+   <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
+   <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
    <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
-   <script type="module" src="/app/assets/js/my-apps.js?v=20260905-notices-v1"></script>
+-  <script type="module" src="/app/assets/js/my-apps.js?v=20260905-notices-v1"></script>
++  <script type="module" src="/app/assets/js/my-apps.js?v=20260908-pr7"></script>
    <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
-+  <link rel="stylesheet" href="/assets/css/app-design.css?v=20260905-ui-r1">
-+  <script defer src="/assets/js/option-picker.js?v=20260906-r2"></script>
++  <link rel="stylesheet" href="/assets/css/app-design.css?v=20260908-pr7">
++  <script defer src="/assets/js/option-picker.js?v=20260908-pr7"></script>
  </head>
  <body class="min-h-screen">
    <div class="xy-stars-bg"></div>
@@ -2792,28 +2438,40 @@ index ec298317f1c5fa700274edb34d7da272d9d95445..1645ea50e578e544518c5241db9f89a6
            <img src="/assets/img/apk/empty_view.webp?v=20260901-persistent-pages" class="w-28 mx-auto opacity-60 mb-4">
            <p class="text-sm mb-4" x-text="emptyText('my_apps_empty_title', '还没有自己创建的角色')">还没有自己创建的角色</p>
 diff --git a/frontend/app/rewards.html b/frontend/app/rewards.html
-index 8541afed33f21b32076847675333451dedecc8a5..0f0eef110f72217fce3b78fe70cefea418ac5e39 100644
+index 8541afed33f21b32076847675333451dedecc8a5..c799815480ac772a5b30cd0d1c054e0ff68cea13 100644
 --- a/frontend/app/rewards.html
 +++ b/frontend/app/rewards.html
-@@ -11,6 +11,8 @@
+@@ -9,8 +9,10 @@
+   <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
+   <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
    <link rel="stylesheet" href="/app/assets/css/rewards-payment.css?v=20260713-payment-orders">
-   <script type="module" src="/app/assets/js/hub-pages.js?v=20260905-notices-v1"></script>
+-  <script type="module" src="/app/assets/js/hub-pages.js?v=20260905-notices-v1"></script>
++  <script type="module" src="/app/assets/js/hub-pages.js?v=20260908-pr7"></script>
    <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
-+  <link rel="stylesheet" href="/assets/css/app-design.css?v=20260905-ui-r1">
-+  <script defer src="/assets/js/option-picker.js?v=20260906-r2"></script>
++  <link rel="stylesheet" href="/assets/css/app-design.css?v=20260908-pr7">
++  <script defer src="/assets/js/option-picker.js?v=20260908-pr7"></script>
  </head>
  <body class="min-h-screen hub-page hub-page--rewards">
    <div class="xy-stars-bg"></div>
 diff --git a/frontend/app/workshop.html b/frontend/app/workshop.html
-index 989ecfe8b98660a02f6b591b11183f0ea06f3965..919b9efb874ee3d4d07a0a17bca715447721e9dc 100644
+index 989ecfe8b98660a02f6b591b11183f0ea06f3965..c392675fb46ad9d3305e4356947af0929d97127f 100644
 --- a/frontend/app/workshop.html
 +++ b/frontend/app/workshop.html
+@@ -8,7 +8,7 @@
+   <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
+   <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
+   <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
+-  <script type="module" src="/app/assets/js/hub-pages.js?v=20260905-notices-v1"></script>
++  <script type="module" src="/app/assets/js/hub-pages.js?v=20260908-pr7"></script>
+   <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
+   <style>
+     .ws-create-mask { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 18px; background: rgba(7, 8, 15, .66); backdrop-filter: blur(8px); }
 @@ -26,6 +26,8 @@
      .ws-create-option small { margin-top: 4px; color: rgba(237,233,254,.58); font-size: 11px; line-height: 1.45; }
      @media (max-width: 560px) { .ws-create-grid { grid-template-columns: 1fr; } .ws-create-option { min-height: 76px; } }
    </style>
-+  <link rel="stylesheet" href="/assets/css/app-design.css?v=20260905-ui-r1">
-+  <script defer src="/assets/js/option-picker.js?v=20260906-r2"></script>
++  <link rel="stylesheet" href="/assets/css/app-design.css?v=20260908-pr7">
++  <script defer src="/assets/js/option-picker.js?v=20260908-pr7"></script>
  </head>
  <body class="min-h-screen hub-page hub-page--workshop">
    <div class="xy-stars-bg"></div>
@@ -3378,14 +3036,14 @@ index 0000000000000000000000000000000000000000..397971916a7521dd8f884e1a8b15a244
 +.social-page .social-main{min-height:100dvh}.social-kicker{margin:4px 0 0;color:#9a7bb7;font-size:12px;font-weight:700;letter-spacing:.08em}.social-header h1{margin:0;font-size:22px;line-height:1.35;letter-spacing:0}.social-header-actions{display:flex;gap:2px}.social-scope{display:flex;gap:4px;padding:12px 16px 4px;overflow:auto;scrollbar-width:none}.social-scope button{min-height:36px;padding:6px 14px;border-radius:18px;color:#8b9096;white-space:nowrap;font-size:13px}.social-scope button.is-active{background:#292f33;color:#fff;font-weight:700}.social-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 16px 12px;color:#a0a5aa;font-size:12px}.social-sort{display:flex;gap:2px;background:#eef0f2;border-radius:14px;padding:2px}.social-sort button{min-height:28px;padding:3px 10px;border-radius:12px;color:#8a9095;font-size:11px}.social-sort button.is-active{background:#fff;color:#3e444a;box-shadow:0 1px 3px #0001;font-weight:700}.social-post .is-saved{color:#c28c36!important}.social-detail-actions{display:flex;justify-content:center;gap:8px;margin:20px auto 0}.social-detail-actions button{min-height:40px;padding:6px 14px;background:#f5f1f8!important;border-radius:20px;color:#8058a0!important;font-size:12px}
 diff --git a/frontend/assets/css/dialogs.css b/frontend/assets/css/dialogs.css
 new file mode 100644
-index 0000000000000000000000000000000000000000..740eb6d2bebfafe75d335e63bc461e8b4698c639
+index 0000000000000000000000000000000000000000..826bb97eced1ca381dce450f9b5b06e96d8681f4
 --- /dev/null
 +++ b/frontend/assets/css/dialogs.css
 @@ -0,0 +1,8 @@
 +.homer-action-dialog{box-sizing:border-box;width:min(420px,calc(100vw - 40px));max-height:calc(100dvh - 48px);overflow:auto;border:0;border-radius:22px;padding:24px;background:#fff;color:#28232f;box-shadow:0 20px 80px #10072040;font:15px/1.65 system-ui,sans-serif}
 +.homer-action-dialog::backdrop{background:#15102066;backdrop-filter:blur(2px)}
-+.homer-action-dialog h2{margin:0 0 12px;font-size:19px;font-weight:650;color:#28232f}
-+.homer-action-dialog p{margin:0 0 24px;color:#6a6272;overflow-wrap:anywhere;white-space:pre-wrap}
++.homer-action-dialog h2{margin:0 0 12px;font-size:19px;font-weight:650;color:var(--ui-text,#28232f)}
++.homer-action-dialog p{margin:0 0 24px;color:var(--ui-muted,#6a6272);overflow-wrap:anywhere;white-space:pre-wrap}
 +.homer-action-dialog footer{display:flex;justify-content:flex-end;gap:12px}
 +.homer-action-dialog button{min-height:44px;min-width:88px;padding:10px 20px;border:0;border-radius:24px;font:600 14px/1.5 system-ui,sans-serif;cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation;user-select:none}
 +.homer-action-cancel{background:#f1eef4;color:#4f4659}.homer-action-confirm{background:#7655a4;color:#fff}
@@ -3443,14 +3101,17 @@ index 0000000000000000000000000000000000000000..407bb4e95eed91b30a6cd9e9ae08d246
 +@media(max-width:600px){.homer-option-picker{margin:auto auto 0;width:100%;max-height:82dvh;border-radius:24px 24px 0 0}.homer-option-picker__head{padding-top:18px}}
 +@media(prefers-reduced-motion:no-preference){.homer-option-picker[open]{animation:homer-options-in .16s ease-out}@keyframes homer-options-in{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}}
 diff --git a/frontend/assets/js/admin-app.js b/frontend/assets/js/admin-app.js
-index b096f650475088a6b3fae3cadbe40e9c49f90c36..67a8f418663a396d3dbecaa1325ff8b629adae73 100644
+index b096f650475088a6b3fae3cadbe40e9c49f90c36..c0f3a13c407d1a01acc1c6729d68b7d3a21bc82e 100644
 --- a/frontend/assets/js/admin-app.js
 +++ b/frontend/assets/js/admin-app.js
-@@ -1,3 +1,4 @@
-+import { confirmAction, showMessage } from '/assets/js/dialogs.js?v=20260906-r2';
+@@ -1,5 +1,6 @@
++import { confirmAction, showMessage } from '/assets/js/dialogs.js?v=20260908-pr7';
  // 惑梦（Homer） 管理后台 Alpine.js 应用
- import { api, isLoggedIn, formatDateTime, ApiError } from '/assets/js/api.js?v=20260905-notices-v1';
+-import { api, isLoggedIn, formatDateTime, ApiError } from '/assets/js/api.js?v=20260905-notices-v1';
++import { api, isLoggedIn, formatDateTime, ApiError } from '/assets/js/api.js?v=20260908-pr7';
  
+ function adminPanel() {
+   return {
 @@ -9,6 +10,7 @@ function adminPanel() {
      toast: null,
      toastTimer: null,
@@ -3459,68 +3120,25 @@ index b096f650475088a6b3fae3cadbe40e9c49f90c36..67a8f418663a396d3dbecaa1325ff8b6
      notifications: [],
      notificationForm: null,
      notificationBusy: false,
-@@ -17,6 +19,7 @@ function adminPanel() {
-     errorDetail: '',
- 
-     tabs: [
-+      { id: 'community', label: '社区管理', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 3h18v14H9l-6 4V3z"/></svg>' },
-       { id: 'notifications', label: '通知管理', icon: '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M6 8a6 6 0 0112 0v8l2 2H4l2-2V8m4 12h4"/></svg>' },
-       { id: 'stats', label: '数据总览', icon: '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>' },
-       { id: 'users', label: '用户管理', icon: '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-9a4 4 0 11-8 0 4 4 0 018 0zM21 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>' },
-@@ -34,7 +37,6 @@ function adminPanel() {
-       { key: 'home', label: '首页' },
-       { key: 'workshop', label: '创作工坊' },
-       { key: 'histories', label: '历史会话' },
--      { key: 'group', label: '群聊' },
-       { key: 'me', label: '我的' },
-       { key: 'favorites', label: '我的收藏' },
-       { key: 'image', label: '图片聊天' },
-@@ -45,7 +47,6 @@ function adminPanel() {
+@@ -44,8 +46,7 @@ function adminPanel() {
+       { key: 'info', label: '信息中心' },
      ],
      mobileNavLabelItems: [
-       { key: 'home', label: '首页' },
+-      { key: 'home', label: '首页' },
 -      { key: 'group', label: '群聊' },
++      { key: 'group', label: '群聊' },      { key: 'home', label: '首页' },
        { key: 'workshop', label: '创作' },
        { key: 'favorites', label: '收藏' },
        { key: 'me', label: '我的' },
-@@ -556,36 +557,6 @@ function adminPanel() {
+@@ -556,6 +557,7 @@ function adminPanel() {
        { key: 'png_export_failed', label: 'PNG 导出失败', max: 80 },
        { key: 'load_existing_failed', label: '读取角色失败', max: 80 },
      ],
--    groupChatCopyItems: [
--      { key: 'page_title', label: '页面标题', max: 40 },
--      { key: 'empty_groups', label: '无群聊提示', max: 80 },
--      { key: 'member_count_suffix', label: '成员数量后缀', max: 20 },
--      { key: 'last_message_default', label: '列表默认预览', max: 60 },
--      { key: 'empty_current_title', label: '未选群聊标题', max: 80 },
--      { key: 'empty_current_hint', label: '未选群聊说明', max: 120 },
--      { key: 'delete_group_button', label: '删除群聊按钮', max: 40 },
--      { key: 'no_current_text', label: '空态提示', max: 100 },
--      { key: 'user_speaker', label: '用户发言人', max: 30 },
--      { key: 'assistant_speaker', label: '角色发言人兜底', max: 30 },
--      { key: 'loading_speaker', label: '生成中发言人', max: 30 },
--      { key: 'force_reply_label', label: '指定发言标签', max: 40 },
--      { key: 'input_placeholder', label: '输入框占位', max: 120 },
--      { key: 'send_button', label: '发送按钮', max: 30 },
--      { key: 'create_panel_title', label: '创建面板标题', max: 50 },
--      { key: 'group_name_placeholder', label: '群聊名称占位', max: 80 },
--      { key: 'create_button', label: '创建按钮', max: 40 },
--      { key: 'search_placeholder', label: '搜索占位', max: 80 },
--      { key: 'search_button', label: '搜索按钮', max: 30 },
--      { key: 'role_card_fallback', label: '角色卡兜底', max: 60 },
--      { key: 'max_roles_error', label: '最多角色提示', max: 80 },
--      { key: 'min_roles_error', label: '最少角色提示', max: 80 },
--      { key: 'create_success', label: '创建成功提示', max: 80 },
--      { key: 'create_failed', label: '创建失败提示', max: 80 },
--      { key: 'delete_confirm_template', label: '删除确认模板', max: 120 },
--      { key: 'delete_success', label: '删除成功提示', max: 60 },
--      { key: 'send_failed', label: '发送失败提示', max: 80 },
--      { key: 'reply_failed', label: '回复失败提示', max: 80 },
--    ],
- 
-     stats: null,
-     lastStatsRefreshed: null,
-@@ -630,6 +601,11 @@ function adminPanel() {
++
+     groupChatCopyItems: [
+       { key: 'page_title', label: '页面标题', max: 40 },
+       { key: 'empty_groups', label: '无群聊提示', max: 80 },
+@@ -630,6 +632,11 @@ function adminPanel() {
      siteSettings: null,
      siteForm: null,
  
@@ -3532,7 +3150,7 @@ index b096f650475088a6b3fae3cadbe40e9c49f90c36..67a8f418663a396d3dbecaa1325ff8b6
      llmSettings: null,
      globalPresets: null,
      globalPresetKind: 'prompt',
-@@ -858,8 +834,19 @@ function adminPanel() {
+@@ -858,8 +865,19 @@ function adminPanel() {
        return '普通用户';
      },
  
@@ -3552,7 +3170,7 @@ index b096f650475088a6b3fae3cadbe40e9c49f90c36..67a8f418663a396d3dbecaa1325ff8b6
        if (id === 'notifications') await this.loadNotifications();
        if (id === 'stats' && !this.stats) await this.loadStats();
        if (id === 'users' && this.users.length === 0) await this.loadUsers(1);
-@@ -903,7 +890,7 @@ function adminPanel() {
+@@ -903,7 +921,7 @@ function adminPanel() {
        finally { this.notificationBusy = false; }
      },
      async deleteNotification(item) {
@@ -3561,7 +3179,7 @@ index b096f650475088a6b3fae3cadbe40e9c49f90c36..67a8f418663a396d3dbecaa1325ff8b6
        this.notificationBusy = true;
        this.notificationError = '';
        try {
-@@ -967,7 +954,7 @@ function adminPanel() {
+@@ -967,7 +985,7 @@ function adminPanel() {
      },
  
      async closeContest(contest) {
@@ -3570,7 +3188,7 @@ index b096f650475088a6b3fae3cadbe40e9c49f90c36..67a8f418663a396d3dbecaa1325ff8b6
        try {
          await api.admin.closeCommunityContest(contest.id);
          this.showToast('赛事已关闭', 'success');
-@@ -1286,7 +1273,7 @@ function adminPanel() {
+@@ -1286,7 +1304,7 @@ function adminPanel() {
      },
  
      async disableRedeemCode(item) {
@@ -3579,7 +3197,7 @@ index b096f650475088a6b3fae3cadbe40e9c49f90c36..67a8f418663a396d3dbecaa1325ff8b6
        this.loading = true;
        try {
          await api.admin.disableRedeemCode(item.code);
-@@ -1721,6 +1708,26 @@ function adminPanel() {
+@@ -1721,6 +1739,26 @@ function adminPanel() {
        };
      },
  
@@ -3606,7 +3224,7 @@ index b096f650475088a6b3fae3cadbe40e9c49f90c36..67a8f418663a396d3dbecaa1325ff8b6
      syncModelConfigs(preset) {
        const models = this.parseModelsText(preset?.modelsText || preset?.model);
        const existing = new Map((preset?.modelConfigs || []).map(item => [String(item?.model || ''), item]));
-@@ -1910,6 +1917,9 @@ function adminPanel() {
+@@ -1910,6 +1948,9 @@ function adminPanel() {
          probe_results: [],
          modelConfigs: [],
        });
@@ -3616,7 +3234,7 @@ index b096f650475088a6b3fae3cadbe40e9c49f90c36..67a8f418663a396d3dbecaa1325ff8b6
        if (!this.llmForm.default_model_preset_id) this.llmForm.default_model_preset_id = id;
      },
  
-@@ -2134,7 +2144,7 @@ function adminPanel() {
+@@ -2134,7 +2175,7 @@ function adminPanel() {
  
      async deleteTavoPlugin(plugin) {
        if (!plugin?.id) return;
@@ -3625,7 +3243,7 @@ index b096f650475088a6b3fae3cadbe40e9c49f90c36..67a8f418663a396d3dbecaa1325ff8b6
        this.loading = true;
        try {
          await api.admin.deleteTavoPlugin(plugin.id);
-@@ -2324,7 +2334,7 @@ function adminPanel() {
+@@ -2324,7 +2365,7 @@ function adminPanel() {
          this.showToast(err.message || '批量参数解析失败', 'error');
          return;
        }
@@ -3634,7 +3252,7 @@ index b096f650475088a6b3fae3cadbe40e9c49f90c36..67a8f418663a396d3dbecaa1325ff8b6
        this.loading = true;
        try {
          const r = await api.admin.bulkUpdateApps(payload);
-@@ -2465,7 +2475,7 @@ function adminPanel() {
+@@ -2465,7 +2506,7 @@ function adminPanel() {
      },
  
      async deleteApp(app) {
@@ -3643,7 +3261,7 @@ index b096f650475088a6b3fae3cadbe40e9c49f90c36..67a8f418663a396d3dbecaa1325ff8b6
        this.loading = true;
        try {
          await api.admin.deleteApp(app.id);
-@@ -2611,7 +2621,7 @@ function adminPanel() {
+@@ -2611,7 +2652,7 @@ function adminPanel() {
          return;
        }
        const action = next ? '开放管理员权限给' : '撤销管理员权限：';
@@ -3652,7 +3270,7 @@ index b096f650475088a6b3fae3cadbe40e9c49f90c36..67a8f418663a396d3dbecaa1325ff8b6
        this.loading = true;
        try {
          await api.admin.setUserAdmin(user.id, next);
-@@ -2639,7 +2649,7 @@ function adminPanel() {
+@@ -2639,7 +2680,7 @@ function adminPanel() {
        if (!user?.id) return;
        const next = !user?.advanced_creation?.admin_override;
        const action = next ? '后台开放高级创作给' : '收回后台高级创作权限：';
@@ -3676,10 +3294,10 @@ index 3c7f5001443e8ecf939b217c44f7adcc17d9a3b6..a82978c29f60d12aad45746b239c7900
    sendEmailCode: (email, lang = 'zh-Hans') =>
 diff --git a/frontend/assets/js/chat-appearance.js b/frontend/assets/js/chat-appearance.js
 new file mode 100644
-index 0000000000000000000000000000000000000000..24d76962368ef405c12f6225d5e8161febf8e73e
+index 0000000000000000000000000000000000000000..b10ad5b763ee3aa6b086f338ce501c256bc40217
 --- /dev/null
 +++ b/frontend/assets/js/chat-appearance.js
-@@ -0,0 +1,67 @@
+@@ -0,0 +1,78 @@
 +// Personal appearance is local and scoped to an account + conversation.
 +const defaults = { assistant: '#29485f', user: '#4c4c4c', background: '#212121', image: '' };
 +let scopeReader = () => ({}), activeKey = '', dialog;
@@ -3699,7 +3317,17 @@ index 0000000000000000000000000000000000000000..24d76962368ef405c12f6225d5e8161f
 +    s.setProperty('--homer-bg-image',picture ? `url("${picture}")` : 'none');
 +    document.body.classList.toggle('homer-personal-background',!!value.background || !!picture);
 +}
-+function sync() { const next=keyFor();if(dialog?.open&&next===activeKey)return;activeKey=next;apply(activeKey?read():{}); }
++function sync() {
++    const next = keyFor();
++    if (dialog?.open) {
++        if (next === activeKey) return;
++        // An in-flight account/conversation change cannot keep an editor for
++        // another scope alive, even when a background image is still decoding.
++        dialog.close();
++    }
++    activeKey = next;
++    apply(activeKey ? read() : {});
++}
 +function node(tag,cls,text) { const e=document.createElement(tag);e.className=cls||'';if(text)e.textContent=text;return e; }
 +async function imageValue(file) {
 +    if (!file.type.startsWith('image/')) throw Error('请选择相册中的图片');
@@ -3742,11 +3370,12 @@ index 0000000000000000000000000000000000000000..24d76962368ef405c12f6225d5e8161f
 +    for(const b of [reset,cancel,save])b.type='button';
 +    reset.onclick=()=>{draft={...defaults};fields.querySelectorAll('input').forEach((input,i)=>input.value=defaults[['assistant','user','background'][i]]);apply(draft);status.textContent='已预览默认外观，保存后保留。';};cancel.onclick=()=>dialog.close();
 +    save.disabled=!savedKey;if(!savedKey)status.textContent='当前会话尚未就绪，请稍后重新打开。';
-+    save.onclick=()=>{if(reading||!savedKey)return;try {localStorage.setItem(savedKey,JSON.stringify(draft));dialog.close();}catch{status.textContent='本地空间不足，未保存。可以移除背景图片后重试。';}};
++    save.onclick=()=>{if(reading||!savedKey)return;if(keyFor()!==savedKey){currentDialog.close();return;}try {localStorage.setItem(savedKey,JSON.stringify(draft));currentDialog.close();}catch{status.textContent='本地空间不足，未保存。可以移除背景图片后重试。';}};
 +    footer.append(reset,cancel,save);dialog.append(head,note,fields,pictures,status,footer);document.body.append(dialog);
 +    dialog.addEventListener('close',()=>{currentDialog.remove();sync();},{once:true});dialog.showModal();
 +}
 +window.addEventListener('storage',e=>{if(e.key===activeKey)sync();});
++window.addEventListener('homer-account-cleared', () => { dialog?.close(); sync(); });
 diff --git a/frontend/assets/js/chat-tools.js b/frontend/assets/js/chat-tools.js
 new file mode 100644
 index 0000000000000000000000000000000000000000..f2360597d5cbb4b764153e633034d6cca1757025
@@ -3803,9 +3432,20 @@ index 0000000000000000000000000000000000000000..f2360597d5cbb4b764153e633034d6cc
 +  dialog.addEventListener('click', event => { if (event.target === dialog) { const box = dialog.getBoundingClientRect(); if (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom) dialog.close(); } });
 +  document.body.append(dialog); dialog.showModal(); close.focus();
 +}
+diff --git a/frontend/assets/js/dashboard-app.js b/frontend/assets/js/dashboard-app.js
+index 84f424218274b9eb313c48d5d9548b812bd539f4..f6c822208afb53335d7c577e841c286b0d5f0467 100644
+--- a/frontend/assets/js/dashboard-app.js
++++ b/frontend/assets/js/dashboard-app.js
+@@ -1,5 +1,5 @@
+ // 惑梦（Homer） 用户面板 Alpine.js 应用
+-import { api, getToken, setToken, clearAuth, isLoggedIn, getCachedUser, setCachedUser, formatDateTime, ApiError } from '/assets/js/api.js?v=20260905-notices-v1';
++import { api, getToken, setToken, clearAuth, isLoggedIn, getCachedUser, setCachedUser, formatDateTime, ApiError } from '/assets/js/api.js?v=20260908-pr7';
+ 
+ function dashboard() {
+   return {
 diff --git a/frontend/assets/js/dialogs.js b/frontend/assets/js/dialogs.js
 new file mode 100644
-index 0000000000000000000000000000000000000000..048cd44ec80fc1a29f030fa4f36fd6bad8ecaa11
+index 0000000000000000000000000000000000000000..b0e38fd0f8f17a5296501264805fd863758ed384
 --- /dev/null
 +++ b/frontend/assets/js/dialogs.js
 @@ -0,0 +1,50 @@
@@ -3815,7 +3455,7 @@ index 0000000000000000000000000000000000000000..048cd44ec80fc1a29f030fa4f36fd6ba
 +  if (document.querySelector('#homer-action-dialog-style')) return;
 +  const style = document.createElement('link');
 +  style.id = 'homer-action-dialog-style'; style.rel = 'stylesheet';
-+  style.href = new URL('../css/dialogs.css?v=20260906-r2', import.meta.url).href;
++  style.href = new URL('../css/dialogs.css?v=20260908-pr7', import.meta.url).href;
 +  document.head.append(style);
 +}
 +function node(tag, className, text) {
@@ -3917,17 +3557,17 @@ index 0000000000000000000000000000000000000000..c74b4ab14d789bd34d6b5d72bcb4cb79
 +}
 diff --git a/frontend/assets/js/option-picker.js b/frontend/assets/js/option-picker.js
 new file mode 100644
-index 0000000000000000000000000000000000000000..a3175cb525b62e6a442b7dab4e781badef15d9d2
+index 0000000000000000000000000000000000000000..78a5ee34f60d2ee1ecd65c579e5ceef4470c83ba
 --- /dev/null
 +++ b/frontend/assets/js/option-picker.js
-@@ -0,0 +1,169 @@
+@@ -0,0 +1,177 @@
 +/* Designed option windows, retaining the original control's binding and value. */
 +(() => {
 +  if (window.HomerOptionPicker) return;
 +  const source = document.currentScript?.src || new URL('/assets/js/option-picker.js', location.href).href;
 +  const css = document.createElement('link');
 +  css.rel = 'stylesheet';
-+  css.href = new URL('../css/option-picker.css?v=20260906-r2', source).href;
++  css.href = new URL('../css/option-picker.css?v=20260908-pr7', source).href;
 +  document.head.append(css);
 +  let active = null;
 +  function el(tag, className, text) {
@@ -4068,8 +3708,16 @@ index 0000000000000000000000000000000000000000..a3175cb525b62e6a442b7dab4e781bad
 +  }
 +  window.HomerCloseOverlay = () => {
 +    const overlay = topOverlay();
-+    if (!overlay) return false;
-+    if (overlay instanceof HTMLDialogElement) { overlay.close(''); return true; }
++    if (!overlay) {
++      const selection = document.querySelector('[data-homer-cancel-selection]');
++      if (selection?.getClientRects().length) { selection.click(); return true; }
++      return false;
++    }
++    if (overlay instanceof HTMLDialogElement) {
++      // Match Escape's cancel event, so a form can retain an in-flight write.
++      if (overlay.dispatchEvent(new Event('cancel', { cancelable: true }))) overlay.close('');
++      return true;
++    }
 +    const close = overlay.querySelector('[aria-label="关闭"],.cm-close,.farm-modal-close,.ws-create-close,.character-dialog-close,.xy-modal__head > button');
 +    if (!close) return false;
 +    close.click(); return true;
@@ -4090,19 +3738,55 @@ index 0000000000000000000000000000000000000000..a3175cb525b62e6a442b7dab4e781bad
 +    } else if (!event.shiftKey && document.activeElement===last) { event.preventDefault(); first.focus(); }
 +  }, true);
 +})();
+diff --git a/frontend/assets/js/site-settings.js b/frontend/assets/js/site-settings.js
+index 42bb2b76e31bba427def56b712ddfcbc1953bea8..0ac5213ae5c0e730f44641548a3ef74a6869bd34 100644
+--- a/frontend/assets/js/site-settings.js
++++ b/frontend/assets/js/site-settings.js
+@@ -1,5 +1,5 @@
+ // Public site settings hydrator. Static HTML stays usable if this request fails.
+-import { api } from '/assets/js/api.js?v=20260905-notices-v1';
++import { api } from '/assets/js/api.js?v=20260908-pr7';
+ 
+ function getPath(obj, path) {
+   return String(path || '').split('.').reduce((cur, key) => (
 diff --git a/frontend/dashboard.html b/frontend/dashboard.html
-index 4e7ec8c2f74f7ff1299574ac787ea1af20b9169b..588d5939fe2fbbfa1f03aa838925f659a296ac05 100644
+index 4e7ec8c2f74f7ff1299574ac787ea1af20b9169b..69a0f3b5123a8e1ec3eed0c72720e73b6b82802e 100644
 --- a/frontend/dashboard.html
 +++ b/frontend/dashboard.html
-@@ -11,6 +11,8 @@
+@@ -9,8 +9,10 @@
+   <link rel="apple-touch-icon" sizes="180x180" href="/assets/img/apple-touch-icon.png?v=20260901-persistent-pages">
+   <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
    <link rel="stylesheet" href="/assets/css/custom.css?v=20260901-persistent-pages">
-   <script type="module" src="/assets/js/dashboard-app.js?v=20260905-notices-v1"></script>
+-  <script type="module" src="/assets/js/dashboard-app.js?v=20260905-notices-v1"></script>
++  <script type="module" src="/assets/js/dashboard-app.js?v=20260908-pr7"></script>
    <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
-+  <link rel="stylesheet" href="/assets/css/app-design.css?v=20260905-ui-r1">
-+  <script defer src="/assets/js/option-picker.js?v=20260906-r2"></script>
++  <link rel="stylesheet" href="/assets/css/app-design.css?v=20260908-pr7">
++  <script defer src="/assets/js/option-picker.js?v=20260908-pr7"></script>
  </head>
  <body class="min-h-screen">
    <div class="xy-stars-bg"></div>
+diff --git a/frontend/index.html b/frontend/index.html
+index be201fb7b70f79a96e06496d9a48eb5376a8b0d0..bb9eb2a06c36459e9a1dc7805fa866dae034365e 100644
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -18,7 +18,7 @@
+   <link rel="apple-touch-icon" sizes="180x180" href="/assets/img/apple-touch-icon.png?v=20260901-persistent-pages">
+   <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
+   <link rel="stylesheet" href="/assets/css/custom.css?v=20260901-persistent-pages">
+-  <script type="module" src="/assets/js/site-settings.js?v=20260905-notices-v1"></script>
++  <script type="module" src="/assets/js/site-settings.js?v=20260908-pr7"></script>
+   <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
+ </head>
+ <body class="min-h-screen overflow-x-hidden bg-[#0a0420]">
+@@ -283,7 +283,7 @@
+           <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-8 text-sm" data-site-download-facts="home.download_facts">
+             <div class="px-4 py-3 rounded-lg bg-white/5">
+               <div class="text-slate-400 mb-1">版本</div>
+-              <div class="font-semibold">v1.15.0</div>
++              <div class="font-semibold">v1.15.1</div>
+             </div>
+             <div class="px-4 py-3 rounded-lg bg-white/5">
+               <div class="text-slate-400 mb-1">系统要求</div>
 diff --git a/sillytavern-runtime/public/scripts/backgrounds.js b/sillytavern-runtime/public/scripts/backgrounds.js
 index 1d1d0f78ddd7fc599551fbc66062c13dd1be2683..28001030d5a930b488ec17417d71cc51caf4fd80 100644
 --- a/sillytavern-runtime/public/scripts/backgrounds.js
@@ -4123,7 +3807,7 @@ index 1d1d0f78ddd7fc599551fbc66062c13dd1be2683..28001030d5a930b488ec17417d71cc51
      $('#bg_tabs').on('tabsactivate', () => updateGroupFolderControlsVisibility());
      updateGroupFolderControlsVisibility();
 diff --git a/sillytavern-runtime/public/scripts/extensions/homer-bridge/index.js b/sillytavern-runtime/public/scripts/extensions/homer-bridge/index.js
-index 5744686620fab5c96994f354cd84965a313d99bf..b5d1ab2019f59ad1f7996d4e5ee8832467f1e4f1 100644
+index 5744686620fab5c96994f354cd84965a313d99bf..d402cfd03959934573cecc161f9b284aee1e74f1 100644
 --- a/sillytavern-runtime/public/scripts/extensions/homer-bridge/index.js
 +++ b/sillytavern-runtime/public/scripts/extensions/homer-bridge/index.js
 @@ -21,6 +21,9 @@ import { loadApprovedExtensions } from './extension-host.js';
@@ -4173,6 +3857,15 @@ index 5744686620fab5c96994f354cd84965a313d99bf..b5d1ab2019f59ad1f7996d4e5ee88324
                  .slice(-120)
                  .map(hostMessageSnapshot),
              models: runtimeUiData.models.slice(0, 100).map(model => ({
+@@ -750,7 +756,7 @@ function notifyHostState(reason = 'update') {
+             })),
+             model_default_id: String(runtimeUiData.modelDefaultId || '').slice(0, 160),
+             model_settings: { ...conversationModelSettings() },
+-            generating: Boolean(generationBusy),
++            generating: Boolean(generationBusy || rollbackBusy),
+         },
+     });
+ }
 @@ -771,6 +777,18 @@ function openHostRequestedSettings(section) {
          return;
      }
@@ -4379,7 +4072,7 @@ index 5744686620fab5c96994f354cd84965a313d99bf..b5d1ab2019f59ad1f7996d4e5ee88324
          if (action === 'edit') {
              await openNativeMessageEditor(resolved);
              return;
-@@ -3127,6 +3147,117 @@ async function handleMessageMenuAction(action, target) {
+@@ -3127,6 +3147,124 @@ async function handleMessageMenuAction(action, target) {
      }
  }
  
@@ -4394,6 +4087,9 @@ index 5744686620fab5c96994f354cd84965a313d99bf..b5d1ab2019f59ad1f7996d4e5ee88324
 +    const old = resolved.map(({ message }) => ({ message, is_system: message.is_system, extra: { ...message.extra } }));
 +    const previousPresentation = runtimeVariables.homer_message_presentation;
 +    const presentation = { ...previousPresentation };
++    rollbackBusy = true;
++    queueMessageMenuRender();
++    scheduleHostStateNotify(0, 'message-presentation-saving');
 +    try {
 +        for (const { message } of resolved) {
 +            const id = cloudHomerMessageId(message);
@@ -4420,6 +4116,10 @@ index 5744686620fab5c96994f354cd84965a313d99bf..b5d1ab2019f59ad1f7996d4e5ee88324
 +        for (const state of old) { state.message.is_system = state.is_system; state.message.extra = state.extra; }
 +        renderMessageMenuTargets();
 +        throw error;
++    } finally {
++        rollbackBusy = false;
++        queueMessageMenuRender();
++        scheduleHostStateNotify(0, 'message-presentation-saved');
 +    }
 +}
 +
@@ -4497,7 +4197,7 @@ index 5744686620fab5c96994f354cd84965a313d99bf..b5d1ab2019f59ad1f7996d4e5ee88324
  function installMessageMenu() {
      const chat = document.querySelector('#chat');
      if (!chat) {
-@@ -3134,8 +3265,21 @@ function installMessageMenu() {
+@@ -3134,8 +3272,21 @@ function installMessageMenu() {
          return;
      }
      if (chat.dataset.homerMessageMenuInstalled !== 'true') {
@@ -4519,7 +4219,7 @@ index 5744686620fab5c96994f354cd84965a313d99bf..b5d1ab2019f59ad1f7996d4e5ee88324
              const touchLike = event.pointerType === 'touch' || event.pointerType === 'pen';
              if ((!touchLike && event.button !== 0) || event.isPrimary === false || isInteractiveMessageTarget(event.target)) {
                  return;
-@@ -3972,6 +4116,36 @@ function buildNewConversationMenu() {
+@@ -3972,6 +4123,36 @@ function buildNewConversationMenu() {
      return dialog;
  }
  
@@ -4556,7 +4256,7 @@ index 5744686620fab5c96994f354cd84965a313d99bf..b5d1ab2019f59ad1f7996d4e5ee88324
  function buildAttachmentDialog() {
      const dialog = createElement('dialog', 'homer-site-dialog homer-attachment-dialog');
      dialog.id = 'homer-attachment-dialog';
-@@ -4015,9 +4189,11 @@ function buildAttachmentDialog() {
+@@ -4015,9 +4196,11 @@ function buildAttachmentDialog() {
          } else if (action === 'ai-help') {
              document.querySelector('#option_impersonate')?.click();
          } else {
@@ -4571,7 +4271,7 @@ index 5744686620fab5c96994f354cd84965a313d99bf..b5d1ab2019f59ad1f7996d4e5ee88324
          }
      });
      return dialog;
-@@ -4103,6 +4279,21 @@ function populateHistoryList(historyCount, historyList) {
+@@ -4103,6 +4286,21 @@ function populateHistoryList(historyCount, historyList) {
  }
  
  function buildRuntimeUi() {
@@ -4580,20 +4280,20 @@ index 5744686620fab5c96994f354cd84965a313d99bf..b5d1ab2019f59ad1f7996d4e5ee88324
 +    if (!document.querySelector('#homer-option-picker-script')) {
 +        const picker = document.createElement('script');
 +        picker.id = 'homer-option-picker-script';
-+        picker.src = siteUrl('/assets/js/option-picker.js?v=20260906-r2');
++        picker.src = siteUrl('/assets/js/option-picker.js?v=20260908-pr7');
 +        document.head.append(picker);
 +    }
 +    if (!document.querySelector('#homer-chat-design')) {
 +        const stylesheet = document.createElement('link');
 +        stylesheet.id = 'homer-chat-design';
 +        stylesheet.rel = 'stylesheet';
-+        stylesheet.href = siteUrl('/assets/css/chat-design.css?v=20260905-ui-r1');
++        stylesheet.href = siteUrl('/assets/css/chat-design.css?v=20260908-pr7');
 +        document.head.append(stylesheet);
 +    }
      document.querySelector('#homer-runtime-root')?.remove();
      const root = createElement('div', 'homer-runtime-root');
      root.id = 'homer-runtime-root';
-@@ -4114,17 +4305,18 @@ function buildRuntimeUi() {
+@@ -4114,17 +4312,18 @@ function buildRuntimeUi() {
          || '角色对话',
      );
      const header = createElement('header', 'homer-chat-header');
@@ -4616,7 +4316,7 @@ index 5744686620fab5c96994f354cd84965a313d99bf..b5d1ab2019f59ad1f7996d4e5ee88324
      settingsButton.type = 'button';
      settingsButton.setAttribute('aria-label', '打开对话设置');
      settingsButton.addEventListener('click', () => setDrawerOpen('right'));
-@@ -4203,11 +4395,12 @@ function buildRuntimeUi() {
+@@ -4203,11 +4402,12 @@ function buildRuntimeUi() {
      rightDrawer.setAttribute('aria-label', '对话设置');
      rightDrawer.setAttribute('aria-hidden', 'true');
      const rightHead = createElement('header', 'homer-drawer__head');
@@ -4634,7 +4334,7 @@ index 5744686620fab5c96994f354cd84965a313d99bf..b5d1ab2019f59ad1f7996d4e5ee88324
      const rightClose = createElement('button', 'homer-icon-button', '×');
      rightClose.type = 'button';
      rightClose.setAttribute('aria-label', '关闭设置');
-@@ -4270,16 +4463,33 @@ function buildRuntimeUi() {
+@@ -4270,16 +4470,33 @@ function buildRuntimeUi() {
          returnToDesktopNavigation();
          document.querySelector('#homer-mod-dialog')?.showModal();
      });
@@ -4670,7 +4370,7 @@ index 5744686620fab5c96994f354cd84965a313d99bf..b5d1ab2019f59ad1f7996d4e5ee88324
      );
  
      const panel = createElement('section', 'homer-preset-panel');
-@@ -4364,6 +4574,7 @@ function buildRuntimeUi() {
+@@ -4364,6 +4581,7 @@ function buildRuntimeUi() {
          buildConversationManagerDialog(),
          buildNewConversationMenu(),
          buildAttachmentDialog(),
@@ -4678,7 +4378,7 @@ index 5744686620fab5c96994f354cd84965a313d99bf..b5d1ab2019f59ad1f7996d4e5ee88324
          buildPresentationModeToggle(),
      );
      root.addEventListener('keydown', event => {
-@@ -4373,6 +4584,13 @@ function buildRuntimeUi() {
+@@ -4373,6 +4591,13 @@ function buildRuntimeUi() {
          }
      });
      document.body.append(root);
@@ -4692,7 +4392,18 @@ index 5744686620fab5c96994f354cd84965a313d99bf..b5d1ab2019f59ad1f7996d4e5ee88324
      bindComposerAttachmentButton();
      renderPresetLists();
      flushHostNotices();
-@@ -4699,6 +4917,7 @@ async function bootstrapLaunch(preloadedSession = null, administratorExtensionsP
+@@ -4428,8 +4653,8 @@ async function switchConversation(conversation) {
+         setDrawerOpen();
+         return;
+     }
+-    if (loadingLaunch || generationBusy) {
+-        showHostNotice(generationBusy ? '回复生成完成后才能切换会话' : '会话正在切换，请稍候', 'warning');
++    if (loadingLaunch || generationBusy || rollbackBusy) {
++        showHostNotice(rollbackBusy ? '当前消息保存后才能切换会话' : generationBusy ? '回复生成完成后才能切换会话' : '会话正在切换，请稍候', 'warning');
+         if (!loadingLaunch) notifyHostConversation('conversation-switch-failed');
+         return;
+     }
+@@ -4699,6 +4924,7 @@ async function bootstrapLaunch(preloadedSession = null, administratorExtensionsP
          setRuntimeGate('梦境已就绪', '正在呈现完整对话界面…');
          await releaseRuntimeGate();
          document.documentElement.classList.add('homer-runtime-ready');
