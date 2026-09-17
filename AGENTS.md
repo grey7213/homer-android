@@ -11,6 +11,7 @@
 - `PatchManager` data patches override bundled web assets; an APK release must account for old slots as well as update the published data patch when needed.
 - Current task map: `specs/in-app-update-20260905/`.
 - Latest PR review/release work: `specs/pr7-release-20260908/`. Community preview requires `/admin/api/me`; the new social backend was not included and its moderation entry remains disabled.
+- PR #8 (`7ddba11`) deliberately dropped the community web patch, which also deleted group chat. Cold start restores the last trusted `/app/` page and falls back to `/app/explore.html`; do not point the default home at a page whose backend is not deployed. The community server side still has no `social_*` tables in production.
 
 ## Verified pitfalls
 
