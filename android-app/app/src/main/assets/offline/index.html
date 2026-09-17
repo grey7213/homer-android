@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="color-scheme" content="dark">
+  <meta name="color-scheme" content="light">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self'; img-src data: file:; font-src 'none'; connect-src 'none'; media-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
   <title>对话 · 惑梦</title>
   <link rel="stylesheet" href="style.css">
@@ -32,13 +32,14 @@
       <header class="topbar">
         <button id="menu-button" class="icon-button menu-icon" type="button" aria-label="打开导航"><span></span><span></span><span></span></button>
         <div class="dialogue-heading"><h1 id="title">角色对话</h1><p id="connection-state">本机记录</p></div>
-        <button id="settings-button" class="icon-button settings-icon" type="button" aria-label="连接状态">⚙</button>
+        <button id="settings-button" class="icon-button settings-icon" type="button" aria-label="连接状态"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M16 4H10a8 8 0 0 0-1 16v-3h2a7 7 0 0 0 7-7"/><path d="m20 2 1.1 2.9L24 6l-2.9 1.1L20 10l-1.1-2.9L16 6l2.9-1.1Z" fill="currentColor" stroke="none"/></svg></button>
       </header>
 
       <div id="messages" class="messages" aria-live="polite"></div>
 
       <form id="composer" class="composer">
-        <textarea id="draft" rows="1" maxlength="10000" placeholder="输入想发送的消息"></textarea>
+        <button id="add-content" type="button" aria-label="添加内容">＋</button>
+        <textarea id="draft" rows="1" maxlength="10000" placeholder="随便聊聊..."></textarea>
         <button id="send" class="send-button" type="submit" aria-label="发送">↑</button>
       </form>
 

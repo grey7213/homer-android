@@ -84,6 +84,11 @@
     closeMenu();
     statusPanel.hidden = !statusPanel.hidden;
   });
+  document.querySelector('#add-content').addEventListener('click', () => {
+    closeMenu(); statusPanel.hidden = false;
+    statusTitle.textContent = '添加图片需要恢复连接';
+    statusDetail.textContent = '本机记录可以继续阅读。连接恢复后，可使用相册、拍照等完整功能。';
+  });
   retry.addEventListener('click', () => {
     statusPanel.hidden = true;
     setConnectionState(true, true);
