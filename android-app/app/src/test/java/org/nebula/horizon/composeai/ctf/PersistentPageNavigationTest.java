@@ -8,6 +8,28 @@ import org.junit.Test;
 
 public final class PersistentPageNavigationTest {
     @Test
+    public void restoresTheLastPageInsteadOfForcingCommunity() {
+        assertEquals("https://example.test/app/chat.html?conversation_id=c1",
+                HomerActivity.startupUrl("https://example.test/",
+                        "https://example.test/app/chat.html?conversation_id=c1"));
+        assertEquals("https://example.test/app/community.html",
+                HomerActivity.startupUrl("https://example.test/",
+                        "https://example.test/app/community.html"));
+    }
+
+    @Test
+    public void fallsBackToExploreForUntrustedOrNonAppTargets() {
+        assertEquals("https://example.test/app/explore.html",
+                HomerActivity.startupUrl("https://example.test/", null));
+        assertEquals("https://example.test/app/explore.html",
+                HomerActivity.startupUrl("https://example.test/", ""));
+        assertEquals("https://example.test/app/explore.html",
+                HomerActivity.startupUrl("https://example.test/", "https://evil.test/app/me.html"));
+        assertEquals("https://example.test/app/explore.html",
+                HomerActivity.startupUrl("https://example.test/", "https://example.test/dashboard.html"));
+    }
+
+    @Test
     public void keepsPrimaryProductSurfacesInSeparatePersistentViews() {
         assertEquals("chat", HomerActivity.persistentPageKey("https://example.test/app/chat.html?conversation_id=c1"));
         assertEquals("explore", HomerActivity.persistentPageKey("https://example.test/app/explore.html"));
@@ -15,6 +37,7 @@ public final class PersistentPageNavigationTest {
         assertEquals("me", HomerActivity.persistentPageKey("https://example.test/app/me.html"));
         assertEquals("favorites", HomerActivity.persistentPageKey("https://example.test/app/favorites.html"));
         assertEquals("workshop", HomerActivity.persistentPageKey("https://example.test/app/workshop.html"));
+        assertEquals("community", HomerActivity.persistentPageKey("https://example.test/app/community.html"));
         assertEquals("account", HomerActivity.persistentPageKey("https://example.test/dashboard.html"));
         assertEquals("admin", HomerActivity.persistentPageKey("https://example.test/admin.html"));
         assertEquals("", HomerActivity.persistentPageKey("https://example.test/app/character.html?id=card-1"));

@@ -289,3 +289,18 @@ body.is-menu-open .sidebar { transform: translateX(0); }
 @media (prefers-reduced-motion: reduce) {
   .sidebar { transition: none; }
 }
+
+/* Match the measured conversation chrome during native snapshot display. */
+:root{color-scheme:dark;color:#fff;background:#212121;font-family:system-ui,"Microsoft YaHei",sans-serif}
+.app-shell,.dialogue,.topbar{background:#212121;color:#fff}
+.topbar{min-height:calc(48px + max(env(safe-area-inset-top),var(--homer-native-safe-top)));border:0;padding:0;background:linear-gradient(#141414,#212121);padding-top:max(env(safe-area-inset-top),var(--homer-native-safe-top));grid-template-columns:48px minmax(0,1fr) 48px}
+.dialogue-heading{visibility:visible}.dialogue-heading h1{color:#fff;font-size:16px}.dialogue-heading p{display:none}
+button{-webkit-tap-highlight-color:transparent;user-select:none;touch-action:manipulation}
+.icon-button{border:0;background:transparent;color:#fff;border-radius:0;width:48px;height:48px}.menu-icon span{background:white}
+.messages{padding:16px 10px;display:flex;flex-direction:column}.messages::before{content:'';flex:1 0 0}
+.message{border:0;border-radius:14px;background:#29485f;color:#fff;line-height:1.6;max-width:92%;margin:0 auto 14px 0;padding:10px 12px;box-shadow:none;font-size:14px}.message.is-user{background:#4c4c4c;border:0;border-radius:14px;margin-left:auto;margin-right:0}
+.composer{margin:8px 10px max(12px,env(safe-area-inset-bottom));border:0;border-radius:28px;background:#656668;min-height:54px;padding:4px 7px 4px 14px}.composer textarea{color:#fff;min-height:44px;padding:10px 0;caret-color:#fff;font-size:14px}.composer textarea::placeholder{color:#c4c4c4}.send-button{width:32px;height:32px;border-radius:50%;background:#fff;color:#656668}
+.sidebar,.status-panel{background:white;color:#292432;border-color:#e4dfe9}.nav-list button{background:#f5f3f7;color:#292432}.history-copy strong{color:#292432}.history-copy small{color:#756c81}.status-panel p{color:#756c81}
+.settings-icon svg{width:26px;height:26px}.composer{grid-template-columns:30px minmax(0,1fr) 32px;gap:6px;padding-left:10px}
+#add-content{width:30px;height:44px;padding:0;border:0;background:transparent;color:white;font:30px/1 system-ui}
+.status-panel{flex-wrap:wrap;border-radius:18px}.status-panel button{min-height:44px;border-radius:12px;background:#7c49ef}.status-panel div{flex-basis:180px}

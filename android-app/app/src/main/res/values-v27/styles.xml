@@ -3,6 +3,7 @@
         <item name="android:fontFamily">sans</item>
         <item name="android:windowActionModeOverlay">true</item>
         <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
         <item name="android:colorAccent">#B83262</item>
         <item name="android:statusBarColor">@color/homer_background</item>
         <item name="android:navigationBarColor">@color/homer_background</item>

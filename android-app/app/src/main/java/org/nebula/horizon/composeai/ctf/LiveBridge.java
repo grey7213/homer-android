@@ -21,6 +21,9 @@ public final class LiveBridge {
     public String getAppVersion() { return BuildConfig.VERSION_NAME; }
 
     @JavascriptInterface
+    public boolean isDebugBuild() { return BuildConfig.DEBUG; }
+
+    @JavascriptInterface
     public void checkForAppUpdate() { activity.runOnUiThread(activity::checkForAppUpdate); }
 
     @JavascriptInterface

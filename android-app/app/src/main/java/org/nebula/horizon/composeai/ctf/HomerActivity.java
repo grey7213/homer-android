@@ -169,8 +169,8 @@ public final class HomerActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        getWindow().setStatusBarColor(0xFF1D1D1E);
-        getWindow().setNavigationBarColor(0xFF1D1D1E);
+        getWindow().setStatusBarColor(0xFFF5F3F7);
+        getWindow().setNavigationBarColor(0xFFF5F3F7);
 
         cacheDatabase = new HomerCacheDatabase(this);
         patchManager = new PatchManager(this);
@@ -222,7 +222,7 @@ public final class HomerActivity extends Activity {
 
         configureSnapshotView();
         configureLiveView(liveView);
-        String startupTarget = safeStartupUrl(cacheDatabase.readLastUrl());
+        String startupTarget = startupUrl(BuildConfig.SERVER_BASE_URL, cacheDatabase.readLastUrl());
         prepareSnapshotForTarget(startupTarget);
         // Give the tiny local document the first main-loop turn before the
         // heavier live WebView begins parsing the bundled runtime.
@@ -261,7 +261,7 @@ public final class HomerActivity extends Activity {
         settings.setAllowFileAccess(true);
         settings.setBlockNetworkLoads(true);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
-        snapshotView.setBackgroundColor(0xFF1D1D1E);
+        snapshotView.setBackgroundColor(0xFFF5F3F7);
         snapshotView.addJavascriptInterface(
                 new SnapshotBridge(this),
                 "HomerNative"
@@ -297,7 +297,7 @@ public final class HomerActivity extends Activity {
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
         settings.setUserAgentString(settings.getUserAgentString()
                 + " HomerAndroid/" + BuildConfig.VERSION_NAME);
-        view.setBackgroundColor(0xFF1D1D1E);
+        view.setBackgroundColor(0xFFF5F3F7);
         view.setAlpha(1f);
         view.setVisibility(View.VISIBLE);
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG);
@@ -323,10 +323,21 @@ public final class HomerActivity extends Activity {
 
     @SuppressWarnings("deprecation")
     private void applySystemBars() {
+        String visibleUrl = liveView == null ? null : liveView.getUrl();
+        boolean darkConversation = visibleUrl == null || "about:blank".equals(visibleUrl)
+                ? "chat".equals(activePersistentPage) : StartupPresentation.isConversationUrl(visibleUrl);
+        getWindow().setStatusBarColor(darkConversation ? 0xFF141414 : 0xFFF5F3F7);
+        getWindow().setNavigationBarColor(darkConversation ? 0xFF212121 : 0xFFF5F3F7);
+        // Android 15 may make the system bar transparent. Its inset area must
+        // match the icon appearance instead of showing the white window below.
+        if (root != null) root.setBackgroundColor(darkConversation ? 0xFF141414 : 0xFFF5F3F7);
         View decor = getWindow().getDecorView();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             WindowInsetsController controller = decor.getWindowInsetsController();
             if (controller == null) return;
+            controller.setSystemBarsAppearance(
+                    darkConversation ? 0 : WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS | WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS,
+                    WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS | WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS);
             if (immersiveLandscape) {
                 controller.hide(WindowInsets.Type.systemBars());
                 controller.setSystemBarsBehavior(
@@ -344,7 +355,7 @@ public final class HomerActivity extends Activity {
                     | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
                     | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
                     | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                : View.SYSTEM_UI_FLAG_VISIBLE);
+                : darkConversation ? 0 : View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
     }
 
 
@@ -366,8 +377,7 @@ public final class HomerActivity extends Activity {
         liveReadyHandled = false;
         liveView.setAlpha(1f);
         liveView.setVisibility(View.VISIBLE);
-        String stored = cacheDatabase.readLastUrl();
-        String target = safeStartupUrl(stored);
+        String target = startupUrl(BuildConfig.SERVER_BASE_URL, cacheDatabase.readLastUrl());
         registerInitialPersistentPage(target);
         // Follow the lightweight chatroom pattern used by Fengyue: when the
         // last page was a conversation, expose the local snapshot immediately
@@ -390,6 +400,7 @@ public final class HomerActivity extends Activity {
             if ("/app/explore.html".equals(path)) return "explore";
             if ("/app/histories.html".equals(path)) return "histories";
             if ("/app/favorites.html".equals(path)) return "favorites";
+            if ("/app/community.html".equals(path)) return "community";
             if ("/app/workshop.html".equals(path)) return "workshop";
             if ("/app/me.html".equals(path)) return "me";
             if ("/dashboard.html".equals(path)) return "account";
@@ -443,6 +454,7 @@ public final class HomerActivity extends Activity {
         if (key.isEmpty()) return;
         persistentPages.put(key, liveView);
         activePersistentPage = key;
+        applySystemBars();
     }
 
     private boolean switchPersistentPage(String target) {
@@ -451,6 +463,7 @@ public final class HomerActivity extends Activity {
         if (activePersistentPage.isEmpty() && persistentPages.isEmpty()) {
             persistentPages.put(key, liveView);
             activePersistentPage = key;
+        applySystemBars();
             return false;
         }
         if (key.equals(activePersistentPage)) {
@@ -476,6 +489,7 @@ public final class HomerActivity extends Activity {
         }
         liveView = targetView;
         activePersistentPage = key;
+        applySystemBars();
         String currentTarget = liveView.getUrl();
         boolean targetChanged = shouldLoadPersistentTarget(currentTarget, target);
         liveView.setAlpha(1f);
@@ -522,6 +536,7 @@ public final class HomerActivity extends Activity {
             if (liveView != null) liveView.setVisibility(View.GONE);
             liveView = target;
             activePersistentPage = key;
+        applySystemBars();
             liveView.setAlpha(1f);
             liveView.setVisibility(View.VISIBLE);
             snapshotView.setVisibility(View.GONE);
@@ -587,18 +602,22 @@ public final class HomerActivity extends Activity {
         }
     }
 
-    private String safeStartupUrl(String value) {
-        if (SafeUrls.isTrustedNavigation(BuildConfig.SERVER_BASE_URL, value)) {
+    /**
+     * Cold start restores the last page the user visited. A stored conversation
+     * keeps its instant local snapshot; anything else falls back to explore.
+     */
+    static String startupUrl(String serverBaseUrl, String stored) {
+        if (SafeUrls.isTrustedNavigation(serverBaseUrl, stored)) {
             try {
-                URI candidate = URI.create(value);
+                URI candidate = URI.create(stored);
                 if (candidate.getPath() != null && candidate.getPath().startsWith("/app/")) {
-                    return value;
+                    return stored;
                 }
             } catch (RuntimeException ignored) {
                 // Fall through to the default app entry.
             }
         }
-        return BuildConfig.SERVER_BASE_URL + "app/";
+        return serverBaseUrl + "app/explore.html";
     }
 
     private void pollLiveReady() {
@@ -842,6 +861,7 @@ public final class HomerActivity extends Activity {
         public void onPageFinished(WebView view, String url) {
             if (view != liveView) return;
             if (!SafeUrls.isTrustedNavigation(BuildConfig.SERVER_BASE_URL, url)) return;
+            applySystemBars();
             applyNativeInsetsToWebViews();
             cacheDatabase.saveLastUrl(url);
             handler.removeCallbacksAndMessages(null);
@@ -872,11 +892,28 @@ public final class HomerActivity extends Activity {
             try {
                 Intent intent = params.createIntent();
                 intent.addCategory(Intent.CATEGORY_OPENABLE);
+                String[] types = FilePickerTypes.normalize(params.getAcceptTypes());
+                intent.setType(types.length == 1 ? types[0] : "*/*");
+                intent.removeExtra(Intent.EXTRA_MIME_TYPES);
+                if (types.length > 1) intent.putExtra(Intent.EXTRA_MIME_TYPES, types);
+                intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, params.getMode() == FileChooserParams.MODE_OPEN_MULTIPLE);
                 startActivityForResult(intent, FILE_CHOOSER_REQUEST);
                 return true;
             } catch (RuntimeException error) {
-                fileChooserCallback = null;
-                return false;
+                // Some phone file managers cannot handle the WebView's intent.
+                try {
+                    Intent fallback = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                    fallback.addCategory(Intent.CATEGORY_OPENABLE);
+                    fallback.setType("*/*");
+                    fallback.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, params.getMode() == FileChooserParams.MODE_OPEN_MULTIPLE);
+                    startActivityForResult(fallback, FILE_CHOOSER_REQUEST);
+                } catch (RuntimeException unavailable) {
+                    fileChooserCallback = null;
+                    callback.onReceiveValue(null);
+                    android.widget.Toast.makeText(HomerActivity.this,
+                            "无法打开系统文件选择器，请启用手机的文件管理应用后重试", android.widget.Toast.LENGTH_LONG).show();
+                }
+                return true;
             }
         }
 

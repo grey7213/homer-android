@@ -76,6 +76,7 @@ public final class PatchManager {
     }
 
     public String offlineEntryUrl() {
+        if (isUiReviewBuild()) return "file:///android_asset/offline/index.html";
         String slot = preferences.getString(ACTIVE_SLOT, "");
         if (!"slot-a".equals(slot) && !"slot-b".equals(slot)) {
             return "file:///android_asset/offline/index.html";
@@ -85,8 +86,14 @@ public final class PatchManager {
         return Uri.fromFile(entry).toString();
     }
 
+    // UI acceptance packages must display their bundled revision, not a production data patch.
+    private static boolean isUiReviewBuild() {
+        return BuildConfig.DEBUG && BuildConfig.APPLICATION_ID.endsWith(".uireview");
+    }
+
     /** Returns a verified active-slot override, or null when the bundled asset should be used. */
     public InputStream openActiveAsset(String relativePath) throws IOException {
+        if (isUiReviewBuild()) return null;
         String normalized = relativePath == null ? "" : relativePath.replace('\\', '/');
         if (!PatchVerifier.isSafeZipPath(normalized)
                 || (!normalized.startsWith("client/") && !normalized.startsWith("offline/"))) {
@@ -107,6 +114,7 @@ public final class PatchManager {
     }
 
     public void checkForUpdateAsync(Callback callback) {
+        if (isUiReviewBuild()) { callback.onNoUpdate(); return; }
         if (BuildConfig.PATCH_PUBLIC_KEY_B64 == null || BuildConfig.PATCH_PUBLIC_KEY_B64.trim().isEmpty()) {
             callback.onNoUpdate();
             return;
