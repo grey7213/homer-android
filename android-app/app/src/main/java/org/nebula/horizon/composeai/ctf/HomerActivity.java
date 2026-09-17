@@ -222,7 +222,7 @@ public final class HomerActivity extends Activity {
 
         configureSnapshotView();
         configureLiveView(liveView);
-        String startupTarget = startupUrl(BuildConfig.SERVER_BASE_URL);
+        String startupTarget = startupUrl(BuildConfig.SERVER_BASE_URL, cacheDatabase.readLastUrl());
         prepareSnapshotForTarget(startupTarget);
         // Give the tiny local document the first main-loop turn before the
         // heavier live WebView begins parsing the bundled runtime.
@@ -377,7 +377,7 @@ public final class HomerActivity extends Activity {
         liveReadyHandled = false;
         liveView.setAlpha(1f);
         liveView.setVisibility(View.VISIBLE);
-        String target = startupUrl(BuildConfig.SERVER_BASE_URL);
+        String target = startupUrl(BuildConfig.SERVER_BASE_URL, cacheDatabase.readLastUrl());
         registerInitialPersistentPage(target);
         // Follow the lightweight chatroom pattern used by Fengyue: when the
         // last page was a conversation, expose the local snapshot immediately
@@ -602,8 +602,22 @@ public final class HomerActivity extends Activity {
         }
     }
 
-    static String startupUrl(String serverBaseUrl) {
-        return serverBaseUrl + "app/community.html";
+    /**
+     * Cold start restores the last page the user visited. A stored conversation
+     * keeps its instant local snapshot; anything else falls back to explore.
+     */
+    static String startupUrl(String serverBaseUrl, String stored) {
+        if (SafeUrls.isTrustedNavigation(serverBaseUrl, stored)) {
+            try {
+                URI candidate = URI.create(stored);
+                if (candidate.getPath() != null && candidate.getPath().startsWith("/app/")) {
+                    return stored;
+                }
+            } catch (RuntimeException ignored) {
+                // Fall through to the default app entry.
+            }
+        }
+        return serverBaseUrl + "app/explore.html";
     }
 
     private void pollLiveReady() {
