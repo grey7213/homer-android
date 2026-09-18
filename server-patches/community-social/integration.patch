@@ -1,0 +1,265 @@
+diff --git a/tools/ai_fengyue_local_server.py b/tools/ai_fengyue_local_server.py
+index a50bfe1..9b9ef55 100644
+--- a/tools/ai_fengyue_local_server.py
++++ b/tools/ai_fengyue_local_server.py
+@@ -56,6 +56,9 @@ from card_version_workshop import (
+     resolve_versioned_app,
+ )
+ from community_workshop import CommunityStore, ensure_community_schema, handle_community_route
++from community_feed import ensure_feed_schema, handle_feed_route
++from community_media import CommunityMediaStore
++from community_service import Rejected as CommunityRejected
+ from notifications_extension import ensure_notification_schema, list_notifications, mutate_notification
+ from card_extra_workshop import (
+     card_extra_payload,
+@@ -2867,6 +2870,7 @@ class Store:
+             pass
+         self.lock = threading.RLock()
+         self.card_media: CardMediaService | None = None
++        self.community_media: CommunityMediaStore | None = None
+         self.init_schema()
+ 
+     def configure_card_media(self, media_dir: Path) -> None:
+@@ -2879,6 +2883,13 @@ class Store:
+             self.card_media = CardMediaService(self.conn, storage)
+             self.card_media.cleanup_stale_assets(max_age_seconds=24 * 60 * 60)
+ 
++    def configure_community_media(self, media_dir: Path) -> None:
++        self.community_media = CommunityMediaStore(
++            self.conn,
++            self.lock,
++            Path(media_dir) / "community",
++        )
++
+     def init_schema(self) -> None:
+         with self.lock:
+             self.conn.executescript(
+@@ -3443,6 +3454,7 @@ class Store:
+         ensure_card_version_schema(self.conn, self.lock)
+         self.ensure_group_member_columns()
+         ensure_community_schema(self.conn, self.lock)
++        ensure_feed_schema(self.conn, self.lock)
+         ensure_card_extra_schema(self.conn, self.lock)
+         ensure_chat_mod_schema(self.conn, self.lock)
+         ensure_notification_schema(self.conn, self.lock)
+@@ -8193,6 +8205,22 @@ class Store:
+         row = self.get_local_app(clean)
+         return str(row["id"]) if row else clean
+ 
++    def resolve_social_cards(self, public_ids: list[str], request_user: dict) -> dict[str, dict]:
++        """Resolve community card references without exposing card source data."""
++        request_user_id = str((request_user or {}).get("id") or "")
++        resolved: dict[str, dict] = {}
++        for public_id in public_ids:
++            row = self.get_local_app(str(public_id))
++            if not user_can_play_app(row, request_user_id):
++                continue
++            value = dict(row)
++            resolved[str(public_id)] = {
++                "id": str(value.get("id") or ""),
++                "name": str(value.get("name") or "未命名角色"),
++                "visible": True,
++            }
++        return resolved
++
+     def list_local_apps(self, *, source: str | None = None, owner_user_id: str | None = None,
+                         search: str = "", tag: str = "", sort: str = "default",
+                         content_zone: str = "all",
+@@ -19059,7 +19087,15 @@ class Handler(BaseHTTPRequestHandler):
+         self.wfile.write(chunk.encode("utf-8"))
+         self.wfile.flush()
+ 
+-    def send_file(self, status: int, path: Path, content_type: str) -> None:
++    def send_file(
++        self,
++        status: int,
++        path: Path,
++        content_type: str,
++        *,
++        cache_control: str = "public, max-age=604800",
++        nosniff: bool = False,
++    ) -> None:
+         size = path.stat().st_size
+         start = 0
+         end = max(0, size - 1)
+@@ -19097,7 +19133,9 @@ class Handler(BaseHTTPRequestHandler):
+         self.send_header("Accept-Ranges", "bytes")
+         if response_status == 206:
+             self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+-        self.send_header("Cache-Control", "public, max-age=604800")
++        self.send_header("Cache-Control", cache_control)
++        if nosniff:
++            self.send_header("X-Content-Type-Options", "nosniff")
+         self.send_cors_headers()
+         self.send_header("Connection", "close")
+         self.end_headers()
+@@ -19783,6 +19821,40 @@ class Handler(BaseHTTPRequestHandler):
+         except (TypeError, ValueError):
+             self.send_json(413, error_response("request body too large", 413))
+             return
++        community_media_match = re.fullmatch(r"/console/api/web/social-media/([a-f0-9]{32})", path)
++        if community_media_match:
++            if self.command.upper() != "GET":
++                self.send_json(405, error_response("method not allowed", 405))
++                return
++            user = self.authenticated_user()
++            if not user or not self.store.community_media:
++                self.send_json(401 if not user else 503, error_response(
++                    "unauthorized" if not user else "community media unavailable",
++                    401 if not user else 503,
++                ))
++                return
++            context = {
++                "conn": self.store.conn,
++                "lock": self.store.lock,
++                "user": dict(user),
++                "is_admin": bool(user["is_admin"]),
++            }
++            try:
++                media_path, media_type = self.store.community_media.read_file(
++                    community_media_match.group(1),
++                    context,
++                )
++            except CommunityRejected as exc:
++                self.send_json(exc.status, error_response(str(exc), exc.status))
++                return
++            self.send_file(
++                200,
++                media_path,
++                media_type,
++                cache_control="private, no-store",
++                nosniff=True,
++            )
++            return
+         status = 200
+         if path == "/health":
+             self.store.log_request(
+@@ -20244,6 +20316,16 @@ class Handler(BaseHTTPRequestHandler):
+             return {"name": value.get("name") or "", "cover_url": value.get("cover_url") or "",
+                     "owner_name": "惑梦创作者", "owner_user_id": value.get("owner_user_id") or ""}
+ 
++        if normalized.startswith("console/api/web/social/"):
++            return extension_response(handle_feed_route(
++                self.command, normalized, parse_qs(query or ""), body,
++                {"conn": self.store.conn, "lock": self.store.lock,
++                 "user": dict(user) if user else None,
++                 "is_admin": bool(user and user["is_admin"]),
++                 "resolve_cards": self.store.resolve_social_cards,
++                 "media_store": self.store.community_media},
++            ))
++
+         if normalized.startswith("console/api/web/community/"):
+             return extension_response(handle_community_route(
+                 self.command, normalized, parse_qs(query or ""), body,
+@@ -22982,6 +23064,7 @@ def main() -> int:
+     (MEDIA_DIR / "generated").mkdir(parents=True, exist_ok=True)
+     store = Store(args.db)
+     store.configure_card_media(MEDIA_DIR)
++    store.configure_community_media(MEDIA_DIR)
+     ACTIVE_STORE = store
+     mail_db = Path(os.environ.get("MAIL_DB_PATH") or (args.db.resolve().parent / "verification_mail.sqlite3"))
+     verification_store = VerificationStore(mail_db)
+diff --git a/tools/test_community_host_integration.py b/tools/test_community_host_integration.py
+new file mode 100644
+index 0000000..ecfc2e4
+--- /dev/null
++++ b/tools/test_community_host_integration.py
+@@ -0,0 +1,98 @@
++"""Isolated checks for the community integration in the real Homer host."""
++import tempfile
++import unittest
++from pathlib import Path
++
++from ai_fengyue_local_server import Store
++from community_feed import handle_feed_route
++from community_policy import VERSION
++
++
++class CommunityHostIntegrationTests(unittest.TestCase):
++    def setUp(self):
++        self.temp = tempfile.TemporaryDirectory(prefix="homer-community-host-")
++        root = Path(self.temp.name)
++        self.store = Store(root / "state.sqlite3")
++        self.store.configure_community_media(root / "media")
++        self.user = {"id": "community-user", "name": "社区验收用户", "is_admin": 0}
++
++    def tearDown(self):
++        self.store.conn.close()
++        self.temp.cleanup()
++
++    def context(self, *, admin=False):
++        return {
++            "conn": self.store.conn,
++            "lock": self.store.lock,
++            "user": dict(self.user),
++            "is_admin": admin,
++            "resolve_cards": self.store.resolve_social_cards,
++            "media_store": self.store.community_media,
++        }
++
++    def call(self, method, path, body=None, *, admin=False):
++        return handle_feed_route(
++            method,
++            "console/api/web/social/" + path,
++            {},
++            body or {},
++            self.context(admin=admin),
++        )
++
++    def test_schema_bootstrap_and_media_capability(self):
++        tables = {
++            row[0]
++            for row in self.store.conn.execute(
++                "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'social_%'"
++            )
++        }
++        self.assertIn("social_posts", tables)
++        self.assertIn("social_cases", tables)
++        self.assertIn("social_uploads", tables)
++        bootstrap = self.call("GET", "bootstrap")["data"]
++        self.assertTrue(bootstrap["available"])
++        self.assertTrue(bootstrap["media"])
++        self.assertFalse(bootstrap["consented"])
++
++    def test_consent_post_and_card_reference_resolution(self):
++        self.store.upsert_upstream_app({
++            "id": "card-community-test",
++            "name": "社区引用测试卡",
++            "summary": "",
++            "description": "",
++            "cover_url": "",
++            "cover_origin": "",
++            "tags": [],
++            "opening_statement": "",
++            "suggested_questions": [],
++            "language": "zh-Hans",
++        })
++        row = self.store.get_local_app("card-community-test")
++        display_id = str(row["display_id"])
++        consent = self.call("POST", "consent", {
++            "version": VERSION,
++            "agreement": True,
++            "guidelines": True,
++        })
++        self.assertEqual(consent["code"], 0)
++        resolved = self.call("POST", "resolve-cards", {"ids": [display_id]})["data"]["cards"]
++        self.assertEqual(resolved[display_id]["name"], "社区引用测试卡")
++        post = self.call("POST", "posts", {
++            "title": "引用角色卡",
++            "content": "推荐 ID：" + display_id,
++            "topic": "角色故事",
++            "images": [],
++            "client_id": "host-integration-post",
++        })
++        self.assertEqual(post["code"], 0)
++        self.assertEqual(post["data"]["title"], "引用角色卡")
++
++    def test_admin_endpoints_stay_server_authorized(self):
++        denied = self.call("GET", "admin/stats")
++        self.assertEqual(denied["__http__"], 403)
++        allowed = self.call("GET", "admin/stats", admin=True)
++        self.assertEqual(allowed["code"], 0)
++
++
++if __name__ == "__main__":
++    unittest.main()
