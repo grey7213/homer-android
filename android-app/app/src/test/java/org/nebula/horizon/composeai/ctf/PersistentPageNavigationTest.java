@@ -18,14 +18,14 @@ public final class PersistentPageNavigationTest {
     }
 
     @Test
-    public void fallsBackToExploreForUntrustedOrNonAppTargets() {
-        assertEquals("https://example.test/app/explore.html",
+    public void fallsBackToDeployAwareCommunityEntryForUntrustedOrNonAppTargets() {
+        assertEquals("https://example.test/app/",
                 HomerActivity.startupUrl("https://example.test/", null));
-        assertEquals("https://example.test/app/explore.html",
+        assertEquals("https://example.test/app/",
                 HomerActivity.startupUrl("https://example.test/", ""));
-        assertEquals("https://example.test/app/explore.html",
+        assertEquals("https://example.test/app/",
                 HomerActivity.startupUrl("https://example.test/", "https://evil.test/app/me.html"));
-        assertEquals("https://example.test/app/explore.html",
+        assertEquals("https://example.test/app/",
                 HomerActivity.startupUrl("https://example.test/", "https://example.test/dashboard.html"));
     }
 
