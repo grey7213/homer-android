@@ -6,10 +6,9 @@
   <title>作品库 · 惑梦（Homer）</title>
   <link rel="icon" type="image/png" sizes="32x32" href="/assets/img/favicon-32.png?v=20260901-persistent-pages">
   <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
-  <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
-  <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
-  <script>if(new URLSearchParams(location.search).get('preview')!=='1')location.replace('/app/explore.html');</script>
-  <script type="module" src="/app/assets/js/community.js?v=20260908-pr7"></script>
+  <script src="/assets/vendor/tailwindcss-browser.js?v=20260917-r8"></script>
+  <link rel="stylesheet" href="/app/assets/css/app.css?v=20260917-r8">
+  <script type="module" src="/app/assets/js/community.js?v=20260917-r8"></script>
   <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
   <style>
     .cm-page { width: min(1180px, 100%); margin: 0 auto; }
@@ -72,9 +71,9 @@
     .cm-notice { position: fixed; right: 22px; bottom: 22px; z-index: 1300; max-width: min(360px, calc(100vw - 44px)); padding: 12px 15px; border: 1px solid rgba(251,113,133,.35); border-radius: 13px; color: #fff; background: rgba(32,24,42,.96); box-shadow: 0 12px 40px rgba(0,0,0,.32); font-size: 13px; }
     @media (max-width: 620px) { .cm-rank { grid-template-columns: 32px 42px minmax(0,1fr); } .cm-rank > button { grid-column: 2 / -1; justify-content: center; } .cm-demo { height: 360px; } }
   </style>
-  <link rel="stylesheet" href="/assets/css/app-design.css?v=20260908-pr7">
-  <script defer src="/assets/js/option-picker.js?v=20260908-pr7"></script>
-<style>html:not([data-homer-community-preview="allowed"]) body{display:none!important}</style></head>
+  <link rel="stylesheet" href="/assets/css/app-design.css?v=20260917-r8">
+  <script defer src="/assets/js/option-picker.js?v=20260917-r8"></script>
+</head>
 <body class="min-h-screen">
   <div class="xy-stars-bg"></div>
   <div class="xy-meteor"></div>
@@ -95,7 +94,7 @@
           <button type="button" class="cm-tab" :class="{ 'is-active': tab === 'mod' }" @click="switchTab('mod')">◇ Mod</button>
           <button type="button" class="cm-tab" :class="{ 'is-active': tab === 'ui_template' }" @click="switchTab('ui_template')">▣ UI 模板</button>
           <button type="button" class="cm-tab" :class="{ 'is-active': tab === 'preset' }" @click="switchTab('preset')">✦ 预设</button>
-          <button type="button" class="cm-tab" :class="{ 'is-active': tab === 'contests' }" @click="switchTab('contests')">♛ 当前赛事</button>
+          <button type="button" class="cm-tab" x-show="communityAvailable" :class="{ 'is-active': tab === 'contests' }" @click="switchTab('contests')">♛ 当前赛事</button>
         </nav>
 
         <div x-show="tab !== 'contests'">

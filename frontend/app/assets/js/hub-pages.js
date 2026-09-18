@@ -1,6 +1,6 @@
-import { confirmAction, showMessage } from '/assets/js/dialogs.js?v=20260908-pr7';
-import { api, requireAuth, getCachedUser, setCachedUser, clearAuth, ApiError } from '/app/assets/js/app-core.js?v=20260908-pr7';
-import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260908-pr7';
+import { confirmAction, showMessage } from '/assets/js/dialogs.js?v=20260917-r8';
+import { api, requireAuth, getCachedUser, setCachedUser, clearAuth, ApiError } from '/app/assets/js/app-core.js?v=20260917-r8';
+import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260917-r8';
 import { readPageCache, writePageCache } from './page-cache.js';
 
 async function loadUser(ctx) {

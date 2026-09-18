@@ -1,6 +1,6 @@
-import { confirmAction, showMessage } from '/assets/js/dialogs.js?v=20260908-pr7';
-import { api, requireAuth, getCachedUser, setCachedUser, ApiError } from '/app/assets/js/app-core.js?v=20260908-pr7';
-import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260908-pr7';
+import { confirmAction, showMessage } from '/assets/js/dialogs.js?v=20260917-r8';
+import { api, requireAuth, getCachedUser, setCachedUser, ApiError } from '/app/assets/js/app-core.js?v=20260917-r8';
+import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260917-r8';
 import {
   applyBubbleStyle,
   applyStageTheme,
@@ -16,12 +16,12 @@ import {
   STAGE_THEME_PRESETS,
   STRUCTURED_COMPONENT_OPTIONS,
   UI_ACTION_OPTIONS,
-} from '/app/assets/js/card-experience-schema.mjs?v=20260820-archive-stage';
+} from '/app/assets/js/card-experience-schema.mjs?v=20260917-r8';
 import {
   buildCardPackMediaUpdate,
   isCardPackFilename,
   parseCardPack,
-} from '/app/assets/js/card-pack-import.mjs?v=20260820-archive-stage';
+} from '/app/assets/js/card-pack-import.mjs?v=20260917-r8';
 
 const emptyCardPromptPreset = () => ({ version: 1, enabled: false, name: '', format: 'sillytavern', source_file: '', prompts: [], prompt_order: [], blocks: [], stats: { entry_count: 0, enabled_count: 0 } });
 const TAVERN_HELPER_SCRIPT_MAX_ENTRIES = 100;

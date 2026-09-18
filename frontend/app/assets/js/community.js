@@ -1,7 +1,7 @@
-import { confirmAction, showMessage } from '/assets/js/dialogs.js?v=20260908-pr7';
-import { api, requireAuth, getCachedUser, setCachedUser, ApiError } from '/app/assets/js/app-core.js?v=20260908-pr7';
-import { injectLayout } from '/app/assets/js/layout.js?v=20260908-pr7';
-import { allowCommunityPreview } from './community-preview.js';
+import { confirmAction, showMessage } from '/assets/js/dialogs.js?v=20260917-r8';
+import { api, requireAuth, getCachedUser, setCachedUser, ApiError } from '/app/assets/js/app-core.js?v=20260917-r8';
+import { injectLayout } from '/app/assets/js/layout.js?v=20260917-r8';
+import { social, authorizeCommunity } from './community-controls.js?v=20260917-r8';
 
 const WORK_TYPES = ['mod', 'ui_template', 'preset'];
 const TYPE_LABELS = { mod: 'Mod', ui_template: 'UI 模板', preset: '预设' };
@@ -133,6 +133,7 @@ function communityPage() {
     user: null,
     points: 0,
     isAdmin: false,
+    communityAvailable: false,
     tab: 'mod',
     scope: 'public',
     search: '',
@@ -166,7 +167,11 @@ function communityPage() {
       const params = new URLSearchParams(location.search);
       const requested = params.get('tab');
       if (WORK_TYPES.includes(requested)) this.tab = requested;
-      else if (requested === 'contest' || requested === 'contests') this.tab = 'contests';
+      const access=social('bootstrap').then(state=>{this.communityAvailable=!!state.available;}).catch(()=>{});
+      if (requested === 'contest' || requested === 'contests') {
+        await access;
+        if(this.communityAvailable && await authorizeCommunity())this.tab='contests';
+      }
       await (this.tab === 'contests' ? this.loadContests() : this.loadWorks());
       if (params.get('new') === '1' && WORK_TYPES.includes(this.tab)) {
         this.openCreate(this.tab);
@@ -190,8 +195,9 @@ function communityPage() {
       window.setTimeout(() => { if (this.notice === message) this.notice = ''; }, 3200);
     },
 
-    switchTab(tab) {
+    async switchTab(tab) {
       if (![...WORK_TYPES, 'contests'].includes(tab)) return;
+      if(tab==='contests' && (!this.communityAvailable || !await authorizeCommunity()))return;
       this.tab = tab;
       this.detailOpen = false;
       const url = new URL(location.href);

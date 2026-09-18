@@ -76,7 +76,9 @@ export async function openCurrentNotifications() {
   if (dialog?.open) return;
   const user = owner();
   const sheet = document.createElement('dialog');
-  sheet.className = 'homer-notice';
+  sheet.className = 'homer-notice community-dialog';
+  const community = await import('./community-controls.js?v=20260917-r8');
+  community.styles();
   sheet.setAttribute('aria-label', '当前通知');
   const header = document.createElement('header'); header.textContent = '通知中心';
   const content = document.createElement('section'); content.className = 'ui-state';
@@ -113,6 +115,15 @@ export async function openCurrentNotifications() {
   };
   retry.onclick = load;
   await load();
+  if(owner()!=='guest'){
+    try{
+      const state=await community.social('bootstrap');
+      if(!sheet.open || owner()!==user || !state.consented)return;
+      const tabs=community.element('nav','',{class:'community-tabs'});
+      tabs.append(community.button('应用通知',()=>{controller?.abort();return load();}),community.button('互动与处理结果',async()=>{controller?.abort();retry.hidden=true;await community.communityNotifications(content);}));
+      header.after(tabs);
+    }catch{/* Existing application notices remain usable if community is unavailable. */}
+  }
 }
 if (!window.__homerNoticesInstalled) {
   window.__homerNoticesInstalled = true;

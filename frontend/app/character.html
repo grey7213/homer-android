@@ -6,12 +6,12 @@
   <title>角色详情 · 惑梦（Homer）</title>
   <link rel="icon" type="image/png" sizes="32x32" href="/assets/img/favicon-32.png?v=20260901-persistent-pages">
   <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
-  <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
-  <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
-  <script type="module" src="/app/assets/js/character.js?v=20260908-pr7"></script>
+  <script src="/assets/vendor/tailwindcss-browser.js?v=20260917-r8"></script>
+  <link rel="stylesheet" href="/app/assets/css/app.css?v=20260917-r8">
+  <script type="module" src="/app/assets/js/character.js?v=20260917-r8"></script>
   <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
-  <link rel="stylesheet" href="/assets/css/app-design.css?v=20260908-pr7">
-  <script defer src="/assets/js/option-picker.js?v=20260908-pr7"></script>
+  <link rel="stylesheet" href="/assets/css/app-design.css?v=20260917-r8">
+  <script defer src="/assets/js/option-picker.js?v=20260917-r8"></script>
 </head>
 <body class="min-h-screen">
   <div class="xy-stars-bg"></div>
@@ -63,18 +63,7 @@
               </template>
             </div>
 
-            <div class="user-tags-box mt-5">
-              <div class="user-tags-box__head">
-                <span x-text="characterText('user_tags_title', '我的标签')">我的标签</span>
-                <button type="button" class="xy-btn xy-btn-ghost text-xs" :disabled="userTagSaving" @click="saveUserTags" x-text="userTagSaving ? characterText('saving_text', '保存中') : characterText('save_text', '保存')">保存</button>
-              </div>
-              <input class="xy-input text-sm" x-model="userTagDraft" :placeholder="characterText('user_tags_placeholder', '例如：已测、喜欢、慢热；逗号分隔')">
-              <div class="flex flex-wrap gap-2 mt-3" x-show="card?.user_tags?.length">
-                <template x-for="t in (card?.user_tags || [])" :key="t">
-                  <span class="chip chip-static" x-text="t"></span>
-                </template>
-              </div>
-            </div>
+
           </div>
 
           <section class="character-extra-panel p-6" x-show="extraFlags?.contest_id">

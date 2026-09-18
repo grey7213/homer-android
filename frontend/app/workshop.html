@@ -6,9 +6,9 @@
   <title>创作工坊 · 惑梦（Homer）</title>
   <link rel="icon" type="image/png" sizes="32x32" href="/assets/img/favicon-32.png?v=20260901-persistent-pages">
   <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
-  <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
-  <link rel="stylesheet" href="/app/assets/css/app.css?v=20260901-persistent-pages">
-  <script type="module" src="/app/assets/js/hub-pages.js?v=20260908-pr7"></script>
+  <script src="/assets/vendor/tailwindcss-browser.js?v=20260917-r8"></script>
+  <link rel="stylesheet" href="/app/assets/css/app.css?v=20260917-r8">
+  <script type="module" src="/app/assets/js/hub-pages.js?v=20260917-r8"></script>
   <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
   <style>
     .ws-create-mask { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 18px; background: rgba(7, 8, 15, .66); backdrop-filter: blur(8px); }
@@ -26,8 +26,8 @@
     .ws-create-option small { margin-top: 4px; color: rgba(237,233,254,.58); font-size: 11px; line-height: 1.45; }
     @media (max-width: 560px) { .ws-create-grid { grid-template-columns: 1fr; } .ws-create-option { min-height: 76px; } }
   </style>
-  <link rel="stylesheet" href="/assets/css/app-design.css?v=20260908-pr7">
-  <script defer src="/assets/js/option-picker.js?v=20260908-pr7"></script>
+  <link rel="stylesheet" href="/assets/css/app-design.css?v=20260917-r8">
+  <script defer src="/assets/js/option-picker.js?v=20260917-r8"></script>
 </head>
 <body class="min-h-screen hub-page hub-page--workshop">
   <div class="xy-stars-bg"></div>
@@ -49,6 +49,9 @@
               </div>
               <div class="ws-create-grid">
                 <a class="ws-create-option" href="/app/create.html"><span class="ws-create-option__icon">◉</span><span><strong>新建角色</strong><small>创建完整角色卡，可选择报名当前赛事。</small></span></a>
+                <a class="ws-create-option" href="/app/community-library.html?tab=mod&new=1"><span class="ws-create-option__icon">◇</span><span><strong>新建 Mod</strong><small>发布对话扩展作品</small></span></a>
+                <a class="ws-create-option" href="/app/community-library.html?tab=ui_template&new=1"><span class="ws-create-option__icon">▧</span><span><strong>新建界面模板</strong><small>发布界面与交互作品</small></span></a>
+                <a class="ws-create-option" href="/app/community-library.html?tab=preset&new=1"><span class="ws-create-option__icon">☷</span><span><strong>新建预设</strong><small>发布自己的预设作品</small></span></a>
               </div>
             </section>
           </div>
@@ -63,51 +66,13 @@
 
       <section class="app-page-pad max-w-6xl mx-auto ws-page" x-show="ready" x-transition.opacity>
 
-        <!-- 紧凑标题 + 实时统计条 -->
-        <div class="ws-headline">
-          <div class="ws-headline__lead">
-            <div class="ws-headline__eyebrow" x-text="emptyText('workshop_eyebrow', '创作者工作台')">创作者工作台</div>
-            <h2 class="ws-headline__title" x-text="emptyText('workshop_title', '把设定交给你，其余交给站点。')">把设定交给你，其余交给站点。</h2>
-            <p class="ws-headline__copy" x-text="emptyText('workshop_copy', '填写设定、开场白和封面即可发布；模型 API 由站点后台统一配置，不必操心额度和 Key。')">填写设定、开场白和封面即可发布；模型 API 由站点后台统一配置，不必操心额度和 Key。</p>
-          </div>
-          <dl class="ws-stats">
-            <div class="ws-stat">
-              <dt x-text="emptyText('workshop_stat_mine', '我的角色')">我的角色</dt>
-              <dd x-text="appsLoaded ? myTotal : '—'"></dd>
-            </div>
-            <div class="ws-stat">
-              <dt x-text="emptyText('workshop_stat_public', '已公开')">已公开</dt>
-              <dd x-text="appsLoaded ? publicCount : '—'"></dd>
-            </div>
-            <div class="ws-stat">
-              <dt x-text="emptyText('workshop_stat_library', '角色库')">角色库</dt>
-              <dd x-text="stats ? libraryTotal : '—'"></dd>
-            </div>
-          </dl>
-        </div>
-
-        <!-- 细行快捷导航（统一样式，图标引导，取代四彩卡） -->
-        <nav class="ws-quicknav" aria-label="创作入口">
-          <a class="ws-navitem" href="/app/create.html">
-            <span class="ws-navitem__ico" aria-hidden="true">＋</span>
-            <span class="ws-navitem__text"><strong x-text="emptyText('workshop_create_title', '新建角色')">新建角色</strong><em x-text="emptyText('workshop_create_copy', '从零捏一张角色卡')">从零捏一张角色卡</em></span>
-          </a>
-          <a class="ws-navitem" href="/app/my-apps.html">
-            <span class="ws-navitem__ico" aria-hidden="true">◉</span>
-            <span class="ws-navitem__text"><strong x-text="emptyText('workshop_my_roles_title', '我的角色')">我的角色</strong><em x-text="emptyText('workshop_my_roles_copy', '编辑公开状态与设定')">编辑公开状态与设定</em></span>
-          </a>
-          <a class="ws-navitem" href="/admin.html">
-            <span class="ws-navitem__ico" aria-hidden="true">✦</span>
-            <span class="ws-navitem__text"><strong x-text="emptyText('workshop_official_title', '官方角色')">官方角色</strong><em x-text="emptyText('workshop_official_copy', '管理员发布与维护')">管理员发布与维护</em></span>
-          </a>
-          <a class="ws-navitem" href="/app/explore.html">
-            <span class="ws-navitem__ico" aria-hidden="true">▦</span>
-            <span class="ws-navitem__text"><strong x-text="emptyText('workshop_library_title', '角色库')">角色库</strong><em x-text="syncedLibraryText()"></em></span>
-          </a>
-          <a class="ws-navitem" href="/app/data-merge.html">
-            <span class="ws-navitem__ico" aria-hidden="true">⇄</span>
-            <span class="ws-navitem__text"><strong x-text="emptyText('workshop_merge_title', '惑梦数据合并')">惑梦数据合并</strong><em x-text="emptyText('workshop_merge_copy', '合并世界书 / 正则并导出')">合并世界书 / 正则并导出</em></span>
-          </a>
+        <nav class="ws-quicknav ws-quicknav--focused" aria-label="创作入口">
+          <a class="ws-navitem ws-navitem--primary" href="/app/create.html"><span class="ws-navitem__ico" aria-hidden="true">＋</span><span class="ws-navitem__text"><strong>新建角色</strong><em>创建或导入角色卡</em></span></a>
+          <a class="ws-navitem" href="/app/my-apps.html"><span class="ws-navitem__ico" aria-hidden="true">◉</span><span class="ws-navitem__text"><strong>我的角色</strong><em>继续编辑与管理发布</em></span></a>
+          <a class="ws-navitem" href="/app/community-library.html?tab=mod"><span class="ws-navitem__ico" aria-hidden="true">◇</span><span class="ws-navitem__text"><strong>Mod</strong><em>浏览与创作扩展</em></span></a>
+          <a class="ws-navitem" href="/app/community-library.html?tab=ui_template"><span class="ws-navitem__ico" aria-hidden="true">▧</span><span class="ws-navitem__text"><strong>界面模板</strong><em>浏览与创作界面</em></span></a>
+          <a class="ws-navitem" href="/app/community-library.html?tab=preset"><span class="ws-navitem__ico" aria-hidden="true">☷</span><span class="ws-navitem__text"><strong>预设</strong><em>浏览与创作预设</em></span></a>
+          <a class="ws-navitem" href="/app/data-merge.html"><span class="ws-navitem__ico" aria-hidden="true">⇄</span><span class="ws-navitem__text"><strong>数据合并</strong><em>合并世界书 / 正则并导出</em></span></a>
         </nav>
 
 

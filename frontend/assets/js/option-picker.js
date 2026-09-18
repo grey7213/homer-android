@@ -4,7 +4,7 @@
   const source = document.currentScript?.src || new URL('/assets/js/option-picker.js', location.href).href;
   const css = document.createElement('link');
   css.rel = 'stylesheet';
-  css.href = new URL('../css/option-picker.css?v=20260908-pr7', source).href;
+  css.href = new URL('../css/option-picker.css?v=20260917-r8', source).href;
   document.head.append(css);
   let active = null;
   function el(tag, className, text) {

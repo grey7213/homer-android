@@ -1,4 +1,11 @@
 /* Android bundled UI · shared surfaces, states and touch targets. */
+/* R6: creation destinations are direct links, not nested under another menu. */
+.ws-quicknav.ws-quicknav--focused{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.ws-quicknav--focused .ws-navitem{min-width:0;min-height:96px;padding:16px;align-items:flex-start;gap:10px}
+.ws-quicknav--focused .ws-navitem__ico{width:32px;height:32px;flex:0 0 32px;font-size:20px}
+.ws-quicknav--focused .ws-navitem__text strong{font-size:15px;white-space:normal}
+.ws-quicknav--focused .ws-navitem__text em{white-space:normal;font-size:12px;line-height:1.5}
+@media(min-width:900px){.ws-quicknav.ws-quicknav--focused{grid-template-columns:repeat(3,minmax(0,1fr))}}
 :root {
   --ui-bg:#f6f5f8;--ui-panel:#fff;--ui-panel-soft:#f0eef3;--ui-text:#24212c;
   --ui-muted:#6b6676;--ui-line:#e4e0e9;--ui-accent:#b83262;--ui-accent-soft:#faeaf0;

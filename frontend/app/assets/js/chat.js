@@ -1,4 +1,4 @@
-import { api, ApiError, getCachedUser } from '/app/assets/js/app-core.js?v=20260908-pr7';
+import { api, ApiError, getCachedUser } from '/app/assets/js/app-core.js?v=20260917-r8';
 import { openChatTool } from '/assets/js/chat-tools.js';
 import { bindChatAppearance } from '/assets/js/chat-appearance.js';
 

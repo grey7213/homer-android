@@ -7,13 +7,13 @@
   <link rel="icon" type="image/png" sizes="32x32" href="/assets/img/favicon-32.png?v=20260901-persistent-pages">
   <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
   <link rel="apple-touch-icon" sizes="180x180" href="/assets/img/apple-touch-icon.png?v=20260901-persistent-pages">
-  <script src="/assets/vendor/tailwindcss-browser.js?v=20260713-local"></script>
-  <link rel="stylesheet" href="/assets/css/custom.css?v=20260901-persistent-pages">
-  <link rel="stylesheet" href="/assets/css/admin.css?v=20260817-mobile-model-pricing">
-  <script type="module" src="/assets/js/admin-app.js?v=20260908-pr7"></script>
+  <script src="/assets/vendor/tailwindcss-browser.js?v=20260917-r8"></script>
+  <link rel="stylesheet" href="/assets/css/custom.css?v=20260917-r8">
+  <link rel="stylesheet" href="/assets/css/admin.css?v=20260917-r8">
+  <script type="module" src="/assets/js/admin-app.js?v=20260917-r8"></script>
   <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
-  <link rel="stylesheet" href="/assets/css/app-design.css?v=20260908-pr7">
-  <script defer src="/assets/js/option-picker.js?v=20260908-pr7"></script>
+  <link rel="stylesheet" href="/assets/css/app-design.css?v=20260917-r8">
+  <script defer src="/assets/js/option-picker.js?v=20260917-r8"></script>
 </head>
 <body class="xy-admin min-h-screen">
   <div class="xy-stars-bg"></div>
@@ -1111,7 +1111,7 @@
           </div>
 
           <!-- 运营配置 -->
-          <section x-show="activeTab === 'community'" aria-label="社区管理">
+          <section x-show="activeTab === 'community'" aria-label="社区管理" data-community-admin>
             <div class="flex items-center justify-between mb-6"><div><h2 class="text-xl font-bold">社区举报</h2><p class="text-sm text-slate-400 mt-2">核查用户反馈，处理不合适的公开帖子。</p></div><button class="xy-btn xy-btn-ghost" @click="loadSocialReports()">刷新</button></div>
             <p class="text-red-400" role="alert" x-show="socialReportError" x-text="socialReportError"></p>
             <p class="xy-glass p-6" x-show="!socialReportError && !socialReports.length">暂无待处理的举报</p>

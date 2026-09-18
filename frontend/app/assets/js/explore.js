@@ -1,6 +1,6 @@
-import { api, requireAuth, getCachedUser, setCachedUser, ApiError } from '/app/assets/js/app-core.js?v=20260908-pr7';
-import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260908-pr7';
-import { readPageCache, writePageCache } from '/app/assets/js/page-cache.js?v=20260908-pr7';
+import { api, requireAuth, getCachedUser, setCachedUser, ApiError } from '/app/assets/js/app-core.js?v=20260917-r8';
+import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260917-r8';
+import { readPageCache, writePageCache } from '/app/assets/js/page-cache.js?v=20260917-r8';
 
 const DEFAULT_PAGE_SIZE = 12;
 const INITIAL_RANDOM_SEED = Math.floor(Math.random() * 2147483647);
@@ -406,8 +406,8 @@ function explorePage() {
         this.activeZone = state.activeZone === 'all' ? 'all' : 'clean';
         this.randomSeed = Number(state.randomSeed) || this.randomSeed;
         this.pictureless = !!state.pictureless;
-        this.cards = Array.isArray(state.cards) ? state.cards : [];
-        this.featuredPool = Array.isArray(state.featuredPool) ? state.featuredPool : [];
+        this.cards = Array.isArray(state.cards) ? state.cards.map(card=>({...card,description:compactPreview(card.description)})) : [];
+        this.featuredPool = Array.isArray(state.featuredPool) ? state.featuredPool.map(card=>({...card,description:compactPreview(card.description)})) : [];
         this.syncAdvancedForm();
         return state;
       } catch {
@@ -452,8 +452,8 @@ function explorePage() {
       this.activeZone = state.activeZone === 'all' ? 'all' : 'clean';
       this.randomSeed = Number(state.randomSeed) || this.randomSeed;
       this.pictureless = !!state.pictureless;
-      this.cards = state.cards.slice(0, 80);
-      this.featuredPool = Array.isArray(state.featuredPool) ? state.featuredPool.slice(0, 2) : [];
+      this.cards = state.cards.slice(0, 80).map(card=>({...card,description:compactPreview(card.description)}));
+      this.featuredPool = Array.isArray(state.featuredPool) ? state.featuredPool.slice(0, 2).map(card=>({...card,description:compactPreview(card.description)})) : [];
       this.syncAdvancedForm();
       return true;
     },
@@ -500,6 +500,7 @@ function compactPreview(value) {
   const quotedKeyCount = (text.match(/["']?[A-Za-z_][A-Za-z0-9_]*["']?\s*[:：]/g) || []).length;
   if (
     !text
+    || /^(?:点击|点此)?(?:开始对话|开始聊天|查看角色设定|查看详情)[。！!\.…\s]*$/.test(text)
     || /^(?:system|assistant|user|prompt|json)\s*[:：]/i.test(text)
     || bulletCount >= 3
     || quotedKeyCount >= 4
@@ -521,9 +522,7 @@ function normalizeCard(raw, copy = {}, index = 0) {
   const id = raw.id || raw.app_id || raw.appId || raw.installed_app_id;
   if (!id) return null;
   const tags = Array.isArray(raw.tags) ? raw.tags : (Array.isArray(raw.category) ? raw.category : []);
-  const description = firstCleanPreview(raw.summary, raw.intro, raw.subtitle, raw.description)
-    || copy.summary_fallback
-    || '点击查看角色设定';
+  const description = firstCleanPreview(raw.summary, raw.intro, raw.subtitle, raw.description);
   const flags = raw.feature_flags && typeof raw.feature_flags === 'object' ? raw.feature_flags : {};
   return {
     id: String(id),

@@ -1,15 +1,15 @@
-import { api, setToken, clearAuth, isLoggedIn, ApiError } from '/app/assets/js/app-core.js?v=20260908-pr7';
-import { loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260908-pr7';
+import { api, setToken, clearAuth, isLoggedIn, ApiError } from '/app/assets/js/app-core.js?v=20260917-r8';
+import { loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260917-r8';
 
 function safeNextPath() {
-  const value = new URLSearchParams(location.search).get('next') || '/app/';
+  const value = new URLSearchParams(location.search).get('next') || '/app/community.html';
   try {
     const target = new URL(value, location.origin);
     if (target.origin === location.origin && target.pathname.startsWith('/app/')) {
       return target.pathname + target.search + target.hash;
     }
   } catch {}
-  return '/app/';
+  return '/app/community.html';
 }
 
 async function publicPost(path, body) {

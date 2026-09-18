@@ -4291,14 +4291,14 @@ function buildRuntimeUi() {
     if (!document.querySelector('#homer-option-picker-script')) {
         const picker = document.createElement('script');
         picker.id = 'homer-option-picker-script';
-        picker.src = siteUrl('/assets/js/option-picker.js?v=20260908-pr7');
+        picker.src = siteUrl('/assets/js/option-picker.js?v=20260917-r8');
         document.head.append(picker);
     }
     if (!document.querySelector('#homer-chat-design')) {
         const stylesheet = document.createElement('link');
         stylesheet.id = 'homer-chat-design';
         stylesheet.rel = 'stylesheet';
-        stylesheet.href = siteUrl('/assets/css/chat-design.css?v=20260908-pr7');
+        stylesheet.href = siteUrl('/assets/css/chat-design.css?v=20260917-r8');
         document.head.append(stylesheet);
     }
     document.querySelector('#homer-runtime-root')?.remove();

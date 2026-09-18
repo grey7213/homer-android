@@ -1,6 +1,6 @@
 /* 惑梦（Homer） Web App · 角色卡编辑器参考设计系统 */
 
-@import url('/assets/css/custom.css?v=20260901-persistent-pages');
+@import url('/assets/css/custom.css?v=20260917-r8');
 
 /* 盒模型复位。此前只有 Tailwind 的 preflight 提供 border-box，导致没加载
    tailwindcss-browser.js 的页面（explore.html / farm.html）里 .app-nav__item
@@ -1853,7 +1853,9 @@ html, body { font-size: 16px; line-height: 1.5; color: var(--xy-app-text); }
   .app-bottom-nav {
     position: fixed;
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
     left: 0;
     right: 0;
     bottom: 0;
@@ -3825,7 +3827,9 @@ select.xy-input option,
   }
   .app-bottom-nav {
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
     padding: 7px 8px calc(7px + env(safe-area-inset-bottom));
   }
 }

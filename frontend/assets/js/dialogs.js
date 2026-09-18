@@ -4,7 +4,7 @@ function ensureStyle() {
   if (document.querySelector('#homer-action-dialog-style')) return;
   const style = document.createElement('link');
   style.id = 'homer-action-dialog-style'; style.rel = 'stylesheet';
-  style.href = new URL('../css/dialogs.css?v=20260908-pr7', import.meta.url).href;
+  style.href = new URL('../css/dialogs.css?v=20260917-r8', import.meta.url).href;
   document.head.append(style);
 }
 function node(tag, className, text) {

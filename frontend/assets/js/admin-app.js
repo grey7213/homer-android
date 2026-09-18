@@ -1,6 +1,6 @@
-import { confirmAction, showMessage } from '/assets/js/dialogs.js?v=20260908-pr7';
+import { confirmAction, showMessage } from '/assets/js/dialogs.js?v=20260917-r8';
 // 惑梦（Homer） 管理后台 Alpine.js 应用
-import { api, isLoggedIn, formatDateTime, ApiError } from '/assets/js/api.js?v=20260908-pr7';
+import { api, isLoggedIn, formatDateTime, ApiError } from '/assets/js/api.js?v=20260917-r8';
 
 function adminPanel() {
   return {
@@ -19,6 +19,7 @@ function adminPanel() {
     errorDetail: '',
 
     tabs: [
+      { id: 'community', label: '社区管理', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 3h18v14H9l-6 4V3z"/></svg>' },
       { id: 'notifications', label: '通知管理', icon: '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M6 8a6 6 0 0112 0v8l2 2H4l2-2V8m4 12h4"/></svg>' },
       { id: 'stats', label: '数据总览', icon: '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>' },
       { id: 'users', label: '用户管理', icon: '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-9a4 4 0 11-8 0 4 4 0 018 0zM21 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>' },
@@ -36,7 +37,6 @@ function adminPanel() {
       { key: 'home', label: '首页' },
       { key: 'workshop', label: '创作工坊' },
       { key: 'histories', label: '历史会话' },
-      { key: 'group', label: '群聊' },
       { key: 'me', label: '我的' },
       { key: 'favorites', label: '我的收藏' },
       { key: 'image', label: '图片聊天' },
@@ -46,7 +46,7 @@ function adminPanel() {
       { key: 'info', label: '信息中心' },
     ],
     mobileNavLabelItems: [
-      { key: 'group', label: '群聊' },      { key: 'home', label: '首页' },
+      { key: 'home', label: '首页' },
       { key: 'workshop', label: '创作' },
       { key: 'favorites', label: '收藏' },
       { key: 'me', label: '我的' },
@@ -558,36 +558,6 @@ function adminPanel() {
       { key: 'load_existing_failed', label: '读取角色失败', max: 80 },
     ],
 
-    groupChatCopyItems: [
-      { key: 'page_title', label: '页面标题', max: 40 },
-      { key: 'empty_groups', label: '无群聊提示', max: 80 },
-      { key: 'member_count_suffix', label: '成员数量后缀', max: 20 },
-      { key: 'last_message_default', label: '列表默认预览', max: 60 },
-      { key: 'empty_current_title', label: '未选群聊标题', max: 80 },
-      { key: 'empty_current_hint', label: '未选群聊说明', max: 120 },
-      { key: 'delete_group_button', label: '删除群聊按钮', max: 40 },
-      { key: 'no_current_text', label: '空态提示', max: 100 },
-      { key: 'user_speaker', label: '用户发言人', max: 30 },
-      { key: 'assistant_speaker', label: '角色发言人兜底', max: 30 },
-      { key: 'loading_speaker', label: '生成中发言人', max: 30 },
-      { key: 'force_reply_label', label: '指定发言标签', max: 40 },
-      { key: 'input_placeholder', label: '输入框占位', max: 120 },
-      { key: 'send_button', label: '发送按钮', max: 30 },
-      { key: 'create_panel_title', label: '创建面板标题', max: 50 },
-      { key: 'group_name_placeholder', label: '群聊名称占位', max: 80 },
-      { key: 'create_button', label: '创建按钮', max: 40 },
-      { key: 'search_placeholder', label: '搜索占位', max: 80 },
-      { key: 'search_button', label: '搜索按钮', max: 30 },
-      { key: 'role_card_fallback', label: '角色卡兜底', max: 60 },
-      { key: 'max_roles_error', label: '最多角色提示', max: 80 },
-      { key: 'min_roles_error', label: '最少角色提示', max: 80 },
-      { key: 'create_success', label: '创建成功提示', max: 80 },
-      { key: 'create_failed', label: '创建失败提示', max: 80 },
-      { key: 'delete_confirm_template', label: '删除确认模板', max: 120 },
-      { key: 'delete_success', label: '删除成功提示', max: 60 },
-      { key: 'send_failed', label: '发送失败提示', max: 80 },
-      { key: 'reply_failed', label: '回复失败提示', max: 80 },
-    ],
 
     stats: null,
     lastStatsRefreshed: null,
@@ -867,7 +837,7 @@ function adminPanel() {
 
     async loadSocialReports() {
       this.socialReportError = '';
-      try { const data = await api.socialReports(); this.socialReports = data?.data?.list || []; }
+      try { const module = await import('./community-admin.js?v=20260917-r8'); await module.mountCommunityAdmin(document.querySelector('[data-community-admin]')); }
       catch (err) { this.socialReportError = err.message || '举报列表加载失败'; }
     },
     async removeReportedPost(report) {

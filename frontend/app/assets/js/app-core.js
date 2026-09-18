@@ -1,6 +1,6 @@
 // 惑梦（Homer） Web App 共享核心 - 在所有 /app/*.html 顶部加载
-import './notifications.js?v=20260908-pr7';
-import { api as baseApi, getToken, setToken, clearAuth, isLoggedIn, getCachedUser, setCachedUser, formatDateTime, ApiError } from '/assets/js/api.js?v=20260908-pr7';
+import './notifications.js?v=20260917-r8';
+import { api as baseApi, getToken, setToken, clearAuth, isLoggedIn, getCachedUser, setCachedUser, formatDateTime, ApiError } from '/assets/js/api.js?v=20260917-r8';
 
 function redirectAfterUnauthorized() {
   clearAuth();
@@ -163,7 +163,11 @@ export const api = {
     const qs = new URLSearchParams(params);
     return rawRequest(`/console/api/web/creator-leaderboard?${qs}`);
   },
-  social: (path, options = {}) => rawRequest('/console/api/web/social/' + path, options),
+  social: async (path, options = {}) => {
+    const local = await import('./community-local.js?v=20260917-r8');
+    if (local.routeLocally()) return local.handleLocal(path, options);
+    return rawRequest('/console/api/web/social/' + path, options);
+  },
   creatorContests: () => rawRequest('/console/api/web/creator-contests'),
   favorites: (params = {}) => {
     const qs = new URLSearchParams(params);
@@ -303,7 +307,7 @@ export const api = {
   editMessage: (messageId, content) => rawRequest(`/console/api/web/messages/${encodeURIComponent(messageId)}/edit`, { method: 'POST', body: { content } }),
   rollbackMessage: (messageId) => rawRequest(`/console/api/web/messages/${encodeURIComponent(messageId)}/rollback`, { method: 'POST', body: {} }),
   deleteMessage: (messageId) => rawRequest(`/console/api/web/messages/${encodeURIComponent(messageId)}/delete`, { method: 'POST', body: {} }),
-  // 群聊
+  // 保留已发布的群聊接口；当前产品只隐藏入口，不破坏旧链接或存量会话。
   groupChats: () => rawRequest('/console/api/web/group-chats'),
   createGroupChat: (payload) => rawRequest('/console/api/web/group-chats', { method: 'POST', body: payload }),
   groupChat: (groupId) => rawRequest(`/console/api/web/group-chats/${encodeURIComponent(groupId)}`),

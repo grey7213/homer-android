@@ -1,10 +1,9 @@
-import { installDialoguePrewarm } from '/app/assets/js/dialogue-prewarm.js?v=20260908-pr7';
+import { installDialoguePrewarm } from '/app/assets/js/dialogue-prewarm.js?v=20260917-r8';
 
 const NAV_ITEMS = [
   { key: 'explore', label: '探索', href: '/app/explore.html', icon: 'M3 12l9-9 9 9M5 10v10h14V10' },
   { key: 'workshop', label: '创作工坊', href: '/app/workshop.html', icon: 'M12 5v14m7-7H5' },
   { key: 'histories', label: '历史会话', href: '/app/histories.html', icon: 'M12 8v4l3 3M21 12a9 9 0 11-18 0 9 9 0 0118 0z' },
-  { key: 'group', label: '群聊', href: '/app/group-chat.html', icon: 'M17 20h5v-2a4 4 0 00-4-4h-1M9 20H4v-2a4 4 0 014-4h1m0-4a4 4 0 118 0 4 4 0 01-8 0zm8 2a3 3 0 100-6' },
   { key: 'me', label: '我的', href: '/app/me.html', icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM4 21a8 8 0 0116 0' },
   { key: 'favorites', label: '我的收藏', href: '/app/favorites.html', icon: 'M11.48 3.5l.52 1.06.52-1.06a5.5 5.5 0 017.78 7.78L12 20.08l-8.8-8.8a5.5 5.5 0 017.78-7.78z' },
   { key: 'image', label: '图片聊天', href: '/app/image-chat.html', icon: 'M4 16l4-4 3 3 5-6 4 7M4 6h16v12H4z' },
@@ -14,13 +13,16 @@ const NAV_ITEMS = [
   { key: 'info', label: '信息中心', href: '/app/info.html', icon: 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z' },
 ];
 
+const COMMUNITY_ITEM = {key:'community',label:'社区',href:'/app/community.html',icon:'M4 4h16v12H9l-5 4z'};
 const MOBILE_ITEMS = [
   { key: 'explore', label: '探索', href: '/app/explore.html', icon: NAV_ITEMS[0].icon },
-  { key: 'group', label: '群聊', href: '/app/group-chat.html', icon: NAV_ITEMS[3].icon },
+  COMMUNITY_ITEM,
   { key: 'workshop', label: '创作', href: '/app/workshop.html', icon: NAV_ITEMS[1].icon },
   { key: 'histories', label: '历史对话', href: '/app/histories.html', icon: NAV_ITEMS[2].icon },
   { key: 'me', label: '我的', href: '/app/me.html', icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM4 21a8 8 0 0116 0' },
 ];
+
+NAV_ITEMS.splice(1,0,COMMUNITY_ITEM);
 
 const PULL_REFRESH_PATHS = new Set([
   '/app/',
@@ -38,7 +40,7 @@ const PULL_REFRESH_PATHS = new Set([
 const PULL_REFRESH_ASSET = '/assets/img/brand/pull-refresh-';
 const PULL_REFRESH_VERSION = '?v=20260901-persistent-pages';
 const HOST_CHANNEL = 'homer:dialogue-host:v1';
-const PREFETCH_ROUTES = ['/app/explore.html', '/app/favorites.html', '/app/workshop.html', '/app/me.html'];
+const PREFETCH_ROUTES = ['/app/community.html', '/app/explore.html', '/app/favorites.html', '/app/workshop.html', '/app/me.html'];
 
 let publicSiteSettingsPromise = null;
 
@@ -101,7 +103,7 @@ function sidebarUtilityHtml(settings = null) {
 
 export function sidebarHtml(active = 'home', settings = null) {
   const nav = NAV_ITEMS.map(item => `
-    <a href="${item.href}" class="app-nav__item ${item.key === active ? 'is-active' : ''}">
+    <a href="${item.href}" ${item.key==='community'?'data-community-nav':''} class="app-nav__item ${item.key === active ? 'is-active' : ''}">
       ${svg(item.icon)}<span>${navLabel(item, settings)}</span>
     </a>`).join('');
   return `
@@ -124,7 +126,7 @@ export function sidebarHtml(active = 'home', settings = null) {
 
 export function bottomNavHtml(active = 'home', settings = null) {
   return MOBILE_ITEMS.map(item => `
-    <a href="${item.href}" class="${item.key === active ? 'is-active' : ''}">
+    <a href="${item.href}" ${item.key==='community'?'data-community-nav':''} class="${item.key === active ? 'is-active' : ''}">
       ${svg(item.icon)}<span>${navLabel(item, settings, true)}</span>
     </a>`).join('');
 }
@@ -362,5 +364,8 @@ export function injectLayout(active = 'home') {
       if (bottom) bottom.innerHTML = bottomNavHtml(active, settings);
       bindShellUtilities(document);
     }
-  }).catch(() => {});
+  }).catch(() => {}).finally(() => {
+    // Optional community controls never delay the existing page's first render.
+    import('./community-controls.js?v=20260917-r8').then(module=>module.installCommunityExtensions(active)).catch(()=>{});
+  });
 }
