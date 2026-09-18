@@ -604,7 +604,8 @@ public final class HomerActivity extends Activity {
 
     /**
      * Cold start restores the last page the user visited. A stored conversation
-     * keeps its instant local snapshot; anything else falls back to explore.
+     * keeps its instant local snapshot; a first/untrusted launch uses the app
+     * entry, which opens community when the deployed backend reports it ready.
      */
     static String startupUrl(String serverBaseUrl, String stored) {
         if (SafeUrls.isTrustedNavigation(serverBaseUrl, stored)) {
@@ -617,7 +618,7 @@ public final class HomerActivity extends Activity {
                 // Fall through to the default app entry.
             }
         }
-        return serverBaseUrl + "app/explore.html";
+        return serverBaseUrl + "app/";
     }
 
     private void pollLiveReady() {
