@@ -74,6 +74,11 @@ final class ApkUpdateController implements AutoCloseable {
     void check(boolean manual) {
         if (closed || busy || (dialog != null && dialog.isShowing())) return;
         if (!foreground) { if (manual) pendingUi = () -> check(true); return; }
+        if (BuildConfig.DEBUG) {
+            if (manual) info("Debug 验收版本", "当前版本 " + BuildConfig.VERSION_NAME
+                    + "\n验收包不通过正式版更新渠道升级。请安装后续提供的同包名、同签名验收包；账号和聊天数据会保留。正式版请使用正式更新渠道。");
+            return;
+        }
         long now = System.currentTimeMillis();
         long elapsed = now - preferences.getLong("last_check", 0);
         if (!manual && elapsed >= 0 && elapsed < CHECK_INTERVAL_MS) return;

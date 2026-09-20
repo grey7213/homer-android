@@ -56,6 +56,9 @@ tasks.register("syncHomerClientAssets", Sync) {
         into "client/runtime"
         // The user explicitly removed Yuzi Phone from the active product.
         exclude "scripts/extensions/third-party/st-yuzi-phone/**"
+        // Memory Books is shipped as index.build.js; its build-only npm tree
+        // must not become public WebView resources after rebuilding the plugin.
+        exclude "scripts/extensions/third-party/SillyTavern-MemoryBooks/node_modules/**"
     }
     doLast {
         File root = generatedClientAssets.get().asFile

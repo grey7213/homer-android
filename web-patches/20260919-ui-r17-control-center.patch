@@ -1,0 +1,593 @@
+diff --git a/frontend/app/assets/js/chat.js b/frontend/app/assets/js/chat.js
+index ee654f8ecf60f6b0934df461fe1557e39b91447d..d8e2f93461d87bef232f102628c85956dd440a91 100644
+--- a/frontend/app/assets/js/chat.js
++++ b/frontend/app/assets/js/chat.js
+@@ -2,6 +2,7 @@ import { api, ApiError, getCachedUser } from '/app/assets/js/app-core.js?v=20260
+ import { openChatTool } from '/assets/js/chat-tools.js';
+ import { bindChatAppearance } from '/assets/js/chat-appearance.js';
+ import { settingsPage } from '/assets/js/chat-settings-page.js';
++import { controlCenter } from '/assets/js/chat-control-center.js';
+ import { fillModelSelect } from '/assets/js/model-catalog.js';
+ import { messageActionIcon, positionChatMenu } from '/assets/js/chat-menu.js';
+ 
+@@ -32,6 +33,7 @@ const menuButton = document.querySelector('#preview-menu');
+ const settingsButton = document.querySelector('#preview-settings');
+ const leftDrawer = document.querySelector('#preview-left-drawer');
+ const rightDrawer = document.querySelector('#preview-settings-drawer');
++controlCenter(rightDrawer);
+ const leftClose = document.querySelector('#preview-left-close');
+ const rightClose = document.querySelector('#preview-settings-close');
+ const scrim = document.querySelector('#preview-scrim');
+@@ -68,7 +70,6 @@ const modelDialog = document.querySelector('#preview-model-dialog');
+ settingsPage(modelDialog, { shell: modelDialog.querySelector('form'), head: modelDialog.querySelector('header'), footer: modelDialog.querySelector('footer'), title: '模型设置' });
+ const modelForm = document.querySelector('#preview-model-form');
+ const modelSelect = document.querySelector('#preview-model-select');
+-const modelClose = document.querySelector('#preview-model-close');
+ const modelCancel = document.querySelector('#preview-model-cancel');
+ 
+ let readyTimer = 0;
+@@ -792,7 +793,6 @@ for (const button of document.querySelectorAll('[data-chat-tool]')) {
+     openChatTool(button.dataset.chatTool, { container: previewMessages, selector: '.preview-message', isUser: element => element.classList.contains('is-user'), title: previewTitle.textContent });
+   });
+ }
+-modelClose.addEventListener('click', () => modelDialog.close());
+ modelCancel.addEventListener('click', () => modelDialog.close());
+ for (const section of document.querySelectorAll('[data-runtime-section]')) {
+   section.addEventListener('click', () => {
+diff --git a/frontend/assets/css/chat-design.css b/frontend/assets/css/chat-design.css
+index 77150c49faee16bed4e336827e5680f10ffc9ea4..49ad23060503523e5f5aa0069346e5d215884985 100644
+--- a/frontend/assets/css/chat-design.css
++++ b/frontend/assets/css/chat-design.css
+@@ -152,22 +152,22 @@ body.homer-runtime .homer-sheet-dialog input[type=range]::-webkit-slider-thumb,b
+ body.homer-runtime .homer-sheet-dialog input[type=range]::-moz-range-track,body.has-preview .preview-model-form input[type=range]::-moz-range-track{height:4px;border:0;border-radius:4px;background:#d9cceb}
+ body.homer-runtime .homer-sheet-dialog input[type=range]::-moz-range-thumb,body.has-preview .preview-model-form input[type=range]::-moz-range-thumb{width:16px;height:16px;border:3px solid #fff;border-radius:50%;background:#7c49ef}
+ /* Reference drawer: identity header, quiet full-width rows, bottom shortcuts. */
+-body.has-preview #preview-settings-drawer,body.homer-runtime #homer-right-drawer{display:flex!important;flex-direction:column;padding-top:12px!important}
+-body.has-preview #preview-settings-drawer *,body.homer-runtime #homer-right-drawer *{font-family:system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif!important;text-shadow:none!important}
++body.has-preview #preview-settings-drawer:not(.homer-control-center),body.homer-runtime #homer-right-drawer:not(.homer-control-center){display:flex!important;flex-direction:column;padding-top:12px!important}
++body.has-preview #preview-settings-drawer:not(.homer-control-center) *,body.homer-runtime #homer-right-drawer:not(.homer-control-center) *{font-family:system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif!important;text-shadow:none!important}
+ body.homer-runtime #homer-right-drawer .homer-chat-shortcuts i{font-family:"Font Awesome 6 Free"!important}
+-body.has-preview #preview-settings-drawer .preview-drawer-head,body.homer-runtime #homer-right-drawer .homer-drawer__head{min-height:64px;padding:10px 16px!important;border-bottom:1px solid #eee;flex-shrink:0;gap:4px}
++body.has-preview #preview-settings-drawer:not(.homer-control-center) .preview-drawer-head,body.homer-runtime #homer-right-drawer:not(.homer-control-center) .homer-drawer__head{min-height:64px;padding:10px 16px!important;border-bottom:1px solid #eee;flex-shrink:0;gap:4px}
+ .homer-chat-identity{display:flex;align-items:center;gap:9px;min-width:0;flex:1}
+ .homer-chat-identity__avatar{width:40px;height:40px;min-width:40px;border-radius:50%;object-fit:cover}
+ body.has-preview .homer-chat-identity strong,body.homer-runtime .homer-chat-identity .homer-drawer__title{font-size:15px!important;line-height:1.4;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;margin:0!important;color:#444!important}
+-body.has-preview #preview-settings-close,body.homer-runtime #homer-right-drawer .homer-icon-button{width:32px!important;min-width:32px!important;background:transparent!important;color:#888!important}
+-body.has-preview #preview-settings-drawer .preview-setting-list,body.homer-runtime #homer-right-drawer .homer-setting-list{padding:8px 28px!important;gap:0!important;flex-shrink:0}
+-body.has-preview #preview-settings-drawer .preview-setting-row,body.homer-runtime #homer-right-drawer .homer-setting-row{display:flex!important;align-items:center;gap:8px!important;min-height:52px!important;padding:8px 4px!important;border:0!important}
+-body.has-preview #preview-settings-drawer .preview-setting-row__icon,body.homer-runtime #homer-right-drawer .homer-setting-row__icon{display:none!important}
+-body.has-preview #preview-settings-drawer .preview-setting-row__copy,body.homer-runtime #homer-right-drawer .homer-setting-row__copy{display:flex!important;align-items:center;justify-content:space-between;gap:8px;min-width:0;flex:1}
+-body.has-preview #preview-settings-drawer .preview-setting-row strong,body.homer-runtime #homer-right-drawer .homer-setting-row__label{flex-shrink:0;font-size:15px!important;font-weight:500!important;color:#505050!important}
+-body.has-preview #preview-settings-drawer .preview-setting-row small,body.homer-runtime #homer-right-drawer .homer-setting-row__description{max-width:112px;min-width:0;font-size:13px!important;color:#68616f!important;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin:0!important}
+-body.has-preview #preview-settings-drawer .preview-setting-row>span:last-child,body.homer-runtime #homer-right-drawer .homer-setting-row__chevron{color:#aaa!important;font-size:26px!important;flex-shrink:0}
+-body.has-preview #preview-settings-drawer .preview-privacy-note,body.homer-runtime #homer-right-drawer .homer-privacy-note{margin:8px 28px 18px!important;padding:0!important;background:none!important;border:0!important;font-size:11px!important;color:#888!important;flex:0 0 auto}
++body.has-preview #preview-settings-drawer:not(.homer-control-center) #preview-settings-close,body.homer-runtime #homer-right-drawer:not(.homer-control-center) .homer-icon-button{width:32px!important;min-width:32px!important;background:transparent!important;color:#888!important}
++body.has-preview #preview-settings-drawer:not(.homer-control-center) .preview-setting-list,body.homer-runtime #homer-right-drawer:not(.homer-control-center) .homer-setting-list{padding:8px 28px!important;gap:0!important;flex-shrink:0}
++body.has-preview #preview-settings-drawer:not(.homer-control-center) .preview-setting-row,body.homer-runtime #homer-right-drawer:not(.homer-control-center) .homer-setting-row{display:flex!important;align-items:center;gap:8px!important;min-height:52px!important;padding:8px 4px!important;border:0!important}
++body.has-preview #preview-settings-drawer:not(.homer-control-center) .preview-setting-row__icon,body.homer-runtime #homer-right-drawer:not(.homer-control-center) .homer-setting-row__icon{display:none!important}
++body.has-preview #preview-settings-drawer:not(.homer-control-center) .preview-setting-row__copy,body.homer-runtime #homer-right-drawer:not(.homer-control-center) .homer-setting-row__copy{display:flex!important;align-items:center;justify-content:space-between;gap:8px;min-width:0;flex:1}
++body.has-preview #preview-settings-drawer:not(.homer-control-center) .preview-setting-row strong,body.homer-runtime #homer-right-drawer:not(.homer-control-center) .homer-setting-row__label{flex-shrink:0;font-size:15px!important;font-weight:500!important;color:#505050!important}
++body.has-preview #preview-settings-drawer:not(.homer-control-center) .preview-setting-row small,body.homer-runtime #homer-right-drawer:not(.homer-control-center) .homer-setting-row__description{max-width:112px;min-width:0;font-size:13px!important;color:#68616f!important;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin:0!important}
++body.has-preview #preview-settings-drawer:not(.homer-control-center) .preview-setting-row>span:last-child,body.homer-runtime #homer-right-drawer:not(.homer-control-center) .homer-setting-row__chevron{color:#aaa!important;font-size:26px!important;flex-shrink:0}
++body.has-preview #preview-settings-drawer:not(.homer-control-center) .preview-privacy-note,body.homer-runtime #homer-right-drawer:not(.homer-control-center) .homer-privacy-note{margin:8px 28px 18px!important;padding:0!important;background:none!important;border:0!important;font-size:11px!important;color:#888!important;flex:0 0 auto}
+ .homer-chat-shortcuts{margin-top:auto;display:flex;justify-content:space-around;padding:16px 18px max(20px,env(safe-area-inset-bottom));gap:12px;flex-shrink:0}
+ .homer-chat-shortcuts button{display:flex;flex-direction:column;align-items:center;gap:11px;min-width:60px;min-height:78px;padding:0!important;background:transparent!important;border:0!important;box-shadow:none!important;color:#505050!important;font:600 15px/1.4 system-ui!important;text-shadow:none!important;-webkit-tap-highlight-color:transparent}
+ .homer-chat-shortcuts :is(svg,i){display:grid;place-items:center;box-sizing:content-box;width:20px;height:20px;padding:11px;border-radius:50%;background:#f2f2f2;font-size:20px}
+@@ -248,7 +248,7 @@ body.homer-runtime .homer-message-menu__action.is-danger{color:#ad2440!important
+ body.homer-runtime .homer-header-button .fa-gear{font-family:"Font Awesome 6 Free"!important;font-weight:900;font-size:22px}
+ 
+ /* Drawer summaries stay on the same row; long values remain available in their dialogs. */
+-body.has-preview #preview-settings-drawer .preview-privacy-note,
++body.has-preview #preview-settings-drawer:not(.homer-control-center) .preview-privacy-note,
+ body.homer-runtime #homer-right-drawer .homer-privacy-note{color:#68616f!important;font-size:12px!important;line-height:1.45}
+ body.has-preview .preview-site-nav a svg,body.homer-runtime .homer-main-navigation__icon{width:20px!important;min-width:20px!important;flex:0 0 20px!important;font-size:20px!important;padding:0!important}
+ body.homer-runtime .homer-main-navigation__label{white-space:nowrap!important}
+diff --git a/frontend/assets/css/chat-settings-page.css b/frontend/assets/css/chat-settings-page.css
+index c276d1efbb592d90fe318f4352c895d3ab1f0a97..1ae010d04cb392f8a1d4ad4404f4815f8de36c80 100644
+--- a/frontend/assets/css/chat-settings-page.css
++++ b/frontend/assets/css/chat-settings-page.css
+@@ -1,85 +1,183 @@
+-/* Settings destinations: back/title, independently scrolling content, actions.
+-   Kept separate from transient pickers and destructive confirmations. */
+-html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] {
+-  --settings-bg:#f3f3f4;--settings-panel:#fff;--settings-text:#292432;--settings-muted:#665f70;
+-  position:fixed!important;inset:0!important;box-sizing:border-box!important;
+-  width:100%!important;max-width:none!important;height:100dvh!important;max-height:100dvh!important;
+-  margin:0!important;padding:0!important;border:0!important;border-radius:0!important;
+-  background:var(--settings-bg)!important;color:var(--settings-text)!important;
+-  overflow:hidden!important;box-shadow:none!important;text-align:left!important;
++/* R16: one owner for settings pages; card styles and transient pickers stay separate. */
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page){
++ --settings-bg:#f2f2f7;--settings-panel:#fff;--settings-text:#1c1c1e;--settings-muted:#626268;--settings-line:#e5e5ea;--settings-fill:#eeeef0;--settings-accent:#0066d6;--settings-positive:#248a3d;--settings-danger:#c9342d;
++ position:fixed!important;inset:0!important;width:100%!important;max-width:none!important;height:100dvh!important;max-height:100dvh!important;margin:0!important;padding:0!important;border:0!important;border-radius:0!important;box-shadow:none!important;overflow:hidden!important;background:var(--settings-bg)!important;color:var(--settings-text)!important;text-align:left!important;text-shadow:none!important;color-scheme:light
+ }
+-html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page):not([open]){display:none!important}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-settings-page__shell {display:flex!important;flex-direction:column!important;height:100%!important;max-height:none!important;width:100%!important;padding:0!important;margin:0!important;gap:0!important;border-radius:0!important;background:var(--settings-bg)!important;overflow:hidden!important}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-settings-page__head {display:grid!important;grid-template-columns:48px minmax(0,1fr) 48px;align-items:center!important;flex:none;min-height:56px!important;padding:4px 8px!important;margin:0!important;gap:0!important;border:0!important;background:var(--settings-bg)!important}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-settings-page__head h2 {margin:0!important;text-align:center;font:650 18px/1.4 system-ui!important;color:var(--settings-text)!important}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-settings-page__head .homer-settings-page__back {width:44px!important;min-width:44px!important;height:44px!important;min-height:44px!important;padding:0!important;font:32px/1 system-ui!important;border:0!important;background:transparent!important;border-radius:50%!important;color:var(--settings-text)!important;box-shadow:none!important}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-settings-page__content {flex:1;min-height:0;overflow:auto!important;overscroll-behavior:contain;width:100%;max-width:680px;align-self:center;box-sizing:border-box;padding:8px 16px 20px;scrollbar-width:thin}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-settings-page__content>.popup-content {width:100%!important;max-height:none!important;overflow:visible!important;padding:0!important;margin:0!important}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-settings-page__footer {position:static!important;flex:none!important;display:flex!important;flex-wrap:wrap!important;align-items:center!important;justify-content:center!important;gap:8px!important;box-sizing:border-box;width:100%!important;margin:0 auto!important;padding:10px max(16px,calc((100% - 648px)/2)) max(10px,env(safe-area-inset-bottom))!important;background:var(--settings-bg)!important;border:0!important;border-radius:0!important}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-settings-page__footer :is(button,a,.menu_button) {flex:1;min-width:100px;min-height:44px!important;max-width:360px!important;margin:0!important;padding:10px!important;border:0!important;border-radius:24px!important;font:500 14px/1.4 system-ui!important;box-sizing:border-box;background:#e5e3ea!important;color:#423c4b!important;text-align:center;white-space:normal!important;text-shadow:none!important;box-shadow:none!important}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-settings-page__footer :is(.homer-primary-button,.is-primary,#preview-model-save,.popup-button-custom:first-child){background:#6750a4!important;color:#fff!important}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] button:disabled{opacity:.5;cursor:not-allowed}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] [hidden]{display:none!important}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] :is(.homer-sheet-dialog__notice,.homer-appearance-note,.homer-memory-intro){background:none!important;border:0!important;padding:0!important;margin:0 0 14px!important;font:14px/1.5 system-ui!important;color:var(--settings-muted)!important}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] :is(.homer-model-fields,.homer-appearance-fields){display:grid;gap:10px!important;margin-top:14px!important}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] :is(.homer-model-field,.homer-model-select-field,.homer-appearance-color,.homer-memory-step){border:0!important;border-radius:12px!important;background:var(--settings-panel)!important;padding:12px!important;margin:0 0 10px!important;gap:6px!important;color:var(--settings-text)!important}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] :is(.homer-model-field__label,.homer-model-field__head,.homer-mod-row strong){font:550 16px/1.4 system-ui!important;color:var(--settings-text)!important}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-model-field__number{width:72px!important;height:36px!important;min-height:36px!important;background:#f3f2f6!important;border:0!important;border-radius:8px!important;color:var(--settings-text)!important;font:14px system-ui!important}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-model-field__range{min-height:36px!important;accent-color:#6750a4!important}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-model-field__hint{font:13px/1.5 system-ui!important;color:var(--settings-muted)!important}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-mod-list{display:block!important}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-mod-row__main{position:relative;min-width:0;gap:16px!important;display:flex;align-items:center;justify-content:space-between;width:100%;min-height:64px;margin:0!important;padding:0!important}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-mod-row input[type=checkbox]{position:absolute!important;right:0;top:50%;transform:translateY(-50%);width:44px!important;height:44px!important;min-height:44px!important;opacity:0!important;margin:0!important;cursor:pointer;z-index:1}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-mod-row__copy{min-width:0;overflow-wrap:anywhere}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-memory-tabs{display:flex;position:sticky;top:-8px;z-index:2;background:var(--settings-bg);gap:0;margin:0 -4px 12px;border-bottom:1px solid #ddd9e3}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-memory-tabs button{flex:1;min-width:0;padding:10px 4px!important;min-height:44px!important;background:transparent!important;border:0!important;border-bottom:2px solid transparent!important;border-radius:0!important;font:14px/1.4 system-ui!important;color:#665f70!important}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-memory-tabs button[aria-pressed=true]{border-bottom-color:#6750a4!important;color:#6750a4!important;font-weight:650!important}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-memory-tab{min-width:0}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-memory-advanced{margin:0;padding:0;border:0}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-memory-range{gap:6px;margin-bottom:8px}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-memory-range label{font-size:13px}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-memory-range input{width:60px!important}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-memory-range button{font-size:13px!important;padding:8px!important}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-memory-step>h3{margin:0 0 10px!important;font:600 16px/1.4 system-ui!important}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .popup-content{flex:none!important}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .preview-model-form> .homer-settings-page__content>label{display:block;background:#fff;padding:12px;border-radius:12px;margin-bottom:10px;color:#292432}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-appearance-pictures{margin:14px 0}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-appearance-pictures button{border:0!important;background:#fff!important}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] :focus-visible{outline:2px solid #6750a4;outline-offset:2px}
+-html body dialog.homer-settings-page :is(input,select,textarea,label,p,span,strong,small,button,a,h2,h3,h4,summary,div){font-family:system-ui,-apple-system,'Segoe UI','Microsoft YaHei',sans-serif!important}
+-html body :is(#homer-model-dialog,#preview-model-dialog).homer-settings-page .homer-model-field{margin:0!important}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-settings-page__reset{font:500 13px/1.4 system-ui!important;background:none!important;border:0!important;color:#6750a4!important;padding:0!important;min-width:44px;min-height:44px}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-settings-page__footer :is(button,a){white-space:nowrap!important}
+-html body :is(#homer-model-dialog,#preview-model-dialog).homer-settings-page[open] .homer-model-fields{display:block!important;border-radius:12px;background:#fff;margin-top:12px!important;padding:0 12px}
+-html body :is(#homer-model-dialog,#preview-model-dialog).homer-settings-page[open] .homer-model-field{padding:10px 0!important;border-radius:0!important;border-bottom:1px solid #eeeaf2!important;margin:0!important;gap:0!important}
+-html body :is(#homer-model-dialog,#preview-model-dialog).homer-settings-page[open] .homer-model-field:last-child{border-bottom:0!important}
+-html body :is(#homer-model-dialog,#preview-model-dialog).homer-settings-page[open] .homer-model-field__hint{margin:0!important;line-height:1.4!important}
+-html body :is(#homer-model-dialog,#preview-model-dialog).homer-settings-page[open] .homer-model-field__range{margin:0!important;height:32px!important;min-height:32px!important;padding:0!important}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open].stmb-popup .homer-settings-page__footer{display:grid!important;grid-template-columns:1fr 1fr!important}
+-html body dialog.stmb-popup.homer-settings-page[open] .homer-settings-page__footer [data-memory-close]{display:none!important}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open].stmb-popup .homer-settings-page__footer .popup-button-custom:first-child{grid-column:1/-1;max-width:none!important}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-mod-tools{display:flex;align-items:center;justify-content:space-between;margin:16px 0 4px;min-height:44px;font-size:14px;color:#625d68}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-mod-reorder{background:none!important;border:0!important;min-height:44px;padding:0 4px!important;font:500 14px system-ui!important;color:#6750a4!important}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-mod-row{padding:8px 0!important;margin:0!important;border:0!important;border-bottom:1px solid #dedce3!important;border-radius:0!important;background:none!important;display:block!important}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-mod-row__copy{flex:1}.homer-mod-row__copy small{display:block}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-mod-row__copy small{font:14px/1.5 system-ui!important;color:#696370!important;margin-top:6px}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-mod-switch-track{position:relative;width:44px;height:26px;background:#c8c5cf;border-radius:20px;flex:none;pointer-events:none}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-mod-switch-track::before{content:'';position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 2px #0002}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-mod-switch:checked+.homer-mod-switch-track{background:#6750a4}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-mod-switch:checked+.homer-mod-switch-track::before{transform:translateX(18px)}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-mod-switch:focus-visible+.homer-mod-switch-track{outline:2px solid #6750a4;outline-offset:3px}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-mod-row__order{display:none!important}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .is-reordering .homer-mod-row__order{display:flex!important;justify-content:flex-end;gap:8px;padding:0 0 8px}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-mod-library-link{display:flex;align-items:center;justify-content:center;color:#6750a4;font:500 14px system-ui;min-height:48px;border:1px dashed #c8c2d3;border-radius:10px;margin-top:20px;text-decoration:none}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-memory-shortcuts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;padding:4px;background:#eeedf1;border-radius:10px;margin-bottom:12px}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-memory-shortcuts button{min-width:0;min-height:40px!important;padding:8px 2px!important;border:0!important;border-radius:7px!important;background:transparent!important;font:500 14px/1.4 system-ui!important;color:#625d68!important;box-shadow:none!important}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-memory-shortcuts button[aria-pressed=true]{background:#fff!important;color:#6750a4!important;box-shadow:0 1px 3px #00000012!important}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-memory-selection{font:14px/1.5 system-ui!important;color:#625d68!important;margin:8px 0!important;min-height:22px}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-memory-custom-range{padding:4px 0 8px;display:flex;justify-content:space-between}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-memory-preview>summary,html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-memory-progress>summary{font:14px/1.5 system-ui!important;min-height:44px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;list-style:none}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-memory-preview>summary::after,html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-memory-progress>summary::after{content:'›';font-size:22px;color:#8b8691}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-memory-preview[open]>summary::after,html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-memory-progress[open]>summary::after{transform:rotate(90deg)}
+-html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-memory-step{padding:16px!important;margin:0 0 14px!important}
+-html body .homer-settings-page .homer-settings-page__head h2:focus{outline:none!important}
+-html body :is(#homer-model-dialog,#preview-model-dialog).homer-settings-page .homer-model-select-field{display:flex!important;flex-direction:column;align-items:stretch;gap:10px!important}
+-html body :is(#homer-model-dialog,#preview-model-dialog).homer-settings-page .homer-model-select{width:100%!important;min-height:44px;font:15px system-ui!important}
++html body dialog.homer-settings-page:not([open]){display:none!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) *,html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) *::before,html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) *::after{box-sizing:border-box;text-shadow:none!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) :is(input,select,textarea,label,p,span,strong,small,button,a,h2,h3,h4,summary,div){font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Microsoft YaHei',sans-serif!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) [hidden]{display:none!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-settings-page__shell{display:flex!important;flex-direction:column!important;align-items:stretch!important;width:100%!important;height:100%!important;max-height:none!important;padding:0!important;margin:0!important;gap:0!important;background:var(--settings-bg)!important;border-radius:0!important;overflow:hidden!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-settings-page__head{display:grid!important;grid-template-columns:72px minmax(0,1fr) 72px;align-items:center!important;gap:0!important;min-height:56px!important;flex:none;padding:4px max(12px,calc((100% - 680px)/2))!important;margin:0!important;border:0!important;background:var(--settings-bg)!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-settings-page__head h2{font-size:16px!important;font-weight:600!important;line-height:1.4!important;color:var(--settings-text)!important;text-align:center;margin:0!important;opacity:0}
++html body dialog.homer-settings-page .homer-settings-page__head.is-scrolled h2{opacity:1!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-settings-page__head h2:focus{outline:none!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-settings-page__head button{min-width:48px!important;min-height:48px!important;width:auto!important;height:auto!important;padding:8px!important;margin:0!important;border:0!important;border-radius:10px!important;background:transparent!important;color:var(--settings-accent)!important;font-size:16px!important;line-height:1.4!important;box-shadow:none!important;white-space:nowrap!important;cursor:pointer}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-settings-page__back{justify-self:start;font-weight:400!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-settings-page__save{justify-self:end;font-weight:650!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-settings-page__content{flex:1;min-height:0;overflow:auto!important;overscroll-behavior:contain;width:100%;max-width:680px;align-self:center;padding:8px 20px max(28px,env(safe-area-inset-bottom));scrollbar-width:thin}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-settings-page__title{font-size:30px;line-height:1.25;font-weight:750;letter-spacing:-.8px;margin:2px 0 8px;color:var(--settings-text)}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) :is(.homer-sheet-dialog__notice,.homer-appearance-note,.homer-memory-intro){font-size:13px!important;line-height:1.55!important;color:var(--settings-muted)!important;background:none!important;border:0!important;padding:0!important;margin:0 0 24px!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-settings-page__content>.popup-content{width:100%!important;max-height:none!important;overflow:visible!important;padding:0!important;margin:0!important;flex:none!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-settings-page__reset{display:block;width:100%;min-height:48px;padding:12px 16px!important;margin:24px 0 0!important;text-align:left!important;background:var(--settings-panel)!important;border:0!important;border-radius:12px!important;font-size:16px!important;color:var(--settings-accent)!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-settings-page__footer{display:flex!important;flex-wrap:wrap;gap:8px!important;justify-content:center!important;align-items:center!important;flex:none!important;width:100%!important;margin:0!important;padding:12px max(20px,calc((100% - 640px)/2)) max(12px,env(safe-area-inset-bottom))!important;border:0!important;border-top:1px solid var(--settings-line)!important;border-radius:0!important;background:var(--settings-bg)!important;position:static!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-settings-page__footer:empty{display:none!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-settings-page__footer :is(button,.menu_button){flex:1;min-width:0;min-height:48px!important;max-width:none!important;padding:12px 8px!important;margin:0!important;border:0!important;border-radius:12px!important;background:transparent!important;color:var(--settings-accent)!important;font-size:14px!important;font-weight:500!important;line-height:1.4!important;box-shadow:none!important;white-space:normal!important;text-align:center!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-settings-page__footer .popup-button-custom:first-child{background:var(--settings-accent)!important;color:#fff!important;font-size:16px!important;font-weight:600!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) button:disabled{opacity:.42!important;cursor:not-allowed}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) :focus-visible{outline:2px solid var(--settings-accent);outline-offset:3px}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) button{-webkit-tap-highlight-color:transparent}
++html body dialog.homer-settings-page :is(button,input,.menu_button){filter:none!important}
++html body dialog.homer-settings-page .homer-memory-layout{padding:0!important;margin:0!important}
++/* Model: a model row, one parameter group, help beside each control. */
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-model-select-field{display:flex!important;flex-direction:column;align-items:stretch;gap:6px!important;padding:14px 16px!important;margin:0 0 24px!important;border:0!important;border-radius:12px!important;background:var(--settings-panel)!important;color:var(--settings-text)!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-model-select-field>.homer-model-field__label{font-size:13px!important;font-weight:400!important;color:var(--settings-muted)!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-model-select{width:100%!important;min-height:48px!important;padding:8px 28px 8px 0!important;margin:0!important;border:0!important;border-radius:0!important;background-color:transparent!important;color:var(--settings-accent)!important;font-size:17px!important;box-shadow:none!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-model-fields{display:block!important;padding:0 16px!important;margin:0!important;gap:0!important;border:0!important;border-radius:12px!important;background:var(--settings-panel)!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-model-field{display:flex!important;flex-direction:column!important;gap:0!important;padding:14px 0!important;margin:0!important;background:none!important;border:0!important;border-bottom:1px solid var(--settings-line)!important;border-radius:0!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-model-field:last-child{border-bottom:0!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-model-field__head{display:flex!important;justify-content:space-between;align-items:center;gap:12px!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-model-field__label{font-size:16px!important;line-height:1.4!important;font-weight:500!important;color:var(--settings-text)!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-model-field__number{width:68px!important;min-height:44px!important;height:44px!important;margin:0!important;padding:8px!important;border:0!important;border-radius:8px!important;background:var(--settings-fill)!important;color:var(--settings-accent)!important;font-size:16px!important;font-variant-numeric:tabular-nums;text-align:center;box-shadow:none!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-model-field__range{appearance:none!important;width:100%!important;height:40px!important;min-height:40px!important;margin:0!important;padding:0!important;border:0!important;box-shadow:none!important;background:transparent!important;accent-color:var(--settings-accent)!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-model-field__range::-webkit-slider-runnable-track{height:4px!important;background:linear-gradient(to right,var(--settings-accent) 0 var(--range-progress,50%),var(--settings-line) var(--range-progress,50%) 100%)!important;border-radius:4px!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-model-field__range::-webkit-slider-thumb{appearance:none!important;width:26px!important;height:26px!important;margin-top:-11px!important;border:0!important;border-radius:50%!important;background:#fff!important;box-shadow:0 1px 4px #0004!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-model-field__hint{font-size:12px!important;line-height:1.5!important;color:var(--settings-muted)!important;margin:0!important}
++/* Mod: status and ordering are separate from each enable switch. */
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-mod-tools{display:flex;justify-content:space-between;align-items:center;min-height:48px;margin:0 12px 4px;color:var(--settings-muted);font-size:13px}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-mod-reorder{min-height:48px;padding:8px 0!important;border:0!important;background:none!important;color:var(--settings-accent)!important;font-size:14px!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-mod-list{display:block!important;padding:0 16px;border-radius:12px;background:var(--settings-panel)}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-mod-row{display:block!important;margin:0!important;padding:0!important;border:0!important;border-bottom:1px solid var(--settings-line)!important;border-radius:0!important;background:none!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-mod-row:last-child{border-bottom:0!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-mod-row__main{position:relative;display:flex;align-items:center;justify-content:space-between;gap:16px!important;min-height:82px;width:100%;padding:12px 0!important;margin:0!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-mod-row__copy{flex:1;min-width:0;overflow-wrap:anywhere}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-mod-row__copy strong{display:block;color:var(--settings-text)!important;font-size:16px!important;font-weight:500!important;line-height:1.4!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-mod-row__copy small{display:block;margin-top:4px;color:var(--settings-muted)!important;font-size:13px!important;line-height:1.45!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-mod-row input[type=checkbox]{position:absolute!important;right:0;top:50%;transform:translateY(-50%);width:51px!important;height:48px!important;min-height:48px!important;opacity:0!important;margin:0!important;cursor:pointer;z-index:1}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-mod-switch-track{position:relative;width:51px;height:31px;border-radius:20px;background:#d1d1d6;flex:none;pointer-events:none}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-mod-switch-track::before{content:'';position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;box-shadow:0 1px 3px #0003}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-mod-switch:checked+.homer-mod-switch-track{background:var(--settings-positive)}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-mod-switch:checked+.homer-mod-switch-track::before{transform:translateX(20px)}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-mod-switch:focus-visible+.homer-mod-switch-track{outline:2px solid var(--settings-accent);outline-offset:3px}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-mod-row__order{display:none!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .is-reordering .homer-mod-row__order{display:flex!important;justify-content:flex-end;gap:8px;padding-bottom:12px}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-mod-row__order button{min-width:48px;min-height:48px;background:var(--settings-fill)!important;border:0!important;color:var(--settings-accent)!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-mod-library-link{display:flex;justify-content:space-between;align-items:center;min-height:52px;padding:12px 16px;margin-top:24px;border:0;border-radius:12px;background:var(--settings-panel);color:var(--settings-accent);font-size:16px;text-decoration:none}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-mod-library-link::after{content:'›';color:var(--settings-muted);font-size:24px}
++/* Memory: segmented destinations, checked range rows and one primary task. */
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-memory-tabs{display:flex;flex-direction:column;gap:0;background:var(--settings-panel);border:0;border-radius:12px;padding:0;margin:20px 0}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-memory-tabs button{display:flex;justify-content:space-between;align-items:center;min-height:52px!important;padding:14px 16px!important;border:0!important;border-bottom:1px solid var(--settings-line)!important;border-radius:0!important;background:transparent!important;color:var(--settings-text)!important;font-size:15px!important;text-align:left!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-memory-tabs button::after{content:'›';font-size:22px;color:var(--settings-muted)}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-memory-tabs button[hidden]{display:none!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-memory-step{padding:16px!important;margin:0 0 24px!important;border:0!important;border-radius:12px!important;background:var(--settings-panel)!important;color:var(--settings-text)!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-memory-step>h3{font-size:16px!important;line-height:1.4!important;font-weight:600!important;margin:0 0 16px!important;color:var(--settings-text)!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-memory-shortcuts{display:flex;flex-direction:column;gap:0;margin:0 -16px 12px;padding:0;background:transparent}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-memory-shortcuts button{display:flex;justify-content:space-between;align-items:center;min-height:48px!important;padding:12px 16px!important;margin:0!important;border:0!important;border-top:1px solid var(--settings-line)!important;border-radius:0!important;background:transparent!important;color:var(--settings-text)!important;font-size:15px!important;text-align:left!important;box-shadow:none!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-memory-shortcuts button[aria-pressed=true]{color:var(--settings-accent)!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-memory-shortcuts button[aria-pressed=true]::after{content:'✓';font-size:18px;font-weight:600}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-memory-custom-range{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:0;margin-bottom:12px}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-memory-custom-range label{display:flex;align-items:center;gap:8px;font-size:14px}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-memory-custom-range input{width:60px!important;min-height:44px!important;background:var(--settings-fill)!important;color:var(--settings-text)!important;border:0!important;border-radius:8px!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-memory-custom-range button{min-height:48px!important;background:none!important;color:var(--settings-accent)!important;border:0!important;padding:8px!important;font-size:14px!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-memory-selection{font-size:13px!important;line-height:1.5!important;color:var(--settings-muted)!important;margin:8px 0!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) :is(.homer-memory-preview,.homer-memory-progress)>summary{font-size:14px!important;line-height:1.5!important;min-height:48px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;list-style:none;color:var(--settings-text)!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) :is(.homer-memory-preview,.homer-memory-progress)>summary::after{content:'›';font-size:22px;color:var(--settings-muted)}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) :is(.homer-memory-preview,.homer-memory-progress)[open]>summary::after{transform:rotate(90deg)}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-memory-step .homer-memory-intro{margin:12px 0 0!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-memory-layout :is(select,.text_pole){min-height:48px!important;background-color:var(--settings-fill)!important;color:var(--settings-text)!important;border:0!important;border-radius:8px!important;box-shadow:none!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-memory-layout .info-block{border:0!important;background:var(--settings-panel)!important;color:var(--settings-text)!important;box-shadow:none!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-memory-layout :is(label,h4){color:var(--settings-text)!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-settings-page__footer:has(.popup-button-custom){display:grid!important;grid-template-columns:1fr 1fr!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-settings-page__footer [data-memory-close]{display:none!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-settings-page__footer .popup-button-custom:first-child{grid-column:1/-1}
++/* Appearance: the preview reflects the real draft, never example persisted data. */
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-settings-page__footer[hidden]{display:none!important}
++html body dialog.homer-settings-page .homer-memory-advanced-group{padding:16px;margin-bottom:20px;border-radius:12px;background:var(--settings-panel);color:var(--settings-text)}
++html body dialog.homer-settings-page .homer-memory-layout :is(h3,h4,h5,.stmb-section-title){color:var(--settings-text)!important;font-size:15px!important;line-height:1.45!important;margin:0 0 12px!important}
++html body dialog.homer-settings-page .homer-memory-layout :is(small,.opacity50p){color:var(--settings-muted)!important;opacity:1!important;font-size:12px!important;line-height:1.5!important}
++html body dialog.homer-settings-page .homer-memory-advanced-group>.world_entry_form_control{margin-bottom:16px}
++html body dialog.homer-settings-page .homer-memory-layout .checkbox_label{min-height:48px;align-items:center}
++html body dialog.homer-settings-page .homer-memory-layout .buttons_block{flex-wrap:wrap!important;white-space:normal!important}
++html body dialog.homer-settings-page .homer-memory-layout .buttons_block .menu_button{min-height:48px;min-width:48px;background:var(--settings-fill)!important;color:var(--settings-accent)!important;border:0!important;border-radius:8px!important;white-space:normal!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-appearance-preview{display:flex;flex-direction:column;align-items:flex-start;gap:12px;padding:18px 16px 22px;margin:0 0 24px;border-radius:16px;background-size:cover;background-position:center;min-height:174px;overflow:hidden}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-appearance-preview__caption{align-self:center;font-size:11px;letter-spacing:.5px;border-radius:10px;padding:2px 8px;background:#0008;color:#fff}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) :is(.homer-appearance-preview__assistant,.homer-appearance-preview__user){padding:10px 13px;border-radius:15px;font-size:14px;line-height:1.45;max-width:88%}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-appearance-preview__assistant{border-bottom-left-radius:5px}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-appearance-preview__user{align-self:flex-end;border-bottom-right-radius:5px}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-appearance-fields{display:block;gap:0!important;border-radius:12px;background:var(--settings-panel);padding:0 16px}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-appearance-color{display:grid;grid-template-columns:1fr 48px;align-items:center;gap:8px!important;margin:0!important;padding:12px 0!important;border:0!important;border-bottom:1px solid var(--settings-line)!important;border-radius:0!important;background:none!important;color:var(--settings-text)!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-appearance-color:last-child{border-bottom:0!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-appearance-color strong{font-size:16px;font-weight:500}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-appearance-color input[type=color]{width:48px;height:44px;border:0!important;border-radius:8px!important;background:var(--settings-fill)!important;padding:8px}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-appearance-swatches{display:flex;grid-column:1/-1;justify-content:space-between;gap:0}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-appearance-swatches button{width:44px!important;min-width:40px!important;min-height:44px!important;height:44px!important;padding:0!important;background:transparent!important;border:0!important;border-radius:50%!important;position:relative}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-appearance-swatches button::before{content:'';position:absolute;inset:6px;border:1px solid #8887;border-radius:50%;background:var(--swatch)}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-appearance-swatches button[aria-pressed=true]::after{content:'';position:absolute;inset:2px;border:2px solid var(--settings-accent);border-radius:50%}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-appearance-pictures{display:block;margin:24px 0 0;background:var(--settings-panel);border-radius:12px;padding:0 16px}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-appearance-pictures button{display:block;min-height:50px;width:100%;margin:0!important;padding:12px 0!important;background:none!important;border:0!important;border-radius:0!important;text-align:left;color:var(--settings-accent)!important;font-size:16px!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-appearance-pictures button+button{border-top:1px solid var(--settings-line)!important;color:var(--settings-danger)!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-appearance-status{font-size:13px;color:var(--settings-muted)!important;margin:12px 4px}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-appearance-status:empty{display:none}
++@media(prefers-color-scheme:dark){
++ html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page){--settings-bg:#000;--settings-panel:#1c1c1e;--settings-text:#f5f5f7;--settings-muted:#aaaab0;--settings-line:#38383a;--settings-fill:#2c2c2e;--settings-accent:#80baff;--settings-positive:#30a650;--settings-danger:#ff827c;color-scheme:dark}
++ html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-settings-page__footer .popup-button-custom:first-child{background:#0066d6!important}
++}
++@media(max-width:360px){html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-settings-page__content{padding-left:16px;padding-right:16px}}
++/* R17: disclosure-led parameter editing and a single-target appearance workspace. */
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-settings-section-title{font-size:13px!important;font-weight:500!important;color:var(--settings-muted)!important;margin:0 16px 10px!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-model-fields{padding:0!important;overflow:hidden}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-parameter{margin:0;padding:0;border:0;border-bottom:1px solid var(--settings-line);background:none}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-parameter:last-child{border-bottom:0}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-parameter>summary{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:58px;padding:16px;list-style:none;cursor:pointer;color:var(--settings-text);font-size:16px}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-parameter>summary::-webkit-details-marker{display:none}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-parameter>summary output{margin-left:auto;color:var(--settings-accent);font-variant-numeric:tabular-nums}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-parameter>summary::after{content:'›';color:var(--settings-muted);font-size:22px}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-parameter[open]>summary::after{transform:rotate(90deg)}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-parameter .homer-model-field{padding:0 16px 18px!important;border:0!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-parameter .homer-model-field__head .homer-model-field__label{display:none}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-parameter .homer-model-field__head::before{content:'当前值';color:var(--settings-muted);font-size:13px}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-mod-tools{margin-top:0}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-settings-search{width:100%;height:48px;margin:0 0 12px;padding:12px 16px!important;border:0!important;border-radius:12px!important;background:var(--settings-fill)!important;color:var(--settings-text)!important;font-size:16px!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-mod-filter{display:flex;gap:8px;margin-bottom:16px}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-mod-filter button{min-height:44px;padding:8px 18px!important;border:0!important;border-radius:22px!important;background:transparent!important;color:var(--settings-muted)!important;font-size:14px!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-mod-filter button[aria-pressed=true]{background:var(--settings-text)!important;color:var(--settings-panel)!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-mod-row[hidden]{display:none!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-mod-no-results{color:var(--settings-muted);text-align:center;padding:28px 12px;font-size:14px}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-appearance-preview{min-height:248px;justify-content:center;gap:22px;margin-bottom:20px}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-appearance-targets{display:flex;gap:4px;margin:0 0 16px;padding:4px;border-radius:12px;background:var(--settings-line)}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-appearance-targets button{flex:1;min-width:0;min-height:48px;padding:10px 4px!important;background:none!important;border:0!important;border-radius:9px!important;color:var(--settings-muted)!important;font-size:14px!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-appearance-targets button[aria-pressed=true]{background:var(--settings-panel)!important;color:var(--settings-text)!important;box-shadow:0 1px 3px #0001!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-appearance-color[hidden],html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-appearance-pictures[hidden]{display:none!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-appearance-color{padding:20px 0!important}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-appearance-swatches{margin-top:14px}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page) .homer-appearance-note{max-width:45em}
++
++/* Shared control panel owns the two actual drawer paths, while retaining their open/close events. */
++html body :is(#homer-right-drawer,#preview-settings-drawer).homer-control-center button{filter:none!important}
++html body :is(#homer-right-drawer,#preview-settings-drawer).homer-control-center .homer-control-utilities :is(svg,i,span){background:none!important;color:var(--control-text)!important}
++html body :is(#homer-right-drawer,#preview-settings-drawer).homer-control-center{
++ --control-bg:#f2f2f7;--control-card:#fff;--control-text:#1c1c1e;--control-muted:#626268;--control-accent:#0066d6;
++ position:fixed!important;top:100dvh!important;bottom:auto!important;left:50%!important;right:auto!important;width:min(600px,100%)!important;max-width:none!important;height:auto!important;max-height:calc(100dvh - 56px)!important;
++ display:flex!important;flex-direction:column!important;gap:0!important;padding:20px 20px max(20px,env(safe-area-inset-bottom))!important;border:0!important;border-radius:28px 28px 0 0!important;background:var(--control-bg)!important;color:var(--control-text)!important;transform:translate(-50%,10%)!important;overflow:auto!important;box-shadow:0 -8px 36px #0002!important;transition:transform .22s ease!important
++}
++html body #homer-right-drawer.homer-control-center.is-open,html body.shell-right-open #preview-settings-drawer.homer-control-center{transform:translate(-50%,-100%)!important}
++html body :is(#homer-right-drawer,#preview-settings-drawer).homer-control-center .homer-control-caption{margin:0 0 8px;font-size:12px;color:var(--control-muted);letter-spacing:.6px}
++html body :is(#homer-right-drawer,#preview-settings-drawer).homer-control-center>header{padding:0 0 20px!important;min-height:48px!important;border:0!important;display:flex;justify-content:space-between;gap:12px}
++html body :is(#homer-right-drawer,#preview-settings-drawer).homer-control-center .homer-chat-identity{min-width:0;gap:12px}
++html body :is(#homer-right-drawer,#preview-settings-drawer).homer-control-center .homer-chat-identity :is(h2,strong){color:var(--control-text)!important;font-size:18px!important;line-height:1.4!important;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
++html body :is(#homer-right-drawer,#preview-settings-drawer).homer-control-center>header>button{min-width:48px!important;width:48px!important;height:48px!important;background:var(--control-card)!important;border:0!important;border-radius:50%!important;color:var(--control-muted)!important;font-size:24px!important}
++html body :is(#homer-right-drawer,#preview-settings-drawer).homer-control-center .homer-control-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
++html body :is(#homer-right-drawer,#preview-settings-drawer).homer-control-center .homer-control-card{display:flex;align-items:center;gap:12px;min-width:0;min-height:92px;margin:0;padding:16px;border:0;border-radius:18px;background:var(--control-card);color:var(--control-text);text-align:left;box-shadow:none;cursor:pointer}
++html body :is(#homer-right-drawer,#preview-settings-drawer).homer-control-center .homer-control-card[data-control=model]{grid-column:1/-1;min-height:84px}
++html body :is(#homer-right-drawer,#preview-settings-drawer).homer-control-center .homer-control-card>svg{width:24px;height:24px;flex:none;fill:none;stroke:var(--control-accent);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
++html body :is(#homer-right-drawer,#preview-settings-drawer).homer-control-center .homer-control-card__copy{min-width:0;display:block}
++html body :is(#homer-right-drawer,#preview-settings-drawer).homer-control-center .homer-control-card strong{display:block;font-size:15px;font-weight:600;line-height:1.4;color:var(--control-text)}
++html body :is(#homer-right-drawer,#preview-settings-drawer).homer-control-center .homer-control-card small{display:block;margin-top:4px;font-size:12px;line-height:1.5;color:var(--control-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
++html body :is(#homer-right-drawer,#preview-settings-drawer).homer-control-center .homer-control-card[data-control=model] small{font-size:15px;color:var(--control-accent)}
++html body :is(#homer-right-drawer,#preview-settings-drawer).homer-control-center .homer-control-utilities{display:flex;gap:12px;padding:0!important;margin:16px 0 0!important}
++html body :is(#homer-right-drawer,#preview-settings-drawer).homer-control-center .homer-control-utilities button{display:flex;flex-direction:row;align-items:center;justify-content:center;gap:8px;flex:1;min-height:48px;border:0;border-radius:12px;background:var(--control-card)!important;color:var(--control-text)!important}
++html body :is(#homer-right-drawer,#preview-settings-drawer).homer-control-center .homer-control-utilities :is(svg,i){width:18px;height:18px;font-size:18px}
++html body :is(#homer-right-drawer,#preview-settings-drawer).homer-control-center .homer-control-footnote{font-size:12px;line-height:1.5;color:var(--control-muted);margin:16px 4px 0}
++html body :is(#homer-right-drawer,#preview-settings-drawer).homer-control-center button:focus-visible{outline:2px solid var(--control-accent);outline-offset:3px}
++@media(prefers-color-scheme:dark){html body :is(#homer-right-drawer,#preview-settings-drawer).homer-control-center{--control-bg:#1c1c1e;--control-card:#2c2c2e;--control-text:#f5f5f7;--control-muted:#aaaab0;--control-accent:#80baff}}
++@media(prefers-reduced-motion:reduce){html body :is(#homer-right-drawer,#preview-settings-drawer).homer-control-center{transition:none!important}}
+diff --git a/frontend/assets/js/chat-appearance.js b/frontend/assets/js/chat-appearance.js
+index 922b9e0e38b609f43becf5eda467c08e00790d42..e110e525c60de0ab35eaab607c02245fb50a2ed6 100644
+--- a/frontend/assets/js/chat-appearance.js
++++ b/frontend/assets/js/chat-appearance.js
+@@ -52,27 +52,40 @@ export function openChatAppearance() {
+     const head=node('header'),title=node('h2','','界面设置');title.id='homer-appearance-title';
+     const close=node('button','','×');close.type='button';close.setAttribute('aria-label','关闭界面设置');close.onclick=()=>dialog.close();head.append(title,close);
+     const note=node('p','homer-appearance-note','仅保存在这台设备的当前会话，不改变角色卡。调色可即时预览，点保存后生效。');
++    const preview=node('div','homer-appearance-preview');preview.setAttribute('aria-label','当前外观预览');
++    preview.append(node('span','homer-appearance-preview__caption','效果预览'),node('div','homer-appearance-preview__assistant','故事从这里继续。'),node('div','homer-appearance-preview__user','准备好了，我们出发吧。'));
++    const refreshPreview=()=>{
++        preview.style.backgroundColor=color(draft.background,defaults.background);
++        preview.style.backgroundImage=draft.image ? `url("${draft.image}")` : 'none';
++        for(const key of ['assistant','user']){const bubble=preview.querySelector(`.homer-appearance-preview__${key}`);const c=color(draft[key],defaults[key]);bubble.style.backgroundColor=c;bubble.style.color=readableText(c);}
++        for(const row of fields.children){const input=row.querySelector('input');for(const swatch of row.querySelectorAll('button'))swatch.setAttribute('aria-pressed',String(swatch.style.getPropertyValue('--swatch')===input.value));}
++    };
+     const fields=node('div','homer-appearance-fields');
++    const tabs=node('nav','homer-appearance-targets');tabs.setAttribute('aria-label','选择要调整的外观');
++    let selectedTarget='assistant';
++    const selectTarget=key=>{selectedTarget=key;[...fields.children].forEach((row,i)=>row.hidden=['assistant','user','background'][i]!==key);[...tabs.children].forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.target===key)));pictures.hidden=key!=='background';};
+     for (const [key,label] of [['assistant','角色气泡'],['user','我的气泡'],['background','纯色背景']]) {
++        const target=node('button','',label);target.type='button';target.dataset.target=key;target.onclick=()=>selectTarget(key);tabs.append(target);
+         const row=node('label','homer-appearance-color'),input=document.createElement('input');input.type='color';input.value=color(draft[key],defaults[key]);input.setAttribute('aria-label',label);
+         const swatches=node('span','homer-appearance-swatches');
+         for(const hex of ['#29485f','#4c4c4c','#ede6fa','#f7e9df','#ffffff','#212121']) {
+             const swatch=node('button');swatch.type='button';swatch.style.setProperty('--swatch',hex);swatch.setAttribute('aria-label',`${label} ${hex}`);
+             swatch.onclick=e=>{e.preventDefault();input.value=hex;input.dispatchEvent(new Event('input'));};swatches.append(swatch);
+         }
+-        input.oninput=()=>{draft[key]=input.value;if(key==='background')draft.image='';apply(draft);};row.append(node('strong','',label),input,swatches);fields.append(row);
++        input.oninput=()=>{draft[key]=input.value;if(key==='background')draft.image='';apply(draft);refreshPreview();};row.append(node('strong','',label),input,swatches);fields.append(row);
+     }
+     const pictures=node('div','homer-appearance-pictures'),file=document.createElement('input');file.type='file';file.accept='image/*';file.hidden=true;
+     const choose=node('button','','从相册选择背景'),remove=node('button','','移除背景图片');choose.type=remove.type='button';choose.onclick=()=>file.click();
+     const status=node('p','homer-appearance-status');status.setAttribute('role','status');
+     file.onchange=async()=>{const picked=file.files?.[0];file.value='';if(!picked)return;reading=true;save.disabled=true;choose.disabled=true;status.textContent='正在读取图片…';try { draft.image=await imageValue(picked);if(dialog===currentDialog&&currentDialog.open){apply(draft);status.textContent='图片已预览，保存后保留。';} }catch(e){status.textContent=e.message;}finally{reading=false;save.disabled=!savedKey;choose.disabled=false;}};
+-    remove.onclick=()=>{draft.image='';apply(draft);status.textContent='已改为纯色背景，保存后保留。';};pictures.append(choose,remove,file);
++    remove.onclick=()=>{draft.image='';apply(draft);refreshPreview();status.textContent='已改为纯色背景，保存后保留。';};pictures.append(choose,remove,file);
++    new MutationObserver(refreshPreview).observe(status,{childList:true});
+     const footer=node('footer'),reset=node('button','','恢复默认'),cancel=node('button','','取消'),save=node('button','is-primary','保存');
+     for(const b of [reset,cancel,save])b.type='button';
+     reset.onclick=()=>{draft={...defaults};fields.querySelectorAll('input').forEach((input,i)=>input.value=defaults[['assistant','user','background'][i]]);apply(draft);status.textContent='已预览默认外观，保存后保留。';};cancel.onclick=()=>dialog.close();
+     save.disabled=!savedKey;if(!savedKey)status.textContent='当前会话尚未就绪，请稍后重新打开。';
+     save.onclick=()=>{if(reading||!savedKey)return;if(keyFor()!==savedKey){currentDialog.close();return;}try {localStorage.setItem(savedKey,JSON.stringify(draft));currentDialog.close();}catch{status.textContent='本地空间不足，未保存。可以移除背景图片后重试。';}};
+-    footer.append(reset,cancel,save);dialog.append(head,note,fields,pictures,status,footer);document.body.append(dialog);
++    footer.append(reset,cancel,save);dialog.append(head,note,preview,tabs,fields,pictures,status,footer);document.body.append(dialog);refreshPreview();selectTarget(selectedTarget);
+     settingsPage(dialog, { head, footer, title: '界面设置' });
+     dialog.addEventListener('close',()=>{currentDialog.remove();sync();},{once:true});dialog.showModal();
+ }
+diff --git a/frontend/assets/js/chat-control-center.js b/frontend/assets/js/chat-control-center.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..5899a2d8f5d3643a9f6e8894455bde5debbb76da
+--- /dev/null
++++ b/frontend/assets/js/chat-control-center.js
+@@ -0,0 +1,26 @@
++// Presentation adapter: move existing action nodes, never duplicate handlers or permissions.
++const paths = {
++ model:'M4 5h16v11H9l-5 4V5Z M8 9h8 M8 12h5',
++ preset:'M4 7h16 M4 17h16 M8 4v6 M16 14v6',
++ memory:'M12 5C8 2 4 4 4 4v15s4-2 8 1c4-3 8-1 8-1V4s-4-2-8 1Z M12 5v15',
++ mod:'M4 4h6v6H4z M14 4h6v6h-6z M4 14h6v6H4z M17 14v6 M14 17h6',
++ appearance:'M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 0-4h-1a2 2 0 0 1 0-4h5a4 4 0 0 0 4-4c0-3-4-6-9-6Z M7 9h.01 M10 6h.01 M15 6h.01',
++};
++function icon(key){const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('aria-hidden','true');const p=document.createElementNS(svg.namespaceURI,'path');p.setAttribute('d',paths[key]);svg.append(p);return svg;}
++export function controlCenter(root){
++ if(!root||root.dataset.controlCenter)return;root.dataset.controlCenter='true';root.classList.add('homer-control-center');
++ const head=root.querySelector('header'),list=root.querySelector('.homer-setting-list,.preview-setting-list'),shortcuts=root.querySelector('.homer-chat-shortcuts');
++ const rows=[...list.children],appearance=shortcuts?.querySelector('[aria-label="界面设置"]');
++ if(appearance)rows.push(appearance);
++ list.className='homer-control-grid';
++ for(const [i,button] of rows.entries()){
++  const key=['model','preset','memory','mod','appearance'][i];
++  let copy=button.querySelector('.homer-setting-row__copy,.preview-setting-row__copy');
++  if(!copy){copy=document.createElement('span');const name=document.createElement('strong');name.textContent='界面设置';const desc=document.createElement('small');desc.textContent='气泡与背景';copy.append(name,desc);}
++  copy.className='homer-control-card__copy';for(const child of copy.children)child.className='';
++  button.className='homer-control-card';button.dataset.control=key;button.replaceChildren(icon(key),copy);list.append(button);
++ }
++ const caption=document.createElement('p');caption.className='homer-control-caption';caption.textContent='本次对话';head.before(caption);
++ if(shortcuts)shortcuts.classList.add('homer-control-utilities');
++ const note=root.querySelector('.homer-privacy-note,.preview-privacy-note');if(note){note.className='homer-control-footnote';note.textContent='设置仅作用于本次对话。预设仅开放创作者允许的选项。';root.append(note);}
++}
+diff --git a/frontend/assets/js/chat-settings-page.js b/frontend/assets/js/chat-settings-page.js
+index 74701d9bf44ad1faa882bd17f9619ecc8fbe9cdb..63b8c621e0b8a09d42cdf2d8c15f303e053c479b 100644
+--- a/frontend/assets/js/chat-settings-page.js
++++ b/frontend/assets/js/chat-settings-page.js
+@@ -1,5 +1,39 @@
+ // Preserve the existing controls, event handlers and dialog cancellation while
+ // giving long settings tasks a page layout rather than a floating form.
++function notifySurface(clear = false) {
++    try {
++        const bridge = window.HomerNative || window.parent?.HomerNative;
++        const open = !clear && document.querySelector('dialog.homer-settings-page[open]');
++        bridge?.setSettingsSurface?.(open ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : '');
++    } catch { /* Browser previews and older clients have no native surface API. */ }
++}
++window.addEventListener('pagehide', () => notifySurface(true));
++matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => notifySurface());
++function modelOverview(content) {
++    const group=content.querySelector('.homer-model-fields');if(!group)return;
++    const title=document.createElement('h3');title.className='homer-settings-section-title';title.textContent='生成偏好';group.before(title);
++    for(const field of [...group.children]){
++        const details=document.createElement('details');details.className='homer-parameter';
++        const summary=document.createElement('summary'),name=document.createElement('span'),value=document.createElement('output');
++        name.textContent=field.querySelector('.homer-model-field__label').textContent;summary.setAttribute('aria-label',`调整${name.textContent}`);summary.append(name,value);
++        details.append(summary,field);group.append(details);
++        const update=()=>value.textContent=field.querySelector('.homer-model-field__number').value;
++        field.addEventListener('input',update);details.addEventListener('toggle',()=>{update();if(details.open)for(const other of group.children)if(other!==details)other.open=false;});
++        update();
++    }
++    content.addEventListener('click',()=>{for(const details of group.children)details.querySelector('output').textContent=details.querySelector('input[type=number]').value;});
++    content.addEventListener('invalid',event=>{const details=event.target.closest('.homer-parameter');if(details)details.open=true;},true);
++}
++function modFilters(content){
++    const list=content.querySelector('.homer-mod-list');if(!list)return;
++    const search=document.createElement('input');search.type='search';search.placeholder='查找 Mod';search.setAttribute('aria-label','查找 Mod');search.className='homer-settings-search';
++    const toolbar=document.createElement('div');toolbar.className='homer-mod-filter';const all=document.createElement('button'),enabled=document.createElement('button');
++    all.type=enabled.type='button';all.textContent='全部';enabled.textContent='已启用';let onlyEnabled=false;
++    const empty=document.createElement('p');empty.className='homer-mod-no-results';empty.textContent='没有匹配的 Mod，试试其他关键词。';empty.hidden=true;empty.setAttribute('role','status');
++    const filter=()=>{let shown=0;for(const row of list.querySelectorAll('.homer-mod-row')){row.hidden=!row.textContent.toLowerCase().includes(search.value.trim().toLowerCase())||(onlyEnabled&&!row.querySelector('input').checked);if(!row.hidden)shown++;}empty.hidden=shown>0||!list.querySelector('.homer-mod-row');all.setAttribute('aria-pressed',String(!onlyEnabled));enabled.setAttribute('aria-pressed',String(onlyEnabled));};
++    all.onclick=()=>{onlyEnabled=false;filter();};enabled.onclick=()=>{onlyEnabled=true;filter();};search.oninput=filter;list.addEventListener('change',filter);
++    toolbar.append(all,enabled);list.before(search,toolbar);list.after(empty);filter();
++}
+ export function settingsPage(dialog, { shell = dialog, head, footer, title, close } = {}) {
+     dialog.classList.add('homer-settings-page');
+     shell.classList.add('homer-settings-page__shell');
+@@ -7,20 +41,37 @@ export function settingsPage(dialog, { shell = dialog, head, footer, title, clos
+     const heading = head.querySelector('h2') || document.createElement('h2');
+     heading.textContent = title;
+     heading.tabIndex = -1; heading.setAttribute('autofocus', '');
+-    const existingBack = close || head.querySelector('button');
++    const buttons = footer ? [...footer.querySelectorAll('button')] : [];
++    const cancel = buttons.find(b => b.textContent.trim() === '取消');
++    const save = buttons.find(b => b.textContent.trim() === '保存');
++    const existingBack = cancel || close || head.querySelector('button');
+     const back = existingBack || document.createElement('button');
+-    back.type = 'button'; back.textContent = '‹'; back.classList.add('homer-settings-page__back');
+-    if (!back.getAttribute('aria-label')) back.setAttribute('aria-label', `返回对话（${title}）`);
++    back.type = 'button'; back.textContent = cancel ? '取消' : '返回'; back.classList.add('homer-settings-page__back');
++    if (!back.getAttribute('aria-label')) back.setAttribute('aria-label', cancel ? '取消' : `返回对话（${title}）`);
+     if (!existingBack) back.addEventListener('click', () => {
+         if (dialog.dispatchEvent(new Event('cancel', { cancelable: true }))) dialog.close();
+     });
+     head.replaceChildren(back, heading, document.createElement('span'));
+     // Reset is a secondary header action. Keep one clear save action at the
+     // bottom, without three equally prominent pills fighting for space.
+-    const reset = footer && [...footer.querySelectorAll('button')].find(b => b.textContent === '恢复默认');
+-    if (reset) { reset.textContent = '重置'; reset.setAttribute('aria-label', '恢复默认'); reset.classList.add('homer-settings-page__reset'); head.lastElementChild.replaceWith(reset); }
++    const reset = buttons.find(b => b.textContent === '恢复默认');
++    if (save) { save.classList.add('homer-settings-page__save'); head.lastElementChild.replaceWith(save); }
+     const content = document.createElement('div'); content.className = 'homer-settings-page__content';
+     for (const child of [...shell.children]) if (child !== head && child !== footer) content.append(child);
++    const largeTitle = document.createElement('div'); largeTitle.className = 'homer-settings-page__title';
++    largeTitle.textContent = title; largeTitle.setAttribute('aria-hidden', 'true'); content.prepend(largeTitle);
++    content.addEventListener('scroll', () => head.classList.toggle('is-scrolled', content.scrollTop > 44), { passive: true });
++    if (reset) { reset.setAttribute('aria-label', '恢复默认'); reset.classList.add('homer-settings-page__reset'); content.append(reset); }
++    modelOverview(content);modFilters(content);
++    const updateRanges = () => {
++        for (const range of content.querySelectorAll('.homer-model-field__range')) {
++            const min = Number(range.min), max = Number(range.max);
++            range.style.setProperty('--range-progress', `${Math.max(0, Math.min(100, (Number(range.value) - min) / (max - min) * 100))}%`);
++            const output=range.closest('.homer-parameter')?.querySelector('output');if(output)output.textContent=range.closest('.homer-model-field').querySelector('input[type=number]').value;
++        }
++    };
++    content.addEventListener('input', updateRanges);reset?.addEventListener('click', updateRanges);
++    new MutationObserver(() => { updateRanges(); notifySurface();if(dialog.open)content.querySelector('.homer-settings-search')?.dispatchEvent(new Event('input')); }).observe(dialog, { attributes:true, attributeFilter:['open'] });updateRanges();
+     if (footer) footer.classList.add('homer-settings-page__footer');
+     shell.replaceChildren(head, content, ...(footer ? [footer] : []));
+     dialog.setAttribute('aria-label', title);
+diff --git a/frontend/assets/js/memory-ui.js b/frontend/assets/js/memory-ui.js
+index c0da0a66660307447c1bdbda48f4126ef7f908a8..74aaed9828b99d5dc922a5966240275ad35d700a 100644
+--- a/frontend/assets/js/memory-ui.js
++++ b/frontend/assets/js/memory-ui.js
+@@ -60,19 +60,35 @@ function enhance(popup) {
+     const main=el('section','homer-memory-tab');main.append(range,profile);
+     const storagePage=el('section','homer-memory-tab');storagePage.append(storage);
+     const advancedPage=el('section','homer-memory-tab');advancedPage.append(...[...advanced.children].filter(e=>e.tagName!=='SUMMARY'));
++    let advancedGroup;
++    for(const child of [...advancedPage.children]) {
++        if(child.matches('.stmb-section-title') || !advancedGroup){advancedGroup=el('section','homer-memory-advanced-group');advancedPage.append(advancedGroup);}
++        advancedGroup.append(child);
++    }
+     const panels=[main,storagePage,advancedPage];
++    let activePanel=0;
++    const showPanel=i=>{
++        activePanel=i;panels.forEach((p,j)=>p.hidden=i!==j);if(controls)controls.hidden=i!==0;
++        const text=['长记忆','保存设置','高级设置'][i];
++        for(const title of popup.querySelectorAll('.homer-settings-page__title,.homer-settings-page__head h2'))title.textContent=text;
++        const scroller=popup.querySelector('.homer-settings-page__content');if(scroller)scroller.scrollTop=0;
++    };
+     ['整理记忆','保存设置','高级设置'].forEach((name,i)=>{
+         const b=el('button','',name);b.type='button';b.setAttribute('aria-pressed',String(i===0));
++        b.setAttribute('aria-label',name);if(i===0)b.hidden=true;
+         panels[i].hidden=i!==0;panels[i].setAttribute('aria-label',name);
+-        b.onclick=()=>{panels.forEach((p,j)=>p.hidden=i!==j);[...nav.children].forEach((t,j)=>t.setAttribute('aria-pressed',String(i===j)));};nav.append(b);
++        b.onclick=()=>showPanel(i);nav.append(b);
+     });
+     storage.querySelector('h3').textContent='记忆保存位置';range.querySelector('h3').textContent='选择对话范围';profile.querySelector('h3').textContent='整理方式';
+-    layout.append(nav,...panels);content.replaceChildren(layout);
++    main.append(nav);layout.append(...panels);content.replaceChildren(layout);
+     const controls=popup.querySelector('.popup-controls');
+     if(!popup.querySelector('.homer-settings-page__head')) {
+         popup.prepend(header);
+         settingsPage(popup,{head:header,footer:controls,title:'长记忆'});
+     }
++    const goBack=event=>{if(activePanel!==0){event.preventDefault();event.stopImmediatePropagation();showPanel(0);}};
++    popup.addEventListener('cancel',goBack,true);
++    popup.querySelector('.homer-settings-page__back').addEventListener('click',goBack,true);
+     // Presentation only: retain plugin values and original click/save handlers.
+     for(const option of popup.querySelectorAll('option'))if(/SillyTavern|Current ST/i.test(option.textContent))option.textContent='当前对话模型';
+     for(const button of popup.querySelectorAll('.popup-controls .menu_button')){
+diff --git a/sillytavern-runtime/public/scripts/extensions/homer-bridge/index.js b/sillytavern-runtime/public/scripts/extensions/homer-bridge/index.js
+index d0da1043e31d14d90de79e35006edefca993578c..757a45c4d5d5ebec9c95a0fef8fb7a6dba98cb69 100644
+--- a/sillytavern-runtime/public/scripts/extensions/homer-bridge/index.js
++++ b/sillytavern-runtime/public/scripts/extensions/homer-bridge/index.js
+@@ -28,6 +28,7 @@ import { openChatTool } from '/assets/js/chat-tools.js';
+ import { bindChatAppearance } from '/assets/js/chat-appearance.js';
+ import { installMemoryUi } from '/assets/js/memory-ui.js';
+ import { settingsPage } from '/assets/js/chat-settings-page.js';
++import { controlCenter } from '/assets/js/chat-control-center.js';
+ 
+ const MODULE_ID = 'homer-bridge';
+ const urlParams = new URLSearchParams(window.location.search);
+@@ -3740,6 +3741,7 @@ function buildModelDialog() {
+     save.setAttribute('aria-label', '保存到本次会话');
+     save.type = 'button';
+     save.addEventListener('click', async () => {
++        if (!shell.reportValidity()) return;
+         const next = {
+             model_id: select.value,
+         };
+@@ -4596,6 +4598,7 @@ function buildRuntimeUi() {
+         shortcuts,
+     );
+ 
++    controlCenter(rightDrawer);
+     const panel = createElement('section', 'homer-preset-panel');
+     panel.id = 'homer-preset-panel';
+     panel.hidden = true;

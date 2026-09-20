@@ -1,0 +1,261 @@
+diff --git a/frontend/app/chat.html b/frontend/app/chat.html
+index 600245f398ba6e7de3664eb7999a359c5d50e4d6..09fd2a3be88eb765dd5592d21eb12b60f0bf0003 100644
+--- a/frontend/app/chat.html
++++ b/frontend/app/chat.html
+@@ -743,7 +743,7 @@
+             <h2 id="preview-title">角色对话</h2>
+             <p id="preview-status">本地对话</p>
+           </div>
+-          <button id="preview-settings" class="preview-settings-button" type="button" aria-label="打开对话设置"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M16 4H10a8 8 0 0 0-1 16v-3h2a7 7 0 0 0 7-7"/><path d="m20 2 1.1 2.9L24 6l-2.9 1.1L20 10l-1.1-2.9L16 6l2.9-1.1Z" fill="currentColor" stroke="none"/></svg></button>
++          <button id="preview-settings" class="preview-settings-button" type="button" aria-label="打开对话设置"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3M5 5l2 2m10 10 2 2M5 19l2-2M17 7l2-2"/></svg></button>
+         </header>
+         <aside id="preview-network-banner" class="preview-network-banner" aria-live="polite">
+           <img src="/assets/img/brand/network-error-512.png?v=20260901-persistent-pages" alt="">
+diff --git a/frontend/assets/css/chat-design.css b/frontend/assets/css/chat-design.css
+index d1ad413d9a3ef5ed173dcb3586ddc191d64ac5a1..531a31e4a8cd72111c8e5727f07727535e9f9793 100644
+--- a/frontend/assets/css/chat-design.css
++++ b/frontend/assets/css/chat-design.css
+@@ -1,7 +1,7 @@
+ /* Matching local preview and runtime chrome; card-owned documents remain untouched. */
+ body.has-preview,body.homer-runtime {
+   --chat-bg:#212121;--chat-panel:#fff;--chat-text:#292432;--chat-muted:#756c81;
+-  --chat-line:#e4dfe9;--chat-accent:#7c49ef;--chat-soft:#eee7fc;
++  --chat-line:#dce2e7;--chat-accent:#29485f;--chat-soft:#edf2f5;
+   --tavo-assistant-bubble:#29485f;--tavo-user-bubble:#4c4c4c;
+   --tavo-composer-bg:#656668;--tavo-sidebar-bg:#fff;--tavo-sidebar-rule:#e4dfe9;
+   font-family:system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;
+@@ -11,11 +11,11 @@ body.has-preview .launcher,body.has-preview .preview-stage,body.homer-runtime:no
+ body.has-preview .launcher::before,body.has-preview .preview-stage::before,body.homer-runtime:not(.homer-card-stage-active)::before{background:none!important}
+ body.has-preview button,body.homer-runtime #homer-runtime-root button,body.homer-runtime #form_sheld button,body.homer-runtime #form_sheld [role="button"],body.homer-runtime :is(.homer-sheet-dialog,.homer-site-dialog,.homer-preset-dialog,.homer-message-menu-dialog) button{-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:manipulation;text-shadow:none!important;cursor:pointer}
+ body.has-preview button:focus-visible,body.homer-runtime #homer-runtime-root button:focus-visible,body.homer-runtime :is(.homer-sheet-dialog,.homer-site-dialog,.homer-preset-dialog,.homer-message-menu-dialog) button:focus-visible{outline:2px solid var(--chat-accent)!important;outline-offset:3px}
+-body.has-preview .preview-header,body.homer-runtime .homer-chat-header,body.homer-runtime.homer-left-drawer-open .homer-chat-header{height:calc(48px + env(safe-area-inset-top))!important;min-height:48px;padding:env(safe-area-inset-top) 0 0!important;background:linear-gradient(#141414,#212121)!important;border-bottom:0!important;box-shadow:none!important;backdrop-filter:none!important;grid-template-columns:48px minmax(0,1fr) 48px!important}
++body.has-preview .preview-header,body.homer-runtime .homer-chat-header,body.homer-runtime.homer-left-drawer-open .homer-chat-header{height:calc(48px + env(safe-area-inset-top))!important;min-height:48px;padding:env(safe-area-inset-top) 0 0!important;background:transparent!important;border-bottom:0!important;box-shadow:none!important;backdrop-filter:none!important;grid-template-columns:48px minmax(0,1fr) 48px!important}
+ body.has-preview .preview-menu-button,body.has-preview .preview-settings-button,body.homer-runtime .homer-header-button{display:grid;place-content:center;width:48px!important;height:48px!important;min-height:48px!important;border:0!important;border-radius:0!important;background:transparent!important;color:#fff!important;font-size:22px;text-shadow:none!important}
+ .preview-settings-button svg,.homer-header-button svg{width:21px;height:21px;display:block}
+ body.has-preview .preview-heading{display:block!important;text-align:center;padding:0 12px}
+-body.has-preview .preview-heading h2,body.homer-runtime .homer-chat-header__title{display:block!important;margin:0;color:#fff!important;font-size:16px!important;font-weight:650;line-height:1.5;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;text-align:center}
++body.has-preview .preview-heading h2,body.homer-runtime .homer-chat-header__title{display:block!important;visibility:hidden!important;margin:0;color:#fff!important;font-size:16px!important;font-weight:650;line-height:1.5;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;text-align:center}
+ body.has-preview .preview-heading p,body.has-preview .preview-avatar{display:none!important}
+ body.has-preview .preview-messages{padding:16px 10px!important;scroll-padding-bottom:20px;gap:0}
+ body.has-preview .preview-message,body.homer-runtime:not(.homer-card-stage-active) #chat .mes:not(:has(.homer-card-component,.homer-roleplayhub-documents,iframe)) {
+@@ -188,8 +188,6 @@ body.homer-runtime:not(.homer-card-stage-active) #chat .mes:not(:has(iframe,.hom
+ .homer-generation-options small{color:#756c81!important;font-size:12px}
+ 
+ /* R4: transparent chrome and personal colors, shared by preview and runtime. */
+-body.has-preview .preview-header,body.homer-runtime .homer-chat-header,body.homer-runtime.homer-left-drawer-open .homer-chat-header{background:transparent!important}
+-body.has-preview .preview-heading h2,body.homer-runtime .homer-chat-header__title{visibility:hidden!important}
+ body.has-preview .preview-generation-row,body.homer-runtime .homer-continuation-trigger{display:none!important}
+ body.has-preview .preview-message,body.homer-runtime:not(.homer-card-stage-active) #chat .mes:not([is_user="true"]){color:var(--homer-assistant-text,#fff)!important}
+ body.has-preview .preview-message.is-user,body.homer-runtime:not(.homer-card-stage-active) #chat .mes[is_user="true"]{color:var(--homer-user-text,#fff)!important}
+@@ -231,3 +229,49 @@ body.homer-runtime .stmb-popup .popup-controls{display:grid!important;grid-templ
+ body.homer-runtime .stmb-popup .popup-controls{width:100%!important;align-self:stretch;justify-items:stretch}
+ body.homer-runtime .stmb-popup .popup-controls .menu_button{width:100%;max-width:none;margin:0!important}
+ body.homer-runtime .stmb-popup .popup-controls .popup-button-custom:first-child{background:#7140ce!important;color:#fff!important;border-color:#7140ce!important}
++
++/* Chat interaction geometry: reserve the transparent toolbar's hit area even
++   when a multi-screen message scrolls beneath it. Do not clip card stages. */
++body.homer-runtime:not(.homer-card-stage-active) #chat{clip-path:inset(calc(48px + env(safe-area-inset-top)) 0 0 0)}
++body.has-preview .preview-messages{clip-path:inset(0)}
++body.homer-runtime #chat .mes_text,body.homer-runtime #chat .mes_text *{
++  -webkit-user-select:none!important;user-select:none!important;-webkit-touch-callout:none;
++}
++body.homer-runtime #chat :is(textarea,input,[contenteditable=true],[contenteditable=true] *){-webkit-user-select:text!important;user-select:text!important}
++body.homer-runtime #homer-message-menu-dialog{max-height:calc(100dvh - 120px)!important;overflow-y:auto!important}
++body.homer-runtime .homer-message-menu__action{font-size:12px!important;min-height:64px!important}
++body.homer-runtime .homer-message-menu__label{font-size:12px!important}
++body.homer-runtime .homer-message-menu__action.is-danger{color:#ad2440!important}
++body.homer-runtime .homer-header-button .fa-gear{font-family:"Font Awesome 6 Free"!important;font-weight:900;font-size:22px}
++
++/* Settings keep secondary information readable instead of truncating it into
++   an unused column. Full names wrap; actions stay comfortably tappable. */
++body.has-preview #preview-settings-drawer .preview-setting-row__copy,
++body.homer-runtime #homer-right-drawer .homer-setting-row__copy{flex-direction:column;align-items:flex-start;gap:4px}
++body.has-preview #preview-settings-drawer .preview-setting-row small,
++body.homer-runtime #homer-right-drawer .homer-setting-row__description{
++  max-width:none;white-space:normal;overflow:visible;text-overflow:clip;
++  overflow-wrap:anywhere;color:#59636d!important;line-height:1.45;
++}
++body.has-preview #preview-settings-drawer .preview-setting-list,
++body.homer-runtime #homer-right-drawer .homer-setting-list{padding:8px 20px!important}
++body.has-preview #preview-settings-drawer .preview-setting-row,
++body.homer-runtime #homer-right-drawer .homer-setting-row{min-height:68px!important;padding:12px 4px!important}
++body.has-preview #preview-settings-drawer .preview-privacy-note,
++body.homer-runtime #homer-right-drawer .homer-privacy-note{color:#59636d!important;font-size:12px!important;line-height:1.6}
++
++/* Session model controls: compact rows, strong text contrast, sticky actions. */
++body.homer-runtime #homer-model-dialog{width:min(460px,calc(100vw - 24px))!important;border-radius:18px!important}
++body.homer-runtime #homer-model-dialog .homer-sheet-dialog__shell{padding:16px!important;border-radius:18px!important;max-height:none!important}
++body.homer-runtime #homer-model-dialog .homer-sheet-dialog__notice{margin:8px 0 12px;padding:8px 10px!important;background:#edf2f5!important;color:#465460!important;border-color:#29485f!important;font-size:12px!important}
++body.homer-runtime #homer-model-dialog .homer-model-fields{gap:0;margin-top:10px}
++body.homer-runtime #homer-model-dialog .homer-model-field{gap:0!important;padding:6px 0!important;border:0!important;border-bottom:1px solid #dce2e7!important;border-radius:0!important;background:#fff!important}
++body.homer-runtime #homer-model-dialog .homer-model-field__hint{color:#59636d!important;font-size:12px!important;margin:2px 0!important;line-height:1.5}
++body.homer-runtime #homer-model-dialog .homer-model-field__range{margin:0;min-height:32px!important;accent-color:#29485f}
++body.homer-runtime #homer-model-dialog .homer-model-field__number{width:76px!important;min-height:40px!important;height:40px!important;padding:6px 10px!important}
++body.homer-runtime #homer-model-dialog .homer-sheet-dialog__actions{position:sticky;bottom:0;background:#fff;display:flex;flex-wrap:nowrap;gap:8px;padding:12px 0!important;margin-top:8px;border-top:1px solid #dce2e7}
++body.homer-runtime #homer-model-dialog .homer-sheet-dialog__actions button{flex:1;min-width:0;padding:10px 6px!important;font-size:13px!important}
++body.homer-runtime #homer-model-dialog .homer-sheet-dialog__actions button[type=submit]{background:#29485f!important;color:#fff!important}
++body.homer-runtime #homer-model-dialog::backdrop{background:#0005;backdrop-filter:none}
++body.homer-runtime #stmb-memory-boundary-jump{width:116px!important;min-width:116px!important;max-width:none!important;height:44px!important;min-height:44px!important;border-radius:22px!important;padding:8px 12px!important;gap:6px;color:#fff!important;background:#29485f!important;font-size:12px!important;white-space:nowrap}
++body.homer-runtime #stmb-memory-boundary-jump::after{content:"未整理记忆";font-family:system-ui;white-space:nowrap}
+diff --git a/frontend/assets/js/memory-ui.js b/frontend/assets/js/memory-ui.js
+index c74b4ab14d789bd34d6b5d72bcb4cb7901edcc23..3e58cc362cc9db330b204a6cd72c3f37c8c88959 100644
+--- a/frontend/assets/js/memory-ui.js
++++ b/frontend/assets/js/memory-ui.js
+@@ -42,9 +42,30 @@ function enhance(popup) {
+     layout.append(advanced);content.replaceChildren(layout);
+ }
+ let installed=false;
++const boundaryButtons=new WeakSet();
++function enhanceBoundaryButton(button) {
++    if(boundaryButtons.has(button))return;
++    boundaryButtons.add(button);
++    button.setAttribute('aria-label','跳转到尚未整理记忆的对话');
++    const clamp=()=>{
++        if(!button.isConnected)return;
++        const rect=button.getBoundingClientRect();
++        const left=Math.max(8,Math.min(rect.left,innerWidth-rect.width-8));
++        const top=Math.max(56,Math.min(rect.top,innerHeight-rect.height-80));
++        // The upstream draggable button assumes a 36px square. Use its actual
++        // rendered size after Homer adds a label, without replacing drag handlers.
++        if(Math.abs(left-rect.left)>1)button.style.left=`${left}px`;
++        if(Math.abs(top-rect.top)>1)button.style.top=`${top}px`;
++    };
++    const observer=new MutationObserver(clamp);
++    observer.observe(button,{attributes:true,attributeFilter:['style']});
++    new ResizeObserver(clamp).observe(button);
++    clamp();
++}
+ export function installMemoryUi() {
+     if(installed)return;installed=true;
+-    const scan=node=>{if(!(node instanceof Element))return;const parent=node.closest('.stmb-popup');if(parent)enhance(parent);node.querySelectorAll('.stmb-popup').forEach(enhance);};
++    const scan=node=>{if(!(node instanceof Element))return;const parent=node.closest('.stmb-popup');if(parent)enhance(parent);node.querySelectorAll('.stmb-popup').forEach(enhance);if(node.id==='stmb-memory-boundary-jump')enhanceBoundaryButton(node);node.querySelectorAll('#stmb-memory-boundary-jump').forEach(enhanceBoundaryButton);};
+     new MutationObserver(records=>{for(const record of records){scan(record.target);for(const node of record.addedNodes)scan(node);}}).observe(document.body,{childList:true,subtree:true});
+     document.querySelectorAll('.stmb-popup').forEach(enhance);
++    document.querySelectorAll('#stmb-memory-boundary-jump').forEach(enhanceBoundaryButton);
+ }
+diff --git a/sillytavern-runtime/public/scripts/extensions/homer-bridge/index.js b/sillytavern-runtime/public/scripts/extensions/homer-bridge/index.js
+index b6d2b6d17b9c226791195f8bd767c09334740d0a..e5c512df8fd1b1e6b2a3bdc8cc4f6a964ac7d8bd 100644
+--- a/sillytavern-runtime/public/scripts/extensions/homer-bridge/index.js
++++ b/sillytavern-runtime/public/scripts/extensions/homer-bridge/index.js
+@@ -2630,6 +2630,11 @@ function ensureMessageMenuDialog() {
+     actions.setAttribute('role', 'menu');
+     shell.append(actions);
+     dialog.append(shell);
++    new ResizeObserver(() => {
++        if (dialog.open && activeMessageMenuTarget) {
++            positionMessageMenuDialog(dialog, resolveMessageMenuTarget(activeMessageMenuTarget));
++        }
++    }).observe(dialog);
+     dialog.addEventListener('click', event => {
+         if (event.target === dialog) {
+             closeMessageMenu();
+@@ -2672,9 +2677,7 @@ function positionMessageMenuDialog(dialog, resolved) {
+         dialog?.classList.remove('is-positioning');
+         return;
+     }
+-    const anchorElement = resolved?.element?.querySelector('.mes_text')
+-        || resolved?.element?.querySelector('.mes_block')
+-        || resolved?.element;
++    const anchorElement = resolved?.element;
+     const rect = anchorElement?.getBoundingClientRect?.();
+     if (!rect) {
+         dialog.classList.remove('is-positioning');
+@@ -2682,13 +2685,29 @@ function positionMessageMenuDialog(dialog, resolved) {
+     }
+     const gap = 10;
+     const edge = 12;
++    const viewport = window.visualViewport;
++    const viewportTop = viewport?.offsetTop || 0;
++    const viewportLeft = viewport?.offsetLeft || 0;
++    const viewportBottom = viewportTop + (viewport?.height || window.innerHeight);
++    const viewportRight = viewportLeft + (viewport?.width || window.innerWidth);
++    const chatRect = document.querySelector('#chat')?.getBoundingClientRect();
++    const headerBottom = document.querySelector('.homer-chat-header')?.getBoundingClientRect().bottom || 0;
++    const minimumTop = Math.max(viewportTop + edge, headerBottom + gap, chatRect?.top || 0);
++    const composerTop = document.querySelector('#form_sheld')?.getBoundingClientRect().top || viewportBottom;
++    const maximumBottom = Math.min(viewportBottom - edge, composerTop - gap);
+     const width = dialog.offsetWidth;
+     const height = dialog.offsetHeight;
+     let left = resolved?.isUser ? rect.right - width : rect.left;
+     let top = rect.top - height - gap;
+-    if (top < edge) top = rect.bottom + gap;
+-    left = Math.max(edge, Math.min(left, window.innerWidth - width - edge));
+-    top = Math.max(edge, Math.min(top, window.innerHeight - height - edge));
++    if (top < minimumTop) top = rect.bottom + gap;
++    // A multi-screen message has neither edge in view. Anchor near the actual
++    // press rather than jumping to the distant end of the whole message.
++    if (top + height > maximumBottom) {
++        const pressY = resolved?.anchorY;
++        top = Number.isFinite(pressY) ? pressY - height - gap : minimumTop;
++    }
++    left = Math.max(viewportLeft + edge, Math.min(left, viewportRight - width - edge));
++    top = Math.max(minimumTop, Math.min(top, maximumBottom - height));
+     dialog.style.left = `${Math.round(left)}px`;
+     dialog.style.top = `${Math.round(top)}px`;
+     dialog.classList.remove('is-positioning');
+@@ -2746,6 +2765,7 @@ function renderMessageMenuDialog() {
+ }
+ 
+ function openMessageMenu(target) {
++    window.getSelection?.()?.removeAllRanges?.();
+     const resolved = resolveMessageMenuTarget(target);
+     if (!resolved) {
+         showHostNotice('目标消息已经变化，请重新长按', 'warning');
+@@ -3285,6 +3305,22 @@ function installMessageMenu() {
+             renderMessageSelection();
+         }, true);
+         chat.dataset.homerMessageMenuInstalled = 'true';
++        // Native Android text handles otherwise outlive the modal and appear
++        // above unrelated settings dialogs. Editable fields keep native selection.
++        chat.addEventListener('selectstart', event => {
++            if (event.target.closest?.('.mes_text') && !isInteractiveMessageTarget(event.target)) {
++                event.preventDefault();
++            }
++        });
++        const repositionMenu = () => {
++            const dialog = document.querySelector('#homer-message-menu-dialog');
++            if (dialog?.open && activeMessageMenuTarget) {
++                positionMessageMenuDialog(dialog, resolveMessageMenuTarget(activeMessageMenuTarget));
++            }
++        };
++        chat.addEventListener('scroll', closeMessageMenu, { passive: true });
++        window.addEventListener('resize', repositionMenu, { passive: true });
++        window.visualViewport?.addEventListener('resize', repositionMenu, { passive: true });
+         chat.addEventListener('pointerdown', event => {
+             if (messageSelection) return;
+             const touchLike = event.pointerType === 'touch' || event.pointerType === 'pen';
+@@ -4323,7 +4359,7 @@ function buildRuntimeUi() {
+     const title = createElement('div', 'homer-chat-header__title', roleName);
+     title.id = 'homer-conversation-title';
+     const settingsButton = createElement('button', 'homer-header-button');
+-    settingsButton.innerHTML = "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linejoin=\"round\"><path d=\"M16 4H10a8 8 0 0 0-1 16v-3h2a7 7 0 0 0 7-7\"/><path d=\"m20 2 1.1 2.9L24 6l-2.9 1.1L20 10l-1.1-2.9L16 6l2.9-1.1Z\" fill=\"currentColor\" stroke=\"none\"/></svg>";
++    settingsButton.innerHTML = '<i class="fa-solid fa-gear" aria-hidden="true"></i>';
+     settingsButton.type = 'button';
+     settingsButton.setAttribute('aria-label', '打开对话设置');
+     settingsButton.addEventListener('click', () => setDrawerOpen('right'));
+@@ -4452,7 +4488,7 @@ function buildRuntimeUi() {
+     const memoryButton = createSettingButton(
+         '∞',
+         '长记忆',
+-        'Memory Books · 当前对话记忆',
++        '整理与管理当前对话记忆',
+         'homer-open-memory-books',
+     );
+     memoryButton.addEventListener('click', () => {
+diff --git a/sillytavern-runtime/public/scripts/extensions/homer-bridge/style.css b/sillytavern-runtime/public/scripts/extensions/homer-bridge/style.css
+index 469776b41fa44aecc5efdfc813239782cba38e1f..6eca9cf7b9e26ad7d27e4b2197e14a4fb8037e63 100644
+--- a/sillytavern-runtime/public/scripts/extensions/homer-bridge/style.css
++++ b/sillytavern-runtime/public/scripts/extensions/homer-bridge/style.css
+@@ -3352,11 +3352,7 @@ body.homer-runtime #send_but {
+     }
+ 
+     .homer-message-menu-dialog {
+-        right: max(8px, env(safe-area-inset-right));
+-        bottom: max(8px, env(safe-area-inset-bottom));
+-        left: max(8px, env(safe-area-inset-left));
+-        top: auto !important;
+-        width: auto;
++        /* Position comes from the message anchor, including on phones. */
+         max-height: calc(
+             100dvh - 16px - env(safe-area-inset-top) - env(safe-area-inset-bottom)
+         );

@@ -1,0 +1,47 @@
+--- a/tools/ai_fengyue_local_server.py
++++ b/tools/ai_fengyue_local_server.py
+@@ -10002,22 +10002,24 @@
+     def public_model_presets(self) -> dict:
+         presets, default_id = self.llm_presets(include_secrets=False)
+         visible: list[dict] = []
+-        seen_models: set[str] = set()
++        seen_models: set[tuple[str, str]] = set()
+         for p in presets:
+             if not p.get("enabled"):
+                 continue
+             models = split_model_names(p.get("models") or p.get("model")) or [p.get("model") or ""]
+             default_model = str(p.get("model") or "") if str(p.get("model") or "") in models else models[0]
+             for model in models:
+-                if not model or model in seen_models:
++                if not model or (p["id"], model) in seen_models:
+                     continue
+-                seen_models.add(model)
++                seen_models.add((p["id"], model))
+                 model_config = model_config_for_preset(p, model)
+                 pricing = normalize_model_pricing(model_config.get("pricing"))
+                 points_cost = model_charge_points(pricing)
+                 visible.append({
+                     "id": model_selection_id(p["id"], model) if len(split_model_names(p.get("models") or p.get("model"))) > 1 else p["id"],
+                     "preset_id": p["id"],
++                    "group_id": p["id"],
++                    "group_name": str(p.get("name") or "模型分组"),
+                     "name": model_config.get("display_name") or p.get("name") or p.get("model") or p["id"],
+                     "protocol": p.get("protocol") or "openai",
+                     "model": model,
+@@ -10028,15 +10030,7 @@
+                     "price_label": model_price_label(pricing),
+                     "preset_id_bound": model_config.get("preset_id") or "",
+                 })
+-        if not visible and presets:
+-            p = presets[0]
+-            model = p.get("model") or ""
+-            model_config = model_config_for_preset(p, model)
+-            pricing = normalize_model_pricing(model_config.get("pricing"))
+-            visible = [{"id": p["id"], "preset_id": p["id"], "name": model_config.get("display_name") or p.get("name") or model or p["id"], "protocol": p.get("protocol") or "openai", "model": model, "enabled": True, "is_default": True, "points_cost": model_charge_points(pricing), "pricing": pricing, "price_label": model_price_label(pricing), "preset_id_bound": model_config.get("preset_id") or ""}]
+-            default_id = p["id"]
+-        else:
+-            default_id = next((p["id"] for p in visible if p.get("is_default")), visible[0]["id"] if visible else default_id)
++        default_id = next((p["id"] for p in visible if p.get("is_default")), visible[0]["id"] if visible else "")
+         return {"list": visible, "default_id": default_id, "total": len(visible)}
+ 
+     def public_model_selection(self, value: object) -> str:

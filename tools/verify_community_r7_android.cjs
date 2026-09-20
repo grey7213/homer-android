@@ -1,12 +1,12 @@
 // Real installed debug WebView/native navigation; only synthetic account and local community data.
 const fs=require('node:fs'),path=require('node:path'),{execFileSync}=require('node:child_process');
-const adb='D:/Android/Sdk/platform-tools/adb.exe',serial='127.0.0.1:16384',uid='r7-device-local';
+const adb='D:/Android/Sdk/platform-tools/adb.exe',serial=process.env.HOMER_TEST_DEVICE||'127.0.0.1:16384',uid='r7-device-local';
 const out=path.resolve(__dirname,'../output/community-r7/android');
 const native=(...args)=>execFileSync(adb,['-s',serial,...args]);
 (async()=>{
- const targets=await(await fetch('http://127.0.0.1:18223/json/list')).json();
+ const targets=await(await fetch(`http://127.0.0.1:${process.env.HOMER_CDP_PORT||18223}/json/list`)).json();
  const target=targets.find(t=>t.url.includes('/app/login.html'));if(!target)throw Error('Expected signed-out .uireview login page');
- const socket=new WebSocket(target.webSocketDebuggerUrl),pending=new Map(),errors=[],writes=[];let seq=0,scoped=false;
+ const socket=new WebSocket(target.webSocketDebuggerUrl),pending=new Map(),errors=[],writes=[];let seq=0,scoped=false,shellOnlyScript;
  socket.addEventListener('message',async event=>{
   const data=JSON.parse(event.data);
   if(data.method==='Runtime.exceptionThrown')errors.push(data.params.exceptionDetails.exception?.description||data.params.exceptionDetails.text);
@@ -23,12 +23,12 @@ const native=(...args)=>execFileSync(adb,['-s',serial,...args]);
  function call(method,params={}){return new Promise((resolve,reject)=>{const id=++seq,timer=setTimeout(()=>{pending.delete(id);reject(Error('CDP timeout '+method));},20000);pending.set(id,{resolve,reject,timer});socket.send(JSON.stringify({id,method,params}));});}
  async function evaluate(expression,gesture=false){const r=await call('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true,userGesture:gesture});if(r.exceptionDetails)throw Error(r.exceptionDetails.exception?.description||r.exceptionDetails.text);return r.result.value;}
  async function ready(expression){for(let n=0;n<120;n++){try{if(await evaluate(`Boolean(${expression})`))return;}catch(e){if(!/context.*destroyed|Cannot find context|Alpine is not defined/i.test(e.message))throw e;}await new Promise(r=>setTimeout(r,100));}throw Error('UI wait timed out: '+expression);}
- const click=selector=>evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`,true);
+ const click=async selector=>{await ready(`document.querySelector(${JSON.stringify(selector)})?.offsetWidth`);return evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`,true);};
  const clickText=text=>evaluate(`[...document.querySelectorAll('button')].find(b=>b.offsetWidth&&b.textContent.trim()===${JSON.stringify(text)}).click()`,true);
  const fill=(selector,value)=>evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});e.value=${JSON.stringify(value)};e.dispatchEvent(new Event('input',{bubbles:true}));})()`);
  async function tap(selector){const r=await evaluate(`(()=>{const r=document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()`);await call('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[r]});await call('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});}
  fs.mkdirSync(out,{recursive:true});const capture=name=>fs.writeFileSync(path.join(out,name+'.png'),native('exec-out','screencap','-p'));
- const screen=name=>ready(`location.pathname.endsWith('/${name}.html')&&document.querySelector('.c-page')&&document.querySelector('[data-local-acceptance]')&&Alpine.$data(document.querySelector('[x-data]')).ready`);
+ const screen=name=>ready(`location.pathname.endsWith('/${name}.html')&&document.querySelector('.c-page')&&document.querySelector('[data-local-acceptance]')&&Alpine.$data(document.querySelector('[x-data]')).ready&&!Alpine.$data(document.querySelector('[x-data]')).gateLoading`);
  try{
   await call('Runtime.enable');await call('Page.enable');
   if(!await evaluate("!localStorage.getItem('ai_xingyue_user')&&!localStorage.getItem('ai_xingyue_token')"))throw Error('Refusing to change a signed-in account');
@@ -48,6 +48,7 @@ const native=(...args)=>execFileSync(adb,['-s',serial,...args]);
   if(geometry.bottom>geometry.viewport+2||geometry.width>geometry.screen+1)throw Error('Reply dock behind keyboard '+JSON.stringify(geometry));
   geometry.keyboardReducedViewport=geometry.viewport<closedHeight-100;
   capture('keyboard');
+  if(process.env.HOMER_REQUIRE_IME==='1'&&!geometry.keyboardReducedViewport)throw Error('Real IME failed to resize the content; reply dock may be obscured');
   if(!geometry.keyboardReducedViewport)process.stdout.write('LIMITATION: emulator IME reports open without reducing the viewport; keyboard obstruction cannot be certified on this device.\n');
   await fill('[aria-label="评论内容"]','Android 独立页面评论');await clickText('发送');await ready("document.querySelector('.c-comment')?.textContent.includes('Android 独立页面评论')");
   native('shell','input','keyevent','4');await screen('community-post');capture('detail');native('shell','input','keyevent','4');await screen('community');
@@ -61,9 +62,48 @@ const native=(...args)=>execFileSync(adb,['-s',serial,...args]);
   await click('a[href="/app/favorites.html?tab=community"]');await screen('favorites');capture('saved');native('shell','input','keyevent','4');await screen('community-activity');native('shell','input','keyevent','4');await screen('community');
   await click('[aria-label="社区消息"]');await screen('community-messages');if(!await evaluate("![...document.querySelectorAll('.c-messages button')].some(b=>b.textContent==='更多消息'&&b.offsetWidth)"))throw Error('Empty messages shows more button');capture('messages');native('shell','input','keyevent','4');await screen('community');
   await clickText('验收选项');await clickText('本机社区管理');await ready("document.querySelector('.community-admin [data-tab=rules]')");capture('admin');
+  await call('Page.navigate',{url:'https://patcher.villainy.top/app/create.html'});
+  await ready("document.querySelector('input[aria-label=角色名字]')?.offsetWidth");
+  if(await evaluate("!!document.querySelector('[data-local-acceptance]')"))throw Error('Community local-mode banner leaked into live character editor');
+  const editorHeight=await evaluate('visualViewport.height');
+  await tap('input[aria-label=角色名字]');
+  await new Promise(r=>setTimeout(r,800));
+  const editorKeyboard=await evaluate("(()=>{const r=document.querySelector('.editor-toolbar__primary').getBoundingClientRect();return {height:visualViewport.height,saveTop:r.top,saveBottom:r.bottom}})()");
+  if(process.env.HOMER_REQUIRE_IME==='1'&&!(editorKeyboard.height<editorHeight-100&&editorKeyboard.saveTop>=0&&editorKeyboard.saveBottom<=editorKeyboard.height+2))throw Error('Creator save obscured by real keyboard: '+JSON.stringify(editorKeyboard));
+  geometry.creator=editorKeyboard;capture('creator-keyboard');
+  native('shell','input','keyevent','4');
+  await ready("visualViewport.height>"+(editorHeight-3));
+  await click('[aria-label="角色卡操作"]');await click('[aria-label="导入卡包"]');
+  await new Promise(r=>setTimeout(r,600));
+  const chooser=native('shell','dumpsys','activity','activities').toString().split('\n').filter(l=>/ResumedActivity/.test(l)).join('\n');
+  if(!/documentsui|PickActivity/i.test(chooser))throw Error('Creator card file chooser missing');
+  native('shell','input','keyevent','4');await ready("document.querySelector('input[aria-label=角色名字]')?.offsetWidth");
+  // Same installed WebView, all five destination components (not a desktop mock).
+  let navStyle;
+  for(const page of ['explore','community','workshop','histories','me']){
+   await call('Page.navigate',{url:'https://patcher.villainy.top/app/'+page+'.html'});
+   await ready("document.querySelector('#homer-main-navigation a.is-active')&&getComputedStyle(document.querySelector('#homer-main-navigation svg')).width==='24px'");
+   const measured=await evaluate("(()=>{const n=document.querySelector('#homer-main-navigation'),a=n.querySelector('a:not(.is-active)'),s=getComputedStyle(a),r=n.getBoundingClientRect();return {height:r.height,font:s.font,color:s.color,active:getComputedStyle(n.querySelector('.is-active')).color,bg:getComputedStyle(n).backgroundColor}})()");
+   if(navStyle&&JSON.stringify(navStyle)!==JSON.stringify(measured))throw Error('Navigation differs on '+page+': '+JSON.stringify(measured));navStyle=measured;capture('navigation-'+page);
+  }
+  // Keep the dialogue service unloaded to exercise the actual cached shell UI.
+  shellOnlyScript=(await call('Page.addScriptToEvaluateOnNewDocument',{source:"if(location.pathname==='/app/chat.html'){new MutationObserver(()=>{const f=document.querySelector('#dialogue-frame');if(f&&f.getAttribute('src')&&f.getAttribute('src')!=='about:blank')f.src='about:blank';}).observe(document,{childList:true,subtree:true,attributes:true,attributeFilter:['src']});}"})).identifier;
+  await call('Fetch.enable',{patterns:[{urlPattern:'*/console/*'},{urlPattern:'*/admin/api/*'},{urlPattern:'*/go/*'},{urlPattern:'*/module/dialogue/*'}]});
+  await call('Page.navigate',{url:'https://patcher.villainy.top/app/chat.html?app_id=r15-test&conversation_id=r15-test'});
+  await ready("document.querySelector('#preview-settings')?.offsetWidth");
+  await click('#preview-settings');await click('#preview-model-settings');
+  await ready("document.querySelector('#preview-model-dialog[open]')");
+  const modelHeight=await evaluate('visualViewport.height');capture('model-settings');
+  await tap('#preview-model-dialog input[type=number]');await new Promise(r=>setTimeout(r,700));
+  const modelKeyboard=await evaluate("(()=>{const r=document.querySelector('#preview-model-save').getBoundingClientRect();return {height:visualViewport.height,saveTop:r.top,saveBottom:r.bottom}})()");
+  if(process.env.HOMER_REQUIRE_IME==='1'&&!(modelKeyboard.height<modelHeight-100&&modelKeyboard.saveTop>=0&&modelKeyboard.saveBottom<=modelKeyboard.height+2))throw Error('Model save obscured by keyboard: '+JSON.stringify(modelKeyboard));
+  geometry.model=modelKeyboard;capture('model-settings-keyboard');native('shell','input','keyevent','4');
+  await ready('visualViewport.height>'+ (modelHeight-3));native('shell','input','keyevent','4');
+  await ready("!document.querySelector('#preview-model-dialog').open");
   if(errors.length||writes.length)throw Error(JSON.stringify({errors,writes}));
   fs.writeFileSync(path.join(out,'results.json'),JSON.stringify({package:'org.nebula.horizon.composeai.uireview',checks:['native debug marker','local disclosure','standalone search/post/compose/activity/saved/messages','native Back','input dock bounds','draft restored','publish','comment','system media chooser cancellation','local admin'],keyboard:geometry,limitations:geometry.keyboardReducedViewport?[]:['Emulator IME has no visible keyboard; real phone keyboard obstruction still needs verification'],errors,remoteWrites:writes},null,2));process.stdout.write('R7 installed Android checks passed\n');
  }finally{
+  if(shellOnlyScript)await call('Page.removeScriptToEvaluateOnNewDocument',{identifier:shellOnlyScript}).catch(()=>{});
   if(scoped){await evaluate(`(async()=>{for(const key of Object.keys(localStorage)){if(key==='ai_xingyue_logged_in'||key==='ai_xingyue_user'||key==='homer.community.acceptance.v1.${uid}'||(key.startsWith('homer.page-cache.')&&key.endsWith('.${uid}')))localStorage.removeItem(key);}await new Promise(resolve=>{const r=indexedDB.open('homer-community-acceptance');r.onsuccess=()=>{const db=r.result;if(!db.objectStoreNames.contains('accounts')){db.close();resolve();return;}const tx=db.transaction('accounts','readwrite');tx.objectStore('accounts').delete('${uid}');tx.oncomplete=()=>{db.close();resolve()};};r.onerror=resolve;});window.HomerNative.setAccountScope('');})()`);await call('Page.navigate',{url:'https://patcher.villainy.top/app/login.html'});}
   await call('Fetch.disable').catch(()=>{});socket.close();
  }

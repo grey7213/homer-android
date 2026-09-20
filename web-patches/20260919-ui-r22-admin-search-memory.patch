@@ -1,0 +1,210 @@
+diff --git a/frontend/app/assets/js/chat.js b/frontend/app/assets/js/chat.js
+index 96ba36fed4fe6585523552545800d217d04d19a1..d8e2f93461d87bef232f102628c85956dd440a91 100644
+--- a/frontend/app/assets/js/chat.js
++++ b/frontend/app/assets/js/chat.js
+@@ -3,7 +3,6 @@ import { openChatTool } from '/assets/js/chat-tools.js';
+ import { bindChatAppearance } from '/assets/js/chat-appearance.js';
+ import { settingsPage } from '/assets/js/chat-settings-page.js';
+ import { controlCenter } from '/assets/js/chat-control-center.js';
+-import { openMemoryEntry } from '/assets/js/memory-entry.js';
+ import { fillModelSelect } from '/assets/js/model-catalog.js';
+ import { messageActionIcon, positionChatMenu } from '/assets/js/chat-menu.js';
+ 
+@@ -90,11 +89,6 @@ let pendingTool = null;
+ 
+ function openRuntimeTool(section) {
+   pendingTool?.dialog.close();
+-  if(section==='memory'){
+-    const conversation=activeConversationId;
+-    const proceed=items=>{if(conversation!==activeConversationId)throw Error('会话已切换，请重新选择');if(!runtimeReady)throw Error('当前会话还未连接，所选范围已保留。连接后点下一步；不会自动发起生成。');postRuntimeCommand('memory-selection',{ids:items?.map(m=>m.id)||[]},{queue:false});document.body.classList.add('is-ready')};
+-    openMemoryEntry({messages:[...previewMessages.querySelectorAll('.preview-message:not(.is-pending)')].map(e=>({id:e.dataset.messageId,text:e.textContent})),onContinue:proceed,onAdvanced:()=>proceed([])});return;
+-  }
+   if (runtimeReady) {
+     postRuntimeCommand('open-settings', { section }, { queue: false });
+     document.body.classList.add('is-ready');
+diff --git a/frontend/app/assets/js/me.js b/frontend/app/assets/js/me.js
+index 6ce682527cd549277f3f840e6b15a2643fd75e46..ca21ebecba99caf8fa3142ebc0c90ec5692eaea3 100644
+--- a/frontend/app/assets/js/me.js
++++ b/frontend/app/assets/js/me.js
+@@ -33,6 +33,8 @@ function mePage() {
+     savingPersona: false,
+     siteSettings: null,
+     adminVerified: false,
++    profileError: '',
++    profileRefreshing: false,
+ 
+     async init() {
+       injectLayout('me');
+@@ -45,19 +47,34 @@ function mePage() {
+         this.syncProfileForm(cached);
+         this.restoreSnapshot(cached);
+       }
+-      const [profileResult] = await Promise.allSettled([
+-        api.profile(),
+-        this.refreshPoints(),
+-        this.loadPersona(),
+-      ]);
+-      if (profileResult.status === 'fulfilled') {
+-        this.applyProfile(profileResult.value);
+-      } else {
+-        const err = profileResult.reason;
++      // Account authority must never wait for unrelated wallet/persona requests.
++      void this.refreshPoints();
++      void this.loadPersona();
++      await this.refreshProfile();
++    },
++
++    async refreshProfile() {
++      if (this.profileRefreshing) return;
++      this.profileRefreshing = true;
++      this.profileError = '';
++      const controller = new AbortController();
++      const timeout = setTimeout(() => controller.abort(), 10000);
++      try {
++        const response = await api.profile({ signal: controller.signal });
++        const profile = response?.data || response;
++        if (!profile?.id) throw new Error('账户资料无效');
++        this.applyProfile(profile);
++      } catch (err) {
++        this.adminVerified = false;
+         if (err instanceof ApiError && err.code === 401) {
+           clearAuth();
+           location.replace('/app/login.html?next=' + encodeURIComponent(location.pathname));
++        } else {
++          this.profileError = '账户权限暂未确认，请重试。';
+         }
++      } finally {
++        clearTimeout(timeout);
++        this.profileRefreshing = false;
+       }
+     },
+ 
+diff --git a/frontend/app/me.html b/frontend/app/me.html
+index 7889f61f48bd34d3007eecc6792058db2cf9d97e..183fa8c1278f2a245a20466c1526122aa5999f6a 100644
+--- a/frontend/app/me.html
++++ b/frontend/app/me.html
+@@ -87,6 +87,7 @@
+           <a href="/app/farm.html"><span>惑梦农场</span><small>种植收获 · 每日奖励</small><b>›</b></a>
+           <a href="/app/me.html?panel=persona"><span>我的人设</span><small>在故事中的身份</small><b>›</b></a>
+           <a href="/admin.html" x-show="adminVerified" aria-label="管理后台"><span>管理后台</span><small>仅管理员可见</small><b>›</b></a>
++          <button type="button" x-show="profileError" @click="refreshProfile" :disabled="profileRefreshing"><span x-text="profileError" role="status"></span><small x-text="profileRefreshing ? '正在确认' : '点击重试'"></small><b>↻</b></button>
+         </section>
+         <section class="profile-setting-section" data-homer-update-section x-show="!panel || panel==='settings'" hidden>
+           <h3>应用更新</h3>
+diff --git a/frontend/assets/css/memory-controls.css b/frontend/assets/css/memory-controls.css
+index 2afaf8d6d7169a8465f74a26425e431043c3cfc1..21b46e3aff318dddcce6b12f72a525eaf56fec48 100644
+--- a/frontend/assets/css/memory-controls.css
++++ b/frontend/assets/css/memory-controls.css
+@@ -1,5 +1,7 @@
+ /* Higher specificity than the host/plugin generic button grid. */
+ html body dialog.stmb-popup.homer-settings-page{overflow:hidden!important}
++/* The settings page owns scrolling; the inherited popup body must not add another scroller. */
++html body dialog.stmb-popup.homer-settings-page :is(.popup-body,.popup-content){overflow:visible!important;max-height:none!important;height:auto!important;flex:none!important;width:100%!important}
+ html body dialog.stmb-popup.homer-settings-page .homer-memory-advanced-group .info-block{max-height:none!important;overflow:visible!important;padding:12px!important;background:var(--app-fill)!important;color:var(--app-text)!important;border:0!important;border-radius:12px!important}
+ html body dialog.stmb-popup.homer-settings-page .homer-memory-advanced-group .info-block:has(.homer-memory-actions){padding:0!important;background:transparent!important}
+ html body dialog.stmb-popup.homer-settings-page .homer-memory-advanced-group .info-block small{display:block;margin-bottom:8px;color:var(--app-muted)!important;opacity:1!important;font-size:12px!important}
+diff --git a/frontend/assets/css/surface-controls.css b/frontend/assets/css/surface-controls.css
+index 0c6f67749cf2e4e5abadc045bf22992a862f3392..0647aba39d00453e24eab812404bd1e6e5b1c153 100644
+--- a/frontend/assets/css/surface-controls.css
++++ b/frontend/assets/css/surface-controls.css
+@@ -6,6 +6,9 @@ html body .homer-option-picker__check{color:var(--app-accent)}
+ html body:not(.homer-runtime){--fy-bg:var(--app-bg);--fy-card:var(--app-panel);--fy-text:var(--app-text);--fy-text-soft:var(--app-muted);--fy-border:var(--app-line);--fy-accent:var(--app-accent);--fy-accent-2:var(--app-accent);--fy-accent-soft:var(--app-tint)}
+ /* Search/edit controls previously inherited white background with dark-mode text. */
+ html[data-theme=dark] body:not(.homer-runtime) :is(.xy-input,.xy-textarea,.xy-select,input[type=search],.home-search-box input,.explore-search input){background:var(--app-fill)!important;color:var(--app-text)!important;-webkit-text-fill-color:var(--app-text)!important;border-color:var(--app-line)!important}
++/* The icon, padding and editable area form one surface, at rest and on focus. */
++html[data-theme=dark] body:not(.homer-runtime) .home-search-box{background:var(--app-fill)!important}
++html[data-theme=dark] body:not(.homer-runtime) .home-search-box input{background:transparent!important;box-shadow:none!important}
+ html[data-theme=dark] body:not(.homer-runtime) :is(.xy-input,.xy-textarea,input[type=search])::placeholder{color:var(--app-muted)!important;-webkit-text-fill-color:var(--app-muted)!important;opacity:1}
+ html body.community-app {background:var(--app-bg);color:var(--app-text)}
+ html body.community-app :is(.c-page,.c-header,.c-post,.c-detail,.c-editor,.c-reply-bar){background:var(--app-panel);color:var(--app-text)}
+diff --git a/frontend/assets/js/api.js b/frontend/assets/js/api.js
+index 74f4a4925a2cd552ddb667988e939282fd7d2089..c985b8df32252da88d3165e8b7aa9bec01b782e0 100644
+--- a/frontend/assets/js/api.js
++++ b/frontend/assets/js/api.js
+@@ -78,7 +78,7 @@ function handleUnauthorized() {
+   }
+ }
+ 
+-async function request(path, { method = 'GET', body, headers = {}, auth = true } = {}) {
++async function request(path, { method = 'GET', body, headers = {}, auth = true, signal } = {}) {
+   const finalHeaders = { 'Accept': 'application/json', ...headers };
+   if (body !== undefined && body !== null && !(body instanceof FormData)) {
+     finalHeaders['Content-Type'] = 'application/json';
+@@ -94,6 +94,7 @@ async function request(path, { method = 'GET', body, headers = {}, auth = true }
+       headers: finalHeaders,
+       // 携带 HttpOnly Cookie（登录凭证），同源下必需，配合后端 Access-Control-Allow-Credentials。
+       credentials: 'include',
++      signal,
+       body: body instanceof FormData ? body : (body !== undefined && body !== null ? JSON.stringify(body) : undefined),
+     });
+   } catch (err) {
+@@ -149,7 +150,7 @@ export const api = {
+ 
+ 
+   // 用户接口
+-  profile: () => request('/console/api/account/profile'),
++  profile: (options = {}) => request('/console/api/account/profile', options),
+   points: () => request('/console/api/user/point'),
+   credits: () => request('/console/api/user/credits'),
+   redeemCode: (code) => request('/console/api/web/redeem-code', { method: 'POST', body: { code } }),
+diff --git a/frontend/assets/js/memory-ui.js b/frontend/assets/js/memory-ui.js
+index f27f131dcecd123d6cb8e7af71e870eae5c7de44..102c30a526e7f2568f2210cd6bd088c369c14f82 100644
+--- a/frontend/assets/js/memory-ui.js
++++ b/frontend/assets/js/memory-ui.js
+@@ -97,10 +97,10 @@ function enhance(popup) {
+     // Presentation only: retain plugin values and original click/save handlers.
+     for(const option of popup.querySelectorAll('option'))if(/SillyTavern|Current ST/i.test(option.textContent))option.textContent='当前对话模型';
+     for(const button of popup.querySelectorAll('.popup-controls .menu_button')){
+-        if(button.textContent.trim()==='关闭')button.dataset.memoryClose='true';
++        if(/^(关闭|Close)$/i.test(button.textContent.trim())){button.textContent='关闭';button.dataset.memoryClose='true';}
+         if(/清除场景|Clear Scene/.test(button.textContent)){button.textContent='取消范围选择';button.title='只取消起止消息标记，不删除聊天记录或记忆';}
+-        else if(/创建记忆/.test(button.textContent)){button.textContent='生成记忆';button.dataset.memoryGenerate='true';}
+-        else if(/整合记忆/.test(button.textContent)){button.textContent='合并整理已有记忆';button.title='已有记忆太多时再使用，不会生成新的聊天记录';storagePage.append(button);}
++        else if(/创建记忆|Create Memory/i.test(button.textContent)){button.textContent='生成记忆';button.dataset.memoryGenerate='true';}
++        else if(/整合记忆|Consolidate Memories/i.test(button.textContent)){button.textContent='合并整理已有记忆';button.title='已有记忆太多时再使用，不会生成新的聊天记录';storagePage.append(button);}
+     }
+     // No generation on entry. Select a useful default range through the original marker handlers.
+     const initialStart=document.querySelector('#chat .mes_stmb_start.on')?.closest('.mes');
+@@ -142,9 +142,14 @@ function refreshMemoryLabels(popup){
+             if(b.tagName!=='BUTTON'&&!b.dataset.homerAccessible){b.dataset.homerAccessible='1';b.setAttribute('role','button');b.tabIndex=0;b.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();b.click();}});}
+         }
+     }
+-    const labels=[[/创建记忆/,'生成记忆'],[/整合记忆|整合已有记忆/,'合并整理已有记忆'],[/清除场景/,'取消范围选择']];
++    const labels=[[/创建记忆|Create Memory/i,'生成记忆'],[/整合记忆|整合已有记忆|Consolidate Memories/i,'合并整理已有记忆'],[/清除场景|Clear Scene/i,'取消范围选择'],[/^(关闭|Close)$/i,'关闭']];
+     for(const button of popup.querySelectorAll('.popup-controls .menu_button'))for(const [pattern,label] of labels){
+         if(pattern.test(button.textContent)&&button.textContent!==label){button.textContent=label;if(label==='取消范围选择')button.title='只取消起止标记，不删除聊天或记忆';}
++        if(button.textContent===label){
++            if(label==='关闭')button.dataset.memoryClose='true';
++            if(label==='生成记忆')button.dataset.memoryGenerate='true';
++            if(label==='合并整理已有记忆')popup.querySelector('.homer-memory-tab[aria-label="保存设置"]')?.append(button);
++        }
+     }
+     for(const option of popup.querySelectorAll('option'))if(/SillyTavern|Current ST/i.test(option.textContent))option.textContent='当前对话模型';
+ }
+diff --git a/sillytavern-runtime/public/scripts/extensions/homer-bridge/index.js b/sillytavern-runtime/public/scripts/extensions/homer-bridge/index.js
+index 748af44fdcceb691667566f4e6c6d9aaa42c0011..61accab656c75411d58294db2cc7e7bc2713ec19 100644
+--- a/sillytavern-runtime/public/scripts/extensions/homer-bridge/index.js
++++ b/sillytavern-runtime/public/scripts/extensions/homer-bridge/index.js
+@@ -27,7 +27,6 @@ import { installKeywordInjector } from './keyword-injector.js';
+ import { openChatTool } from '/assets/js/chat-tools.js';
+ import { bindChatAppearance } from '/assets/js/chat-appearance.js';
+ import { installMemoryUi } from '/assets/js/memory-ui.js';
+-import { openMemoryEntry } from '/assets/js/memory-entry.js';
+ import { settingsPage } from '/assets/js/chat-settings-page.js';
+ import { controlCenter } from '/assets/js/chat-control-center.js';
+ 
+@@ -3622,11 +3621,9 @@ function createRangeField({ key, label, hint, min, max, step, value }) {
+ }
+ 
+ function openMemoryBooks(){
+-    returnToDesktopNavigation();
+-    const context=getContext(),conversation=launch?.conversation_id;
+-    const messages=context.chat.map((m,index)=>({id:index,text:String(m.mes||'')}));
+-    const proceed=items=>{if(launch?.conversation_id!==conversation)throw Error('会话已切换，请重新选择');if(!window.HomerMemoryBooks?.open)throw Error('整理引擎尚未就绪，范围已保留。稍后点下一步，不会自动生成。');openMemoryEngineSettings(items.map(m=>m.id));};
+-    openMemoryEntry({messages,onContinue:proceed,onAdvanced:()=>proceed([])});
++    // The plugin already owns range selection and the real conversation.
++    // Never interpose a second page based on the host's lossy preview DOM.
++    openMemoryEngineSettings();
+ }
+ 
+ function openMemoryEngineSettings(indices=[]) {
