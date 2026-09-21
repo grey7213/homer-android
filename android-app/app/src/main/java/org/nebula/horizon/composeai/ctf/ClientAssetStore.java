@@ -48,10 +48,12 @@ public final class ClientAssetStore {
             String mime = mimeType(assetPath);
             String encoding = isText(mime) ? StandardCharsets.UTF_8.name() : null;
             Map<String, String> headers = new HashMap<>();
-            headers.put("Cache-Control", "public, max-age=31536000, immutable");
+            // These URLs do not contain a content hash. Scripts/styles at the
+            // same URL change between APKs and must not retain old responses.
+            // Revalidation is still served from the APK, not from the network.
+            headers.put("Cache-Control", cacheControl(mime));
             headers.put("X-Content-Type-Options", "nosniff");
             headers.put("X-Homer-Client-Asset", "apk");
-            if ("text/html".equals(mime)) headers.put("Cache-Control", "no-cache");
             return new WebResourceResponse(mime, encoding, 200, "OK", headers, stream);
         } catch (IOException error) {
             if (stream != null) {
@@ -63,6 +65,10 @@ public final class ClientAssetStore {
 
     Set<String> bundledAssetsForTest() {
         return Collections.unmodifiableSet(bundledAssets);
+    }
+
+    static String cacheControl(String mime) {
+        return isText(mime) ? "no-cache" : "public, max-age=31536000, immutable";
     }
 
     private Set<String> loadBundledIndex() {

@@ -50,6 +50,28 @@ import java.util.Set;
 public final class HomerActivity extends Activity {
     private volatile String appVisitId = java.util.UUID.randomUUID().toString();
     private boolean handlingWebBack;
+    private boolean accountAvailable;
+
+    void onAccountAvailable(boolean available) {
+        accountAvailable = available;
+        if (available) scheduleDialoguePreparation();
+    }
+
+    private void scheduleDialoguePreparation() {
+        // Use a separate callback: the visible-page readiness poll cancels its
+        // own Handler callbacks. Never warm a card or reopen a conversation.
+        root.postDelayed(() -> {
+            if (!accountAvailable || isFinishing() || isDestroyed()
+                    || persistentPages.containsKey("chat")) return;
+            if (!Set.of("explore", "community", "workshop", "histories", "me").contains(activePersistentPage)) return;
+            WebView prepared = new WebView(this);
+            configureLiveView(prepared);
+            prepared.setVisibility(View.INVISIBLE);
+            persistentPages.put("chat", prepared);
+            root.addView(prepared, 0, matchParent());
+            prepared.loadUrl(BuildConfig.SERVER_BASE_URL.replaceAll("/$", "") + "/app/chat.html?prewarm=1");
+        }, 600);
+    }
 
     private static final String CLOSE_WEB_OVERLAY_SCRIPT = """
             (() => {
@@ -180,6 +202,7 @@ public final class HomerActivity extends Activity {
 
         root = new FrameLayout(this);
         liveView = new WebView(this);
+        refreshInstalledAssetCache(liveView);
         snapshotView = new WebView(this);
         root.addView(liveView, matchParent());
         // The local snapshot is the first interactive frame and therefore stays
@@ -202,7 +225,10 @@ public final class HomerActivity extends Activity {
                 android.graphics.Insets bars = current.getInsets(WindowInsets.Type.systemBars());
                 top = bars.top;
                 right = bars.right;
-                bottom = bars.bottom;
+                // Android 15 edge-to-edge does not resize our padded WebViews
+                // automatically. IME and navigation occupy the same bottom
+                // edge, so use their union rather than adding them twice.
+                bottom = Math.max(bars.bottom, current.getInsets(WindowInsets.Type.ime()).bottom);
                 left = bars.left;
             } else {
                 top = current.getSystemWindowInsetTop();
@@ -229,12 +255,28 @@ public final class HomerActivity extends Activity {
         handler.post(this::startLivePage);
     }
 
+    private void refreshInstalledAssetCache(WebView view) {
+        try {
+            long revision = getPackageManager().getPackageInfo(getPackageName(), 0).lastUpdateTime;
+            android.content.SharedPreferences state = getSharedPreferences("homer-web-assets", MODE_PRIVATE);
+            if (state.getLong("installed-at", -1) != revision) {
+                // HTTP resource cache only. Never clear cookies, WebStorage,
+                // account preferences, conversation databases or user files.
+                view.clearCache(true);
+                state.edit().putLong("installed-at", revision).apply();
+            }
+        } catch (PackageManager.NameNotFoundException ignored) {
+            // The current package should always exist; do not erase user state.
+        }
+    }
+
     private void applyNativeInsetsToWebViews() {
         // The native root is padded by the measured insets above.  Keep the
         // CSS fallback variables at zero to avoid applying the same inset twice
         // inside the WebView while still allowing browser-hosted pages to use
         // env(safe-area-inset-*).
         final String script = "(() => { const r = document.documentElement; "
+                + "if (!r) return; "
                 + "r.style.setProperty('--homer-native-safe-top','0px');"
                 + "r.style.setProperty('--homer-native-safe-right','0px');"
                 + "r.style.setProperty('--homer-native-safe-bottom','0px');"
@@ -321,16 +363,36 @@ public final class HomerActivity extends Activity {
         applySystemBars();
     }
 
+    private String settingsSurface = "";
+
+    void setAppTheme(boolean dark) {
+        getPreferences(MODE_PRIVATE).edit().putBoolean("app_theme_dark", dark).apply();
+        applySystemBars();
+    }
+
+    void setSettingsSurface(String mode) {
+        settingsSurface = mode;
+        applySystemBars();
+    }
+
     @SuppressWarnings("deprecation")
     private void applySystemBars() {
         String visibleUrl = liveView == null ? null : liveView.getUrl();
         boolean darkConversation = visibleUrl == null || "about:blank".equals(visibleUrl)
                 ? "chat".equals(activePersistentPage) : StartupPresentation.isConversationUrl(visibleUrl);
-        getWindow().setStatusBarColor(darkConversation ? 0xFF141414 : 0xFFF5F3F7);
-        getWindow().setNavigationBarColor(darkConversation ? 0xFF212121 : 0xFFF5F3F7);
+        if (!darkConversation) settingsSurface = "";
+        // The app theme governs non-chat pages too, including the inset behind
+        // Android 15's transparent bars. Conversation appearance stays separate.
+        if (!darkConversation) darkConversation = getPreferences(MODE_PRIVATE).getBoolean("app_theme_dark", false);
+        boolean settingsVisible = !settingsSurface.isEmpty();
+        if (settingsVisible) darkConversation = "dark".equals(settingsSurface);
+        int surfaceColor = settingsVisible ? (darkConversation ? 0xFF000000 : 0xFFF2F2F7)
+                : (darkConversation ? 0xFF141414 : 0xFFF5F3F7);
+        getWindow().setStatusBarColor(surfaceColor);
+        getWindow().setNavigationBarColor(settingsVisible ? surfaceColor : darkConversation ? 0xFF212121 : 0xFFF5F3F7);
         // Android 15 may make the system bar transparent. Its inset area must
         // match the icon appearance instead of showing the white window below.
-        if (root != null) root.setBackgroundColor(darkConversation ? 0xFF141414 : 0xFFF5F3F7);
+        if (root != null) root.setBackgroundColor(surfaceColor);
         View decor = getWindow().getDecorView();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             WindowInsetsController controller = decor.getWindowInsetsController();
@@ -431,8 +493,23 @@ public final class HomerActivity extends Activity {
         }
     }
 
+    /** The warmed chat document can receive the first conversation bind without a reload. */
+    static boolean isPreparedChatUrl(String value) {
+        if (value == null) return false;
+        try {
+            URI uri = URI.create(value);
+            String query = uri.getRawQuery();
+            return "/app/chat.html".equals(uri.getPath())
+                    && query != null
+                    && query.matches("(?:^|.*&)prewarm=1(?:&.*|$)");
+        } catch (RuntimeException ignored) {
+            return false;
+        }
+    }
+
     private boolean switchLiveConversation(WebView view, String target) {
-        if (!canSwitchConversationInPlace(view.getUrl(), target)) return false;
+        String current = view.getUrl();
+        if (!canSwitchConversationInPlace(current, target) && !isPreparedChatUrl(current)) return false;
         String script = "!window.dispatchEvent(new CustomEvent('homer:navigate-conversation',"
                 + "{cancelable:true,detail:{url:" + JSONObject.quote(target) + "}}))";
         view.evaluateJavascript(script, handled -> {
@@ -507,6 +584,7 @@ public final class HomerActivity extends Activity {
             liveRevealed = true;
             liveReadyHandled = true;
             cacheDatabase.saveLastUrl(currentTarget);
+            liveView.evaluateJavascript("window.dispatchEvent(new Event('homer:page-visible'))", null);
         }
         applyNativeInsetsToWebViews();
         return true;
@@ -544,6 +622,7 @@ public final class HomerActivity extends Activity {
             liveReadyHandled = true;
             String url = liveView.getUrl();
             if (url != null) cacheDatabase.saveLastUrl(url);
+            liveView.evaluateJavascript("window.dispatchEvent(new Event('homer:page-visible'))", null);
             applyNativeInsetsToWebViews();
             return true;
         }
@@ -623,12 +702,17 @@ public final class HomerActivity extends Activity {
 
     private void pollLiveReady() {
         if (isFinishing() || liveView == null) return;
-        liveView.evaluateJavascript(READ_LIVE_STATE_SCRIPT, raw -> {
+        final WebView observedView = liveView;
+        observedView.evaluateJavascript(READ_LIVE_STATE_SCRIPT, raw -> {
+            // An asynchronous callback from a page that has since become
+            // inactive must not reveal it or overwrite the last visited page.
+            if (observedView != liveView || isFinishing() || isDestroyed()) return;
             try {
                 String decoded = decodeJavascriptString(raw);
                 if (decoded == null || decoded.isEmpty()) throw new IllegalStateException("empty state");
                 JSONObject state = new JSONObject(decoded);
                 String documentUrl = state.optString("url", "");
+                if (!documentUrl.equals(observedView.getUrl())) return;
                 if (state.optBoolean("shellReady")
                         && SafeUrls.isTrustedNavigation(BuildConfig.SERVER_BASE_URL, documentUrl)) {
                     revealLiveShell();
@@ -867,6 +951,7 @@ public final class HomerActivity extends Activity {
             cacheDatabase.saveLastUrl(url);
             handler.removeCallbacksAndMessages(null);
             pollLiveReady();
+            scheduleDialoguePreparation();
         }
 
         @Override
