@@ -24,6 +24,18 @@ public final class LiveBridge {
     public boolean isDebugBuild() { return BuildConfig.DEBUG; }
 
     @JavascriptInterface
+    public void setAppTheme(String mode) {
+        if (!"light".equals(mode) && !"dark".equals(mode)) return;
+        activity.runOnUiThread(() -> activity.setAppTheme("dark".equals(mode)));
+    }
+
+    @JavascriptInterface
+    public void setSettingsSurface(String mode) {
+        final String safe = "light".equals(mode) || "dark".equals(mode) ? mode : "";
+        activity.runOnUiThread(() -> activity.setSettingsSurface(safe));
+    }
+
+    @JavascriptInterface
     public void checkForAppUpdate() { activity.runOnUiThread(activity::checkForAppUpdate); }
 
     @JavascriptInterface
@@ -31,6 +43,7 @@ public final class LiveBridge {
         if (database.setAccountScope(owner)) {
             activity.runOnUiThread(activity::discardInactiveAccountPages);
         }
+        activity.runOnUiThread(() -> activity.onAccountAvailable(owner != null && !owner.trim().isEmpty()));
     }
 
     @JavascriptInterface

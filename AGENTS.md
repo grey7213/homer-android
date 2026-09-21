@@ -15,6 +15,9 @@
 
 ## Verified pitfalls
 
+- Acceptance regression gate: a visible local chat snapshot is not a ready conversation. Test native process restart as well as webpage navigation, and time the actual Memory Books home against real messages. If full startup still stalls, do not label the package "instant" or hide the wait as a fix. Preserve separate cold-start and ready-menu measurements.
+- Resource updates: mutable JS/CSS/JSON URLs are not immutable content hashes. Revalidate bundled text locally; invalidate HTTP resource cache on APK replacement without clearing login cookies, WebStorage or conversation databases. Test an upgrade with existing login and history, not only a clean installation.
+
 - Symptom: Android Back leaves a page instead of cancelling its new HTML dialog. Cause: WebView Activity history handling does not invoke the web overlay handler. Fix: Ask the active document and its fixed same-origin dialogue iframe to cancel the top overlay first; honor the DOM cancel event. Verify: API 33 confirmation cancellation, multiple-choice discard, a prevented cancellation, and nested dialogue modal all passed without navigation.
 
 - Symptom: An APK upgrade can still load an older activated data patch. Cause: Patch slots outrank bundled assets. Fix: Clear only activation metadata when the bundled APK version changes; require a patch's `min_app_version` to match that version. Verify: `PatchUpgradeTest` on API 33 preserves a separate account sentinel and keeps a current-version slot on ordinary restart.
