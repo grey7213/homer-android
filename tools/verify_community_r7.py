@@ -37,6 +37,8 @@ def run(browser,base,w,h):
     page.goto(base+'/app/community.html?acceptance=local',wait_until='networkidle')
     gate=page.get_by_role('dialog',name='进入社区前，请阅读');gate.get_by_role('checkbox').check();gate.get_by_role('button',name='同意并进入').click()
     expect(page.locator('.c-post')).to_have_count(2)
+    assert page.locator('.c-compose-fab').evaluate('e=>getComputedStyle(e).borderRadius')=='50%'
+    assert page.locator('.c-post').first.evaluate('e=>getComputedStyle(e).paddingLeft')=='12px'
     expect(page.locator('[data-local-acceptance]')).to_be_visible()
     assert page.locator('[data-local-acceptance]').bounding_box()['height']<=36
     expect(page.locator('[data-app-bottom-nav] a')).to_have_count(5)
@@ -54,6 +56,7 @@ def run(browser,base,w,h):
     expect(page.locator('.c-detail h2')).to_have_text('试试发帖、回复和举报')
     expect(page.locator('dialog[open]')).to_have_count(0);expect(page.locator('.c-pagination')).not_to_be_visible()
     dock=page.locator('.c-reply-dock').bounding_box();assert dock['width']==min(720,w) and dock['height']<82,dock
+    assert page.locator('.c-reply-dock textarea').evaluate('e=>getComputedStyle(e).borderRadius')=='6px'
     assert page.locator('.c-header').bounding_box()['height']<=60
     snap('post-empty-comments')
     page.get_by_role('textbox',name='评论内容').fill('这是独立详情页中的评论')
@@ -93,6 +96,10 @@ def run(browser,base,w,h):
     page.get_by_role('button',name='返回',exact=True).click();page.wait_for_url('**/community.html')
     expect(page.locator('.c-post')).to_have_count(3)
     page.wait_for_function('(expected)=>Math.abs(scrollY-expected)<3',arg=position)
+    page.evaluate("async()=>{const m=await import('/app/assets/js/community-local.js?v=20260917-r8');m.disableLocal();window.dispatchEvent(new Event('homer:page-visible'));}")
+    expect(page.locator('.c-gate')).to_be_visible()
+    expect(page.locator('.c-post')).to_have_count(0)
+    expect(page.locator('[data-local-acceptance]')).to_have_count(0)
     assert not writes,writes;assert not errors,errors;assert not failed,failed
     ctx.close();return {'viewport':[w,h],'pages':8,'remote_writes':writes,'errors':errors,'request_failures':failed,'checks':['whole document routes','no main-dialog overlays','compact local disclosure','reply dock','draft/media restore','publish and edit','search and profile','activity and saved','empty/deleted states','delete cancelled']}
 

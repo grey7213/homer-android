@@ -1,0 +1,529 @@
+diff --git a/frontend/app/assets/js/chat.js b/frontend/app/assets/js/chat.js
+index c5ee729b1708a979db5f1fd3d57a46aaa4f21116..ee654f8ecf60f6b0934df461fe1557e39b91447d 100644
+--- a/frontend/app/assets/js/chat.js
++++ b/frontend/app/assets/js/chat.js
+@@ -1,6 +1,7 @@
+ import { api, ApiError, getCachedUser } from '/app/assets/js/app-core.js?v=20260917-r8';
+ import { openChatTool } from '/assets/js/chat-tools.js';
+ import { bindChatAppearance } from '/assets/js/chat-appearance.js';
++import { settingsPage } from '/assets/js/chat-settings-page.js';
+ import { fillModelSelect } from '/assets/js/model-catalog.js';
+ import { messageActionIcon, positionChatMenu } from '/assets/js/chat-menu.js';
+ 
+@@ -42,6 +43,29 @@ const networkRetry = document.querySelector('#preview-network-retry');
+ const modelButton = document.querySelector('#preview-model-settings');
+ const modelSummary = document.querySelector('#preview-model-summary');
+ const modelDialog = document.querySelector('#preview-model-dialog');
++// Cached conversation UI and the ready runtime use the same component grammar.
++{
++  const form=modelDialog.querySelector('form'), group=document.createElement('div');
++  group.className='homer-model-fields';
++  const labels=[...form.querySelectorAll(':scope > label')];
++  labels[0].className='homer-model-select-field';
++  const picker=labels[0].querySelector('select');picker.classList.add('homer-model-select');
++  const modelLabel=document.createElement('span');modelLabel.className='homer-model-field__label';modelLabel.textContent='当前模型';labels[0].replaceChildren(modelLabel,picker);
++  const hints=['数值越高越有变化，越低越稳定。','控制候选词范围，通常保持在 0.8–1。','降低已频繁出现词语再次出现的概率。','鼓励模型尝试尚未出现的新内容。'];
++  labels.slice(1).forEach((label,i)=>{
++    label.className='homer-model-field';
++    label.querySelector('span').classList.add('homer-model-field__head');
++    const number=label.querySelector('input[type=number]'),range=label.querySelector('input[type=range]');
++    const title=label.querySelector('span>span');title.classList.add('homer-model-field__label');
++    number.className='homer-model-field__number';number.setAttribute('aria-label',title.textContent);
++    range.className='homer-model-field__range';range.setAttribute('aria-label',title.textContent+'滑块');
++    const hint=document.createElement('small');hint.className='homer-model-field__hint';hint.textContent=hints[i];label.append(hint);group.append(label);
++  });
++  labels[0].after(group);
++  const note=document.createElement('p');note.className='homer-sheet-dialog__notice';note.textContent='仅用于当前会话，不改变其他对话的模型设置。';form.querySelector('header').after(note);
++  form.querySelector('#preview-model-save').textContent='保存';
++}
++settingsPage(modelDialog, { shell: modelDialog.querySelector('form'), head: modelDialog.querySelector('header'), footer: modelDialog.querySelector('footer'), title: '模型设置' });
+ const modelForm = document.querySelector('#preview-model-form');
+ const modelSelect = document.querySelector('#preview-model-select');
+ const modelClose = document.querySelector('#preview-model-close');
+diff --git a/frontend/app/assets/js/layout.js b/frontend/app/assets/js/layout.js
+index e384da96ccaa714588f529f11b57175e38aa7553..69db82cabb0dbd45202048fa2572a0855a7f3bc6 100644
+--- a/frontend/app/assets/js/layout.js
++++ b/frontend/app/assets/js/layout.js
+@@ -126,7 +126,7 @@ export function sidebarHtml(active = 'home', settings = null) {
+ 
+ export function bottomNavHtml(active = 'home', settings = null) {
+   return MOBILE_ITEMS.map(item => `
+-    <a href="${item.href}" ${item.key==='community'?'data-community-nav':''} class="${item.key === active ? 'is-active' : ''}">
++    <a href="${item.href}" ${item.key==='community'?'data-community-nav':''} ${item.key===active?'aria-current="page"':''} class="${item.key === active ? 'is-active' : ''}">
+       ${svg(item.icon)}<span>${navLabel(item, settings, true)}</span>
+     </a>`).join('');
+ }
+@@ -355,7 +355,17 @@ export function injectLayout(active = 'home') {
+   const sidebar = document.querySelector('[data-app-sidebar]');
+   if (sidebar) sidebar.innerHTML = sidebarHtml(active);
+   const bottom = document.querySelector('[data-app-bottom-nav]');
+-  if (bottom) bottom.innerHTML = bottomNavHtml(active);
++  if (bottom) {
++    bottom.id = 'homer-main-navigation';
++    bottom.setAttribute('aria-label', '主导航');
++    if (!document.querySelector('#homer-navigation-style')) {
++      const style = document.createElement('link');
++      style.id = 'homer-navigation-style'; style.rel = 'stylesheet';
++      style.href = '/assets/css/main-navigation.css?v=20260919-r15';
++      document.head.append(style);
++    }
++    bottom.innerHTML = bottomNavHtml(active);
++  }
+   bindShellUtilities(document);
+   loadPublicSiteSettings().then(settings => {
+     renderAnnouncement(settings);
+diff --git a/frontend/assets/css/chat-design.css b/frontend/assets/css/chat-design.css
+index 996d7d01b12e61e324c25c90af45966d86f9e9f7..77150c49faee16bed4e336827e5680f10ffc9ea4 100644
+--- a/frontend/assets/css/chat-design.css
++++ b/frontend/assets/css/chat-design.css
+@@ -1,3 +1,4 @@
++@import url('/assets/css/chat-settings-page.css?v=20260919-r15');
+ /* Matching local preview and runtime chrome; card-owned documents remain untouched. */
+ body.has-preview,body.homer-runtime {
+   --chat-bg:#212121;--chat-panel:#fff;--chat-text:#292432;--chat-muted:#756c81;
+@@ -255,18 +256,6 @@ body.homer-runtime:not(.homer-card-stage-active) #chat .mes:not(:has(iframe,.hom
+ body.homer-runtime:not(.homer-card-stage-active) #chat .mes .mes_text p:last-child{margin-bottom:0!important}
+ 
+ /* Session model controls: compact rows, strong text contrast, sticky actions. */
+-body.homer-runtime #homer-model-dialog{width:min(460px,calc(100vw - 24px))!important;border-radius:18px!important}
+-body.homer-runtime #homer-model-dialog .homer-sheet-dialog__shell{padding:16px!important;border-radius:18px!important;max-height:none!important}
+-body.homer-runtime #homer-model-dialog .homer-sheet-dialog__notice{margin:8px 0 12px;padding:8px 10px!important;background:#edf2f5!important;color:#465460!important;border-color:#29485f!important;font-size:12px!important}
+-body.homer-runtime #homer-model-dialog .homer-model-fields{gap:0;margin-top:10px}
+-body.homer-runtime #homer-model-dialog .homer-model-field{gap:0!important;padding:6px 0!important;border:0!important;border-bottom:1px solid #dce2e7!important;border-radius:0!important;background:#fff!important}
+-body.homer-runtime #homer-model-dialog .homer-model-field__hint{color:#59636d!important;font-size:12px!important;margin:2px 0!important;line-height:1.5}
+-body.homer-runtime #homer-model-dialog .homer-model-field__range{margin:0;min-height:32px!important;accent-color:#29485f}
+-body.homer-runtime #homer-model-dialog .homer-model-field__number{width:76px!important;min-height:40px!important;height:40px!important;padding:6px 10px!important}
+-body.homer-runtime #homer-model-dialog .homer-sheet-dialog__actions{position:sticky;bottom:0;background:#fff;display:flex;flex-wrap:nowrap;gap:8px;padding:12px 0!important;margin-top:8px;border-top:1px solid #dce2e7}
+-body.homer-runtime #homer-model-dialog .homer-sheet-dialog__actions button{flex:1;min-width:0;padding:10px 6px!important;font-size:13px!important}
+-body.homer-runtime #homer-model-dialog .homer-sheet-dialog__actions button[type=submit]{background:#29485f!important;color:#fff!important}
+-body.homer-runtime #homer-model-dialog::backdrop{background:#0005;backdrop-filter:none}
+ body.homer-runtime #stmb-memory-boundary-jump{width:116px!important;min-width:116px!important;max-width:none!important;height:44px!important;min-height:44px!important;border-radius:22px!important;padding:8px 12px!important;gap:6px;color:#fff!important;background:#29485f!important;font-size:12px!important;white-space:nowrap}
+ body.homer-runtime #stmb-memory-boundary-jump::after{content:"未整理记忆";font-family:system-ui;white-space:nowrap}
+ body.homer-runtime .homer-preset-panel{max-height:calc(100dvh - 120px);overflow-y:auto}
+@@ -277,7 +266,6 @@ body.homer-runtime .homer-preset-row__name{white-space:normal!important;overflow
+ body.has-preview .preview-composer :is(textarea,#preview-add),body.homer-runtime :is(#send_textarea,#options_button,#leftSendForm){color:#fff!important;caret-color:#fff!important}
+ body.has-preview .preview-composer textarea::placeholder,body.homer-runtime #send_textarea::placeholder{color:#c4c4c4!important}
+ body.homer-runtime #stmb-memory-boundary-jump{background:var(--chat-accent)!important;color:#fff!important}
+-body.homer-runtime #homer-model-dialog .homer-sheet-dialog__actions button[type=submit]{background:var(--chat-accent)!important;color:#fff!important}
+ body.homer-runtime .homer-memory-layout>h2{font-size:20px!important;margin:0 0 8px!important}
+ body.homer-runtime .homer-memory-layout .info-block{padding:10px!important;margin:6px 0!important;font-size:13px!important;line-height:1.45!important}
+ .homer-memory-progress{margin-top:6px;font-size:13px}.homer-memory-progress summary{min-height:44px;display:flex;align-items:center;cursor:pointer}
+diff --git a/frontend/assets/css/chat-settings-page.css b/frontend/assets/css/chat-settings-page.css
+new file mode 100644
+index 0000000000000000000000000000000000000000..c276d1efbb592d90fe318f4352c895d3ab1f0a97
+--- /dev/null
++++ b/frontend/assets/css/chat-settings-page.css
+@@ -0,0 +1,85 @@
++/* Settings destinations: back/title, independently scrolling content, actions.
++   Kept separate from transient pickers and destructive confirmations. */
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] {
++  --settings-bg:#f3f3f4;--settings-panel:#fff;--settings-text:#292432;--settings-muted:#665f70;
++  position:fixed!important;inset:0!important;box-sizing:border-box!important;
++  width:100%!important;max-width:none!important;height:100dvh!important;max-height:100dvh!important;
++  margin:0!important;padding:0!important;border:0!important;border-radius:0!important;
++  background:var(--settings-bg)!important;color:var(--settings-text)!important;
++  overflow:hidden!important;box-shadow:none!important;text-align:left!important;
++}
++html body dialog.homer-settings-page:is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page):not([open]){display:none!important}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-settings-page__shell {display:flex!important;flex-direction:column!important;height:100%!important;max-height:none!important;width:100%!important;padding:0!important;margin:0!important;gap:0!important;border-radius:0!important;background:var(--settings-bg)!important;overflow:hidden!important}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-settings-page__head {display:grid!important;grid-template-columns:48px minmax(0,1fr) 48px;align-items:center!important;flex:none;min-height:56px!important;padding:4px 8px!important;margin:0!important;gap:0!important;border:0!important;background:var(--settings-bg)!important}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-settings-page__head h2 {margin:0!important;text-align:center;font:650 18px/1.4 system-ui!important;color:var(--settings-text)!important}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-settings-page__head .homer-settings-page__back {width:44px!important;min-width:44px!important;height:44px!important;min-height:44px!important;padding:0!important;font:32px/1 system-ui!important;border:0!important;background:transparent!important;border-radius:50%!important;color:var(--settings-text)!important;box-shadow:none!important}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-settings-page__content {flex:1;min-height:0;overflow:auto!important;overscroll-behavior:contain;width:100%;max-width:680px;align-self:center;box-sizing:border-box;padding:8px 16px 20px;scrollbar-width:thin}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-settings-page__content>.popup-content {width:100%!important;max-height:none!important;overflow:visible!important;padding:0!important;margin:0!important}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-settings-page__footer {position:static!important;flex:none!important;display:flex!important;flex-wrap:wrap!important;align-items:center!important;justify-content:center!important;gap:8px!important;box-sizing:border-box;width:100%!important;margin:0 auto!important;padding:10px max(16px,calc((100% - 648px)/2)) max(10px,env(safe-area-inset-bottom))!important;background:var(--settings-bg)!important;border:0!important;border-radius:0!important}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-settings-page__footer :is(button,a,.menu_button) {flex:1;min-width:100px;min-height:44px!important;max-width:360px!important;margin:0!important;padding:10px!important;border:0!important;border-radius:24px!important;font:500 14px/1.4 system-ui!important;box-sizing:border-box;background:#e5e3ea!important;color:#423c4b!important;text-align:center;white-space:normal!important;text-shadow:none!important;box-shadow:none!important}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-settings-page__footer :is(.homer-primary-button,.is-primary,#preview-model-save,.popup-button-custom:first-child){background:#6750a4!important;color:#fff!important}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] button:disabled{opacity:.5;cursor:not-allowed}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] [hidden]{display:none!important}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] :is(.homer-sheet-dialog__notice,.homer-appearance-note,.homer-memory-intro){background:none!important;border:0!important;padding:0!important;margin:0 0 14px!important;font:14px/1.5 system-ui!important;color:var(--settings-muted)!important}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] :is(.homer-model-fields,.homer-appearance-fields){display:grid;gap:10px!important;margin-top:14px!important}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] :is(.homer-model-field,.homer-model-select-field,.homer-appearance-color,.homer-memory-step){border:0!important;border-radius:12px!important;background:var(--settings-panel)!important;padding:12px!important;margin:0 0 10px!important;gap:6px!important;color:var(--settings-text)!important}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] :is(.homer-model-field__label,.homer-model-field__head,.homer-mod-row strong){font:550 16px/1.4 system-ui!important;color:var(--settings-text)!important}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-model-field__number{width:72px!important;height:36px!important;min-height:36px!important;background:#f3f2f6!important;border:0!important;border-radius:8px!important;color:var(--settings-text)!important;font:14px system-ui!important}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-model-field__range{min-height:36px!important;accent-color:#6750a4!important}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-model-field__hint{font:13px/1.5 system-ui!important;color:var(--settings-muted)!important}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-mod-list{display:block!important}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-mod-row__main{position:relative;min-width:0;gap:16px!important;display:flex;align-items:center;justify-content:space-between;width:100%;min-height:64px;margin:0!important;padding:0!important}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-mod-row input[type=checkbox]{position:absolute!important;right:0;top:50%;transform:translateY(-50%);width:44px!important;height:44px!important;min-height:44px!important;opacity:0!important;margin:0!important;cursor:pointer;z-index:1}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-mod-row__copy{min-width:0;overflow-wrap:anywhere}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-memory-tabs{display:flex;position:sticky;top:-8px;z-index:2;background:var(--settings-bg);gap:0;margin:0 -4px 12px;border-bottom:1px solid #ddd9e3}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-memory-tabs button{flex:1;min-width:0;padding:10px 4px!important;min-height:44px!important;background:transparent!important;border:0!important;border-bottom:2px solid transparent!important;border-radius:0!important;font:14px/1.4 system-ui!important;color:#665f70!important}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-memory-tabs button[aria-pressed=true]{border-bottom-color:#6750a4!important;color:#6750a4!important;font-weight:650!important}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-memory-tab{min-width:0}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-memory-advanced{margin:0;padding:0;border:0}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-memory-range{gap:6px;margin-bottom:8px}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-memory-range label{font-size:13px}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-memory-range input{width:60px!important}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-memory-range button{font-size:13px!important;padding:8px!important}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-memory-step>h3{margin:0 0 10px!important;font:600 16px/1.4 system-ui!important}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .popup-content{flex:none!important}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .preview-model-form> .homer-settings-page__content>label{display:block;background:#fff;padding:12px;border-radius:12px;margin-bottom:10px;color:#292432}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-appearance-pictures{margin:14px 0}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-appearance-pictures button{border:0!important;background:#fff!important}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] :focus-visible{outline:2px solid #6750a4;outline-offset:2px}
++html body dialog.homer-settings-page :is(input,select,textarea,label,p,span,strong,small,button,a,h2,h3,h4,summary,div){font-family:system-ui,-apple-system,'Segoe UI','Microsoft YaHei',sans-serif!important}
++html body :is(#homer-model-dialog,#preview-model-dialog).homer-settings-page .homer-model-field{margin:0!important}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-settings-page__reset{font:500 13px/1.4 system-ui!important;background:none!important;border:0!important;color:#6750a4!important;padding:0!important;min-width:44px;min-height:44px}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-settings-page__footer :is(button,a){white-space:nowrap!important}
++html body :is(#homer-model-dialog,#preview-model-dialog).homer-settings-page[open] .homer-model-fields{display:block!important;border-radius:12px;background:#fff;margin-top:12px!important;padding:0 12px}
++html body :is(#homer-model-dialog,#preview-model-dialog).homer-settings-page[open] .homer-model-field{padding:10px 0!important;border-radius:0!important;border-bottom:1px solid #eeeaf2!important;margin:0!important;gap:0!important}
++html body :is(#homer-model-dialog,#preview-model-dialog).homer-settings-page[open] .homer-model-field:last-child{border-bottom:0!important}
++html body :is(#homer-model-dialog,#preview-model-dialog).homer-settings-page[open] .homer-model-field__hint{margin:0!important;line-height:1.4!important}
++html body :is(#homer-model-dialog,#preview-model-dialog).homer-settings-page[open] .homer-model-field__range{margin:0!important;height:32px!important;min-height:32px!important;padding:0!important}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open].stmb-popup .homer-settings-page__footer{display:grid!important;grid-template-columns:1fr 1fr!important}
++html body dialog.stmb-popup.homer-settings-page[open] .homer-settings-page__footer [data-memory-close]{display:none!important}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open].stmb-popup .homer-settings-page__footer .popup-button-custom:first-child{grid-column:1/-1;max-width:none!important}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-mod-tools{display:flex;align-items:center;justify-content:space-between;margin:16px 0 4px;min-height:44px;font-size:14px;color:#625d68}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-mod-reorder{background:none!important;border:0!important;min-height:44px;padding:0 4px!important;font:500 14px system-ui!important;color:#6750a4!important}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-mod-row{padding:8px 0!important;margin:0!important;border:0!important;border-bottom:1px solid #dedce3!important;border-radius:0!important;background:none!important;display:block!important}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-mod-row__copy{flex:1}.homer-mod-row__copy small{display:block}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-mod-row__copy small{font:14px/1.5 system-ui!important;color:#696370!important;margin-top:6px}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-mod-switch-track{position:relative;width:44px;height:26px;background:#c8c5cf;border-radius:20px;flex:none;pointer-events:none}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-mod-switch-track::before{content:'';position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 2px #0002}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-mod-switch:checked+.homer-mod-switch-track{background:#6750a4}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-mod-switch:checked+.homer-mod-switch-track::before{transform:translateX(18px)}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-mod-switch:focus-visible+.homer-mod-switch-track{outline:2px solid #6750a4;outline-offset:3px}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-mod-row__order{display:none!important}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .is-reordering .homer-mod-row__order{display:flex!important;justify-content:flex-end;gap:8px;padding:0 0 8px}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-mod-library-link{display:flex;align-items:center;justify-content:center;color:#6750a4;font:500 14px system-ui;min-height:48px;border:1px dashed #c8c2d3;border-radius:10px;margin-top:20px;text-decoration:none}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-memory-shortcuts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;padding:4px;background:#eeedf1;border-radius:10px;margin-bottom:12px}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-memory-shortcuts button{min-width:0;min-height:40px!important;padding:8px 2px!important;border:0!important;border-radius:7px!important;background:transparent!important;font:500 14px/1.4 system-ui!important;color:#625d68!important;box-shadow:none!important}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-memory-shortcuts button[aria-pressed=true]{background:#fff!important;color:#6750a4!important;box-shadow:0 1px 3px #00000012!important}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-memory-selection{font:14px/1.5 system-ui!important;color:#625d68!important;margin:8px 0!important;min-height:22px}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-memory-custom-range{padding:4px 0 8px;display:flex;justify-content:space-between}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-memory-preview>summary,html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-memory-progress>summary{font:14px/1.5 system-ui!important;min-height:44px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;list-style:none}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-memory-preview>summary::after,html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-memory-progress>summary::after{content:'›';font-size:22px;color:#8b8691}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-memory-preview[open]>summary::after,html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-memory-progress[open]>summary::after{transform:rotate(90deg)}
++html body :is(#homer-model-dialog,#homer-mod-dialog,#preview-model-dialog,.homer-settings-page)[open] .homer-memory-step{padding:16px!important;margin:0 0 14px!important}
++html body .homer-settings-page .homer-settings-page__head h2:focus{outline:none!important}
++html body :is(#homer-model-dialog,#preview-model-dialog).homer-settings-page .homer-model-select-field{display:flex!important;flex-direction:column;align-items:stretch;gap:10px!important}
++html body :is(#homer-model-dialog,#preview-model-dialog).homer-settings-page .homer-model-select{width:100%!important;min-height:44px;font:15px system-ui!important}
+diff --git a/frontend/assets/css/community-reference.css b/frontend/assets/css/community-reference.css
+index fcb357c2a4968c93c49095c75d1e214bfdc59ab2..5bcd4df58bd0b9f52bdbfcbfc28685b635d1a6ac 100644
+--- a/frontend/assets/css/community-reference.css
++++ b/frontend/assets/css/community-reference.css
+@@ -11,6 +11,9 @@ html body.community-app .c-channel-strip>button,html body.community-app .c-chann
+ .c-channel-icon{display:grid;place-items:center;width:46px;height:46px;background:#f0f3f6;border-radius:12px;color:#435769;border:1px solid transparent}
+ .c-channel-icon svg{width:22px;height:22px}
+ .c-channel-strip [aria-pressed=true] .c-channel-icon{border-color:#467daa;background:#eaf3fa;color:#24699b}
++html body.community-app .c-channel-strip>button[aria-pressed=true]{background:transparent;color:#24699b;font-weight:600}
++html[data-theme=dark] body.community-app .c-channel-strip>button[aria-pressed=true]{color:#8bbcf1}
++html[data-theme=dark] body.community-app .c-channel-strip [aria-pressed=true] .c-channel-icon{background:#233b50;color:#8bbcf1;border-color:#8bbcf1}
+ html body.community-app .c-home-tools{border-bottom:4px solid var(--c-soft);min-height:44px;padding-inline:12px}
+ html body.community-app .c-post{padding:14px 12px 12px;border-bottom:4px solid var(--c-soft);border-radius:0;box-shadow:none}
+ html body.community-app .c-author{gap:8px}.community-app .c-post .c-avatar{width:28px;height:28px;background:#edf0f3;color:#616b78;font-size:12px}
+diff --git a/frontend/assets/css/community-screens.css b/frontend/assets/css/community-screens.css
+index e86e178197cea5afaccdae787eb174408d83c552..1cb6f9f7caba1c74b90a4dccadd02ee6a7205fe0 100644
+--- a/frontend/assets/css/community-screens.css
++++ b/frontend/assets/css/community-screens.css
+@@ -12,7 +12,7 @@
+ .community-app *{box-sizing:border-box}.community-app [x-cloak]{display:none!important}.community-app svg{width:22px;height:22px;flex:none}.community-app button,.community-app input,.community-app select,.community-app textarea{font:inherit;color:inherit}.community-app button,.community-app a,.community-app input,.community-app select,.community-app textarea{-webkit-tap-highlight-color:transparent}.community-app button{border:0;background:none;cursor:pointer;min-height:44px;padding:8px 12px;border-radius:9px;touch-action:manipulation}.community-app button:disabled{opacity:.45;cursor:default}.community-app a{color:inherit;text-decoration:none}.community-app :focus-visible{outline:2px solid var(--c-accent);outline-offset:2px}.community-app h1,.community-app h2,.community-app p{margin:0}.community-app [aria-pressed=true]{color:var(--c-accent)}
+ .community-app .c-page{width:100%;max-width:720px;min-height:100dvh;margin:0 auto;background:#fff;padding:0 0 calc(24px + env(safe-area-inset-bottom));overflow-wrap:anywhere}.community-screen-home .c-page{padding-bottom:calc(126px + env(safe-area-inset-bottom))}.community-screen-post .c-page{padding-bottom:calc(100px + env(safe-area-inset-bottom))}
+ .community-app .c-header{position:sticky;top:0;z-index:30;background:#fffffff5;backdrop-filter:blur(12px);min-height:56px;padding:0 8px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--c-line);gap:8px}.community-app .c-header h1{font-size:17px;font-weight:650;flex:1;text-align:center}.community-app .c-header-spacer{display:block;width:44px}.community-app .c-icon{display:inline-flex;width:44px;min-width:44px;height:44px;align-items:center;justify-content:center;padding:10px}.community-app .c-actions{display:flex;align-items:center;gap:4px}.community-app .c-home-tabs{display:flex;align-items:center;gap:2px}.community-app .c-home-tabs button{font-size:18px;color:var(--c-muted);padding:10px 12px}.community-app .c-home-tabs .is-active{font-size:21px;font-weight:750;color:var(--c-text)}
+-.community-app .c-primary{background:var(--c-accent);color:#fff;font-size:14px;font-weight:600;padding:9px 18px}.community-app .c-topics{display:flex;overflow:auto;gap:8px;padding:10px 16px;scrollbar-width:none;border-bottom:1px solid var(--c-line)}.community-app .c-topics button{flex:none;background:var(--c-soft);min-height:40px;white-space:nowrap;font-size:13px;padding:8px 14px;border-radius:20px}.community-app .c-topics [aria-pressed=true]{background:#faeaf0;color:#9f2751;font-weight:600}
++.community-app .c-primary{background:var(--c-accent);color:#fff;font-size:14px;font-weight:600;padding:9px 18px}.community-app .c-topics{display:flex;overflow:auto;gap:8px;padding:10px 16px;scrollbar-width:none;border-bottom:1px solid var(--c-line)}.community-app .c-topics button{flex:none;background:var(--c-soft);min-height:40px;white-space:nowrap;font-size:13px;padding:8px 14px;border-radius:20px}.community-app .c-topics:not(.c-channel-strip) [aria-pressed=true]{background:#faeaf0;color:#9f2751;font-weight:600}
+ .community-app .c-home-tools{display:flex;align-items:center;justify-content:space-between;padding:0 8px;border-bottom:5px solid var(--c-soft)}.community-app .c-home-tools nav{display:flex}.community-app .c-home-tools button{font-size:13px;color:var(--c-muted)}.community-app .c-home-tools [aria-pressed=true]{color:var(--c-text);font-weight:700}.community-app .c-text{display:flex;align-items:center;gap:0}.community-app .c-text svg{width:15px;height:15px}.community-app .c-announcement,.community-app .c-contest{padding:12px 16px;border-bottom:1px solid var(--c-line);font-size:13px}.community-app .c-contest{display:flex;justify-content:space-between;color:#8d3050}.community-app .c-announcement summary{cursor:pointer;min-height:28px}
+ .community-app .c-post{padding:14px 16px 6px;border-bottom:7px solid var(--c-soft);background:#fff}.community-app .c-post>header,.community-app .c-detail>header{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}.community-app .c-author{display:flex;align-items:center;gap:9px;padding:0;text-align:left;min-width:0}.community-app .c-author>span:last-child{min-width:0}.community-app .c-author strong{font-size:13px;font-weight:600;display:block;color:#414652}.community-app .c-author small{display:block;font-size:11px;color:var(--c-muted);line-height:1.4}.community-app .c-avatar{width:34px;height:34px;border-radius:50%;background:#f2eaf0;color:#875269;font-size:14px;display:inline-flex;align-items:center;justify-content:center;flex:none}.community-app .c-post .c-icon{color:var(--c-muted)}
+ .community-app .c-post-copy{cursor:pointer}.community-app .c-post h2{font-size:18px;line-height:1.45;font-weight:700;margin:2px 0 6px}.community-app .c-post-copy p{font-size:15px;line-height:1.65;white-space:pre-wrap;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}.community-app .c-media-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;margin-top:10px}.community-app .c-media-grid button{padding:0;aspect-ratio:1;overflow:hidden;border-radius:8px}.community-app .c-media-grid img{display:block;width:100%;height:100%;object-fit:cover}.community-app .c-post footer{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:6px}.community-app .c-topic{font-size:12px;color:var(--c-muted);padding:8px 0;max-width:45%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.community-app .c-post footer .c-actions{gap:0}.community-app .c-post footer .c-actions button{display:flex;align-items:center;justify-content:center;gap:5px;color:#657080;padding:8px;min-width:44px;font-size:12px}.community-app .c-post footer .c-actions svg{width:19px;height:19px}.community-app .c-post footer [aria-pressed=true]{color:var(--c-accent)}
+diff --git a/frontend/assets/css/main-navigation.css b/frontend/assets/css/main-navigation.css
+new file mode 100644
+index 0000000000000000000000000000000000000000..5ddfcf17b891554ee727bf5ead13a0f81b9f1b27
+--- /dev/null
++++ b/frontend/assets/css/main-navigation.css
+@@ -0,0 +1,21 @@
++/* One owner for the five destinations, independent of each page's palette. */
++html body #homer-main-navigation {
++  --nav-panel:#fff;--nav-line:#e8e8ec;--nav-text:#707174;--nav-active:#ff3975;
++  background:var(--nav-panel)!important;border:0!important;border-top:1px solid var(--nav-line)!important;
++  box-shadow:0 -2px 8px #00000005!important;gap:0!important;
++  padding:4px 8px calc(4px + env(safe-area-inset-bottom))!important;
++  box-sizing:border-box;grid-auto-columns:minmax(0,1fr);grid-template-columns:none;
++}
++html body #homer-main-navigation a {
++  display:flex!important;flex:1;flex-direction:column;align-items:center;justify-content:center;
++  min-width:0;min-height:48px!important;height:48px;padding:2px 0!important;gap:3px!important;
++  color:var(--nav-text)!important;background:transparent!important;border:0!important;border-radius:0!important;
++  font:400 11px/1.2 system-ui,-apple-system,'Segoe UI',sans-serif!important;letter-spacing:0!important;
++  text-decoration:none;white-space:nowrap;filter:none!important;transition:none!important;-webkit-tap-highlight-color:transparent;
++}
++html body #homer-main-navigation a.is-active {color:var(--nav-active)!important;font-weight:500!important}
++html body #homer-main-navigation a svg {width:24px!important;height:24px!important;flex:none;stroke-width:2}
++html body #homer-main-navigation a span{font:inherit!important;color:inherit!important;line-height:1.2!important}
++html body #homer-main-navigation a:focus-visible{outline:2px solid var(--nav-active);outline-offset:-2px}
++html[data-theme=dark] body #homer-main-navigation,html body[data-theme=dark] #homer-main-navigation,
++html body.theme-dark #homer-main-navigation{--nav-panel:#202024;--nav-line:#39383f;--nav-text:#b8b6c0;--nav-active:#ff7ea5}
+diff --git a/frontend/assets/css/product-design.css b/frontend/assets/css/product-design.css
+index 023e1d1623bbc67c83192399d3f438881247a81d..97630f4fa356c390392b2024f1d4002c53a05195 100644
+--- a/frontend/assets/css/product-design.css
++++ b/frontend/assets/css/product-design.css
+@@ -26,10 +26,6 @@ html body .editor-group__title-mark{background:var(--ui-accent)!important}
+ html body.creator-editor-page .creator-editor__tabs button.is-active{background:var(--ui-accent-soft)!important;color:var(--ui-accent)!important}
+ html[data-theme=dark] body .xy-btn-primary{color:#291e3f!important}
+ html body .xy-btn-ghost{border:0!important;background:var(--ui-panel-soft)!important;color:var(--ui-text)!important}
+-html body .app-bottom-nav{box-shadow:none!important;border-top:1px solid var(--ui-line)!important;background:var(--ui-panel)!important;gap:0!important}
+-html body .app-bottom-nav a{color:var(--ui-muted)!important;font-size:11px!important;font-weight:500!important;gap:3px!important;min-height:56px}
+-html body .app-bottom-nav a.is-active{color:var(--ui-accent)!important;font-weight:650!important}
+-html body .app-bottom-nav svg{width:23px!important;height:23px!important;stroke-width:1.7}
+ html body :is(.segmented,.chip-row){scrollbar-width:none}
+ html body :is(.ui-state,.ws-empty,.social-empty){min-height:120px;background:transparent!important;border:0!important;gap:12px;line-height:1.6}
+ html body :is(.ws-empty__ico,.ws-create-option__icon){background:var(--ui-panel-soft)!important;color:var(--ui-accent)!important}
+diff --git a/frontend/assets/js/chat-appearance.js b/frontend/assets/js/chat-appearance.js
+index b10ad5b763ee3aa6b086f338ce501c256bc40217..922b9e0e38b609f43becf5eda467c08e00790d42 100644
+--- a/frontend/assets/js/chat-appearance.js
++++ b/frontend/assets/js/chat-appearance.js
+@@ -1,3 +1,4 @@
++import { settingsPage } from './chat-settings-page.js';
+ // Personal appearance is local and scoped to an account + conversation.
+ const defaults = { assistant: '#29485f', user: '#4c4c4c', background: '#212121', image: '' };
+ let scopeReader = () => ({}), activeKey = '', dialog;
+@@ -72,6 +73,7 @@ export function openChatAppearance() {
+     save.disabled=!savedKey;if(!savedKey)status.textContent='当前会话尚未就绪，请稍后重新打开。';
+     save.onclick=()=>{if(reading||!savedKey)return;if(keyFor()!==savedKey){currentDialog.close();return;}try {localStorage.setItem(savedKey,JSON.stringify(draft));currentDialog.close();}catch{status.textContent='本地空间不足，未保存。可以移除背景图片后重试。';}};
+     footer.append(reset,cancel,save);dialog.append(head,note,fields,pictures,status,footer);document.body.append(dialog);
++    settingsPage(dialog, { head, footer, title: '界面设置' });
+     dialog.addEventListener('close',()=>{currentDialog.remove();sync();},{once:true});dialog.showModal();
+ }
+ window.addEventListener('storage',e=>{if(e.key===activeKey)sync();});
+diff --git a/frontend/assets/js/chat-settings-page.js b/frontend/assets/js/chat-settings-page.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..74701d9bf44ad1faa882bd17f9619ecc8fbe9cdb
+--- /dev/null
++++ b/frontend/assets/js/chat-settings-page.js
+@@ -0,0 +1,28 @@
++// Preserve the existing controls, event handlers and dialog cancellation while
++// giving long settings tasks a page layout rather than a floating form.
++export function settingsPage(dialog, { shell = dialog, head, footer, title, close } = {}) {
++    dialog.classList.add('homer-settings-page');
++    shell.classList.add('homer-settings-page__shell');
++    head.classList.add('homer-settings-page__head');
++    const heading = head.querySelector('h2') || document.createElement('h2');
++    heading.textContent = title;
++    heading.tabIndex = -1; heading.setAttribute('autofocus', '');
++    const existingBack = close || head.querySelector('button');
++    const back = existingBack || document.createElement('button');
++    back.type = 'button'; back.textContent = '‹'; back.classList.add('homer-settings-page__back');
++    if (!back.getAttribute('aria-label')) back.setAttribute('aria-label', `返回对话（${title}）`);
++    if (!existingBack) back.addEventListener('click', () => {
++        if (dialog.dispatchEvent(new Event('cancel', { cancelable: true }))) dialog.close();
++    });
++    head.replaceChildren(back, heading, document.createElement('span'));
++    // Reset is a secondary header action. Keep one clear save action at the
++    // bottom, without three equally prominent pills fighting for space.
++    const reset = footer && [...footer.querySelectorAll('button')].find(b => b.textContent === '恢复默认');
++    if (reset) { reset.textContent = '重置'; reset.setAttribute('aria-label', '恢复默认'); reset.classList.add('homer-settings-page__reset'); head.lastElementChild.replaceWith(reset); }
++    const content = document.createElement('div'); content.className = 'homer-settings-page__content';
++    for (const child of [...shell.children]) if (child !== head && child !== footer) content.append(child);
++    if (footer) footer.classList.add('homer-settings-page__footer');
++    shell.replaceChildren(head, content, ...(footer ? [footer] : []));
++    dialog.setAttribute('aria-label', title);
++    return content;
++}
+diff --git a/frontend/assets/js/memory-ui.js b/frontend/assets/js/memory-ui.js
+index 8ee5c5c57f883f187eeb65c00f7c7d789f2f2aad..c0da0a66660307447c1bdbda48f4126ef7f908a8 100644
+--- a/frontend/assets/js/memory-ui.js
++++ b/frontend/assets/js/memory-ui.js
+@@ -1,3 +1,4 @@
++import { settingsPage } from './chat-settings-page.js';
+ // Reorganize existing Memory Books controls without replacing its save/generate handlers.
+ function el(tag,cls,text) {const e=document.createElement(tag);e.className=cls||'';if(text)e.textContent=text;return e;}
+ function enhance(popup) {
+@@ -6,20 +7,20 @@ function enhance(popup) {
+     const original=[...content.children];
+     const layout=el('div','homer-memory-layout');
+     const title=el('h2','','长记忆');
+-    layout.append(title,el('p','homer-memory-intro','选择对话范围和保存位置，然后创建记忆。'));
++    const header=el('header');header.append(title);
+     const step=(name)=>{const s=el('section','homer-memory-step');s.append(el('h3','',name));layout.append(s);return s;};
+     const range=step('1 · 选择要记住的对话');
+     const scene=content.querySelector('#stmb-scene')||content.querySelector('.info-block.warning');
+     if(scene){
+-        if(scene.matches('.warning')){scene.textContent='先选最近 20 条或全部已加载对话，也可手动调整起止序号。';range.append(scene);}
++        if(scene.matches('.warning')){scene.hidden=true;range.append(scene);}
+         else{const preview=el('details','homer-memory-preview');preview.append(el('summary','','查看所选对话摘要'),scene);range.append(preview);}
+     }
+     const ids=[...document.querySelectorAll('#chat .mes[mesid]')].map(e=>Number(e.getAttribute('mesid'))).filter(Number.isInteger);
+-    const form=el('div','homer-memory-range');const inputs=[];
++    const form=el('div','homer-memory-range homer-memory-custom-range');form.hidden=true;const inputs=[];
+     for(const [label,id,initial] of [['从','homer-memory-from',ids[0]],['到','homer-memory-to',ids.at(-1)]]) {
+         const wrap=el('label','',label),input=document.createElement('input');input.type='number';input.min=String((ids[0]??0)+1);input.max=String((ids.at(-1)??0)+1);input.value=String((initial??0)+1);input.id=id;input.className='text_pole';input.setAttribute('aria-label',label==='从'?'起始消息':'结束消息');wrap.append(input);form.append(wrap);inputs.push(input);
+     }
+-    const choose=el('button','','使用此范围');choose.type='button';const feedback=el('p','homer-memory-intro');feedback.setAttribute('role','status');
++    const choose=el('button','','使用此范围');choose.type='button';const feedback=el('p','homer-memory-selection','选择需要整理的对话');feedback.setAttribute('role','status');
+     choose.onclick=()=>{
+         const [a,b]=inputs.map(e=>Number(e.value)-1);
+         if(!Number.isInteger(a)||!Number.isInteger(b)||a>b||!ids.includes(a)||!ids.includes(b)){feedback.textContent='请输入当前已显示消息内有效的起止序号，结束不能早于开始。';return;}
+@@ -27,16 +28,19 @@ function enhance(popup) {
+         if(!start||!end){feedback.textContent='记忆模块尚未准备好，请稍后重新打开。';return;}
+         if(!start.classList.contains('on'))start.click();
+         if(!end.classList.contains('on'))end.click();
+-        feedback.textContent=`已选择第 ${a+1}–${b+1} 条消息。确认保存位置后，点底部「创建记忆」。`;
++        feedback.textContent=`已选择第 ${a+1}–${b+1} 条消息 · 共 ${ids.filter(id=>id>=a&&id<=b).length} 条`;
+         if(scene?.matches('.warning'))scene.hidden=true;
+     };form.append(choose);
+-    const shortcuts=el('div','homer-memory-range');
++    const shortcuts=el('div','homer-memory-shortcuts');
++    const selectShortcut=button=>{for(const b of shortcuts.children)b.setAttribute('aria-pressed',String(b===button));};
+     for(const [label,count] of [['最近 20 条',20],['全部已加载对话',ids.length]]){
+-        const button=el('button','',label);button.type='button';button.disabled=!ids.length;
+-        button.onclick=()=>{inputs[0].value=String((ids[Math.max(0,ids.length-count)]??0)+1);inputs[1].value=String((ids.at(-1)??0)+1);choose.click();};
++        const button=el('button','',label==='全部已加载对话'?'全部对话':label);button.setAttribute('aria-label',label);button.setAttribute('aria-pressed','false');button.type='button';button.disabled=!ids.length;
++        button.onclick=()=>{selectShortcut(button);form.hidden=true;inputs[0].value=String((ids[Math.max(0,ids.length-count)]??0)+1);inputs[1].value=String((ids.at(-1)??0)+1);choose.click();};
+         shortcuts.append(button);
+     }
++    const custom=el('button','','自定义');custom.type='button';custom.setAttribute('aria-pressed','false');custom.disabled=!ids.length;custom.onclick=()=>{selectShortcut(custom);form.hidden=false;};shortcuts.append(custom);
+     range.append(shortcuts,form,feedback);
++    const preview=range.querySelector('.homer-memory-preview');if(preview)range.append(preview);
+     const progress=content.querySelector('#stmb-memory-status');
+     if(progress){progress.querySelector('[data-i18n="STMemoryBooks_SinceVersion"]')?.remove();const details=el('details','homer-memory-progress');details.append(el('summary','','记忆进度与提示'),progress);range.append(details);}
+     const storage=step('2 · 确认记忆保存位置');
+@@ -44,16 +48,35 @@ function enhance(popup) {
+     const badge=storage.querySelector('#stmb-mode-badge');if(badge)badge.textContent=content.querySelector('#stmb-manual-mode-enabled')?.checked?'手动选择记忆书':'跟随当前对话';
+     const auto=content.querySelector('#stmb-auto-create-lorebook')?.closest('.world_entry_form_control');if(auto)storage.append(auto);
+     const profile=step('3 · 选择整理方式');const profileRow=content.querySelector('#stmb-profile-select')?.closest('.world_entry_form_control');if(profileRow)profile.append(profileRow);
+-    profile.append(el('p','homer-memory-intro','创建会调用模型；已有记忆可用「整合」合并。'));
++    profile.append(el('p','homer-memory-intro','生成将使用此配置，已有记忆不会被覆盖。'));
+     const advanced=el('details','homer-memory-advanced');advanced.append(el('summary','','高级设置 · 模板、模型与自动整理'));
+     for(const child of original) {
+         if(child.tagName==='H2' || layout.contains(child))continue;
+         advanced.append(child);
+     }
+-    layout.append(advanced);content.replaceChildren(layout);
++    // The plugin retains all change/save handlers; sections no longer form one
++    // long mixed settings modal. Switch pages without discarding input values.
++    const nav=el('nav','homer-memory-tabs');nav.setAttribute('aria-label','长记忆分区');
++    const main=el('section','homer-memory-tab');main.append(range,profile);
++    const storagePage=el('section','homer-memory-tab');storagePage.append(storage);
++    const advancedPage=el('section','homer-memory-tab');advancedPage.append(...[...advanced.children].filter(e=>e.tagName!=='SUMMARY'));
++    const panels=[main,storagePage,advancedPage];
++    ['整理记忆','保存设置','高级设置'].forEach((name,i)=>{
++        const b=el('button','',name);b.type='button';b.setAttribute('aria-pressed',String(i===0));
++        panels[i].hidden=i!==0;panels[i].setAttribute('aria-label',name);
++        b.onclick=()=>{panels.forEach((p,j)=>p.hidden=i!==j);[...nav.children].forEach((t,j)=>t.setAttribute('aria-pressed',String(i===j)));};nav.append(b);
++    });
++    storage.querySelector('h3').textContent='记忆保存位置';range.querySelector('h3').textContent='选择对话范围';profile.querySelector('h3').textContent='整理方式';
++    layout.append(nav,...panels);content.replaceChildren(layout);
++    const controls=popup.querySelector('.popup-controls');
++    if(!popup.querySelector('.homer-settings-page__head')) {
++        popup.prepend(header);
++        settingsPage(popup,{head:header,footer:controls,title:'长记忆'});
++    }
+     // Presentation only: retain plugin values and original click/save handlers.
+     for(const option of popup.querySelectorAll('option'))if(/SillyTavern|Current ST/i.test(option.textContent))option.textContent='当前对话模型';
+     for(const button of popup.querySelectorAll('.popup-controls .menu_button')){
++        if(button.textContent.trim()==='关闭')button.dataset.memoryClose='true';
+         if(/清除场景|Clear Scene/.test(button.textContent)){button.textContent='取消范围选择';button.title='只取消起止消息标记，不删除聊天记录或记忆';}
+         else if(/创建记忆/.test(button.textContent))button.textContent='创建记忆';
+         else if(/整合记忆/.test(button.textContent))button.textContent='整合已有记忆';
+diff --git a/sillytavern-runtime/public/scripts/extensions/homer-bridge/index.js b/sillytavern-runtime/public/scripts/extensions/homer-bridge/index.js
+index 203a84d9a766da8b735c5ce6f0bd715c43a85ba7..d0da1043e31d14d90de79e35006edefca993578c 100644
+--- a/sillytavern-runtime/public/scripts/extensions/homer-bridge/index.js
++++ b/sillytavern-runtime/public/scripts/extensions/homer-bridge/index.js
+@@ -27,6 +27,7 @@ import { installKeywordInjector } from './keyword-injector.js';
+ import { openChatTool } from '/assets/js/chat-tools.js';
+ import { bindChatAppearance } from '/assets/js/chat-appearance.js';
+ import { installMemoryUi } from '/assets/js/memory-ui.js';
++import { settingsPage } from '/assets/js/chat-settings-page.js';
+ 
+ const MODULE_ID = 'homer-bridge';
+ const urlParams = new URLSearchParams(window.location.search);
+@@ -3735,7 +3736,8 @@ function buildModelDialog() {
+     const cancel = createElement('button', 'homer-secondary-button', '取消');
+     cancel.type = 'button';
+     cancel.addEventListener('click', () => dialog.close());
+-    const save = createElement('button', 'homer-primary-button', '保存到本次会话');
++    const save = createElement('button', 'homer-primary-button', '保存');
++    save.setAttribute('aria-label', '保存到本次会话');
+     save.type = 'button';
+     save.addEventListener('click', async () => {
+         const next = {
+@@ -3763,6 +3765,15 @@ function buildModelDialog() {
+     actions.append(reset, cancel, save);
+     shell.append(actions);
+     dialog.append(shell);
++    settingsPage(dialog, { shell, head: shell.querySelector('header'), footer: actions, title: '模型设置' });
++    dialog.addEventListener('close', () => {
++        const saved = conversationModelSettings();
++        select.value = saved.model_id || runtimeUiData.modelDefaultId || '';
++        for (const field of fields.querySelectorAll('.homer-model-field')) {
++            field.querySelector('.homer-model-field__number').value = String(saved[field.dataset.key]);
++            field.querySelector('.homer-model-field__range').value = String(saved[field.dataset.key]);
++        }
++    });
+     dialog.addEventListener('click', event => {
+         if (event.target === dialog) {
+             dialog.close();
+@@ -3784,9 +3795,15 @@ function buildModDialog() {
+     shell.append(createElement(
+         'p',
+         'homer-sheet-dialog__notice',
+-        '这里只显示 Mod 名称和说明，不展示角色卡世界书条目。上下移动可调整生效顺序。',
++        '选择用于当前对话的 Mod。保存后生效。',
+     ));
+     const list = createElement('div', 'homer-mod-list');
++    const tools = createElement('div', 'homer-mod-tools');
++    const count = createElement('span', 'homer-mod-count');
++    const reorder = createElement('button', 'homer-mod-reorder', '调整顺序');reorder.type='button';reorder.setAttribute('aria-pressed','false');
++    reorder.addEventListener('click',()=>{const on=list.classList.toggle('is-reordering');reorder.setAttribute('aria-pressed',String(on));reorder.textContent=on?'完成排序':'调整顺序';});
++    const updateCount=()=>count.textContent=`已启用 ${list.querySelectorAll('input:checked').length} / ${runtimeUiData.mods.length}`;
++    tools.append(count,reorder);shell.append(tools);
+     for (const mod of runtimeUiData.mods) {
+         const modId = String(mod?.id || mod?.mod_id || '');
+         if (!modId) {
+@@ -3799,12 +3816,14 @@ function buildModDialog() {
+         input.type = 'checkbox';
+         input.checked = runtimeUiData.activeModIds.includes(modId);
+         input.setAttribute('aria-label', `启用 ${String(mod?.name || 'Mod')}`);
++        input.className = 'homer-mod-switch';input.addEventListener('change',updateCount);
+         const copy = createElement('span', 'homer-mod-row__copy');
+         copy.append(
+             createElement('strong', '', String(mod?.name || '未命名 Mod')),
+             createElement('small', '', String(mod?.summary || '没有说明')),
+         );
+-        label.append(input, copy);
++        const track=createElement('span','homer-mod-switch-track');track.setAttribute('aria-hidden','true');
++        label.append(copy, input, track);
+         const order = createElement('span', 'homer-mod-row__order');
+         const up = createElement('button', 'homer-mini-button', '↑');
+         const down = createElement('button', 'homer-mini-button', '↓');
+@@ -3841,15 +3860,19 @@ function buildModDialog() {
+         list.append(createElement('div', 'homer-empty', '你的 Mod 收藏库还是空的'));
+     }
+     shell.append(list);
++    updateCount();
++    tools.hidden=Boolean(runtimeUiData.modsLoading||runtimeUiData.modsError||!runtimeUiData.mods.length);
+     const actions = createElement('footer', 'homer-sheet-dialog__actions');
+     const workshop = document.createElement('a');
+     workshop.className = 'homer-secondary-button';
+     workshop.href = siteUrl('/app/workshop.html');
+-    workshop.textContent = '打开创意工坊';
++    workshop.textContent = '获取更多 Mod';
++    workshop.className='homer-mod-library-link';shell.append(workshop);
+     const cancel = createElement('button', 'homer-secondary-button', '取消');
+     cancel.type = 'button';
+     cancel.addEventListener('click', () => dialog.close());
+-    const save = createElement('button', 'homer-primary-button', '保存 Mod');
++    const save = createElement('button', 'homer-primary-button', '保存');
++    save.setAttribute('aria-label', '保存 Mod');
+     save.type = 'button';
+     save.disabled = Boolean(runtimeUiData.modsLoading || runtimeUiData.modsError);
+     save.addEventListener('click', async () => {
+@@ -3876,9 +3899,17 @@ function buildModDialog() {
+             save.disabled = false;
+         }
+     });
+-    actions.append(workshop, cancel, save);
++    actions.append(cancel, save);
+     shell.append(actions);
+     dialog.append(shell);
++    settingsPage(dialog, { shell, head: shell.querySelector('header'), footer: actions, title: 'Mod 管理' });
++    dialog.addEventListener('close', () => {
++        const rows = [...list.querySelectorAll('.homer-mod-row')];
++        const order = [...runtimeUiData.activeModIds, ...runtimeUiData.mods.map(mod => String(mod.id || mod.mod_id || ''))];
++        rows.sort((a,b) => order.indexOf(a.dataset.modId)-order.indexOf(b.dataset.modId));
++        for (const row of rows) { row.querySelector('input').checked = runtimeUiData.activeModIds.includes(row.dataset.modId); list.append(row); }
++        list.classList.remove('is-reordering');reorder.setAttribute('aria-pressed','false');reorder.textContent='调整顺序';updateCount();
++    });
+     dialog.addEventListener('click', event => {
+         if (event.target === dialog) {
+             dialog.close();

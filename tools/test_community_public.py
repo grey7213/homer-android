@@ -29,4 +29,18 @@ class PublicLaunchTests(unittest.TestCase):
         self.db.execute("UPDATE social_config SET value='closed' WHERE key='mode'");self.db.commit()
         ensure_feed_schema(self.db,self.lock);self.assertFalse(self.boot()['data']['available'])
 
+    def test_every_management_route_rejects_ordinary_user(self):
+        ensure_feed_schema(self.db,self.lock)
+        # User-supplied role flags cannot replace the host's authenticated role.
+        for method,path in [('GET','config'),('PUT','config'),('GET','reports'),
+                ('PATCH','reports/1'),('GET','content'),('DELETE','posts/1'),
+                ('POST','sanctions'),('POST','sanctions/1/revoke'),('GET','users'),
+                ('GET','logs'),('GET','stats'),('POST','rules'),('DELETE','rules/1'),
+                ('POST','announcements'),('PATCH','appeals/1')]:
+            with self.subTest(method=method,path=path):
+                response=handle_feed_route(method,'console/api/web/social/admin/'+path,{},
+                    {'is_admin':True,'role':'admin'},dict(conn=self.db,lock=self.lock,
+                        user={'id':'ordinary','name':'普通用户','is_admin':True},is_admin=False))
+                self.assertEqual(response['__http__'],403)
+
 if __name__=='__main__':unittest.main()

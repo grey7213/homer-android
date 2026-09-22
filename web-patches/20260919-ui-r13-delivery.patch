@@ -1,0 +1,364 @@
+diff --git a/frontend/app/assets/js/community-controls.js b/frontend/app/assets/js/community-controls.js
+index 74fc1562c1fcf0deb6871fcb3e6568877879dac9..c7e16eeb51b43399e58740fb366beeb5a16018e3 100644
+--- a/frontend/app/assets/js/community-controls.js
++++ b/frontend/app/assets/js/community-controls.js
+@@ -65,6 +65,14 @@ export async function authorizeCommunity() {
+ }
+ 
+ export function mountLocalBanner(){
++  // Only community data is local. Never label the real character editor,
++  // wallet, or other live features as "not uploaded".
++  const localSurface=document.querySelector('[data-local-slot],.community-admin');
++  if(localEnabled()&&!localSurface){
++    document.querySelectorAll('[data-local-acceptance]').forEach(node=>node.remove());
++    delete document.body.dataset.communityLocal;
++    return;
++  }
+   if(!localEnabled()){
+     document.querySelectorAll('[data-local-acceptance]').forEach(node=>node.remove());
+     delete document.body.dataset.communityLocal;
+@@ -130,6 +138,7 @@ function renderItems(root,items,type='posts') {
+ export async function mountCommunityPosts(root,scope='mine') {
+   let cursor='',loading=false;root.replaceChildren();
+   const list=element('section'),more=button('更多',()=>load(false));
++  more.hidden=true;
+   root.append(list,more);
+   async function load(reset){
+     if(loading)return;loading=true;
+@@ -178,6 +187,7 @@ export async function accountStatus() {
+ export async function communityNotifications(root) {
+   styles();root.replaceChildren();let kind='',cursor='',serial=0;
+   const tabs=element('nav','',{class:'community-tabs','aria-label':'消息分类'}),list=element('section', '', {'aria-live':'polite'}),more=button('更多消息',()=>load(false));
++  more.hidden=true;
+   for(const [key,label] of [['','全部'],['reply','回复'],['mention','提及'],['like','点赞'],['system','系统'],['report','举报'],['appeal','申诉']])tabs.append(button(label,()=>{kind=key;return load(true);},{'data-kind':key,'aria-pressed':key===kind}));
+   root.append(tabs,button('全部标为已读',async()=>{await social('notifications','PUT',{all:true});await load(true);}),list,more);
+   async function load(reset){
+diff --git a/frontend/app/assets/js/community-screen.js b/frontend/app/assets/js/community-screen.js
+index bd4fe12d1d6538a9d42fc45475f97f5ec2b3aa21..ff62300095ec5532fcc2f0cc02376762477b696c 100644
+--- a/frontend/app/assets/js/community-screen.js
++++ b/frontend/app/assets/js/community-screen.js
+@@ -36,15 +36,17 @@ window.communityScreen=()=>{
+       // A small visualViewport correction keeps the reply bar above the soft keyboard.
+       const viewport=()=>{const v=window.visualViewport;document.documentElement.style.setProperty('--community-keyboard',Math.max(0,innerHeight-(v?.height||innerHeight)-(v?.offsetTop||0))+'px');};
+       window.visualViewport?.addEventListener('resize',viewport);viewport();
+-      await this.enter();
+       this.$watch('draft',()=>{if(page==='compose'){clearTimeout(saveTimer);this.draftSaved=false;saveTimer=setTimeout(()=>this.saveDraft(),200);}});
++      await this.enter();
+     },
+     async enter(refresh=false){
+       this.gateLoading=true;this.gateError='';
+       try{
+         const access=await authorizeCommunity();if(!access){location.replace('/app/explore.html');return;}
+         this.localMode=!!access.local;this.categories=access.categories;this.muted=access.sanctions?.some(s=>['mute','ban'].includes(s.kind));this.mediaAvailable=!!access.media;
+-        this.ready=true;document.title=this.title+' · 惑梦';
++        // Do not expose an empty editor or save it on Back while a saved draft
++        // (including local media) is still being restored asynchronously.
++        this.ready=page!=='compose';document.title=this.title+' · 惑梦';
+         if(!refresh){try{const state=JSON.parse(sessionStorage.getItem(stateKey())||'null');if(state){for(const key of ['scope','sort','topic','query','searchType','searched'])if(key in state)this[key]=state[key];position=state.scroll||0;}}catch{}}
+         if(page==='home'){
+           this.topics=(await social('topics')).list;this.announcements=(await social('announcements')).list;await this.load(true);
+@@ -55,10 +57,11 @@ window.communityScreen=()=>{
+           const id=params.get('id');if(!id)throw Error('缺少帖子编号，请返回社区重新选择');
+           this.detail=this.updatePost(await social('posts/'+encodeURIComponent(id)));this.commentClientId=crypto.randomUUID();await this.loadComments(true);
+         }else if(page==='compose'){
+-          this.editingId=params.get('edit')||'';this.title=this.editingId?'编辑帖子':'发布帖子';this.topics=(await social('topics')).list;
++          this.editingId=params.get('edit')||'';this.title=this.editingId?'编辑帖子':'发布帖子';
+           const saved=readPageCache(draftKey(this.editingId),this.user,{maxAgeMs:365*86400000})?.draft;
+           if(saved)this.draft={...this.draft,...await hydrateLocalDraft(saved)};
+           else if(this.editingId){const p=await social('posts/'+encodeURIComponent(this.editingId));if(!p.is_owner)throw Error('只能编辑自己的帖子');Object.assign(this.draft,p.pending_edit||p,{client_id:crypto.randomUUID()});}
++          this.ready=true;this.topics=(await social('topics')).list;
+         }else if(page==='saved'){this.scope='saved';await this.load(true);}
+         else if(page==='activity'){await this.loadActivity();}
+         else if(page==='profile'){this.profile=await social('users/'+encodeURIComponent(this.profileId));await this.load(true);}
+diff --git a/frontend/app/assets/js/my-apps.js b/frontend/app/assets/js/my-apps.js
+index 673fed6215144e20be319ff1d3f82e0f29734ab3..6ba4ae5fde2f0cdae3469d9af78fd6ec0d370a56 100644
+--- a/frontend/app/assets/js/my-apps.js
++++ b/frontend/app/assets/js/my-apps.js
+@@ -8,7 +8,7 @@ function myAppsPage() {
+     user: null,
+     points: 0,
+     sidebarOpen: false,
+-    loading: false,
++    loading: true,
+     saving: false,
+     apps: [],
+     query: '',
+@@ -55,6 +55,9 @@ function myAppsPage() {
+           location.replace('/app/login.html?next=' + encodeURIComponent(location.pathname));
+           return;
+         }
++        this.loadError = '暂时无法验证账号，请重试。已有角色仍保留在本机。';
++      } finally {
++        this.loading = false;
+       }
+     },
+ 
+diff --git a/frontend/app/community-library.html b/frontend/app/community-library.html
+index 3a09900a935396a19709fca46ff10b7fb3d70c30..aa804cd5471cc29e0d51acc3063a092be76d0fa3 100644
+--- a/frontend/app/community-library.html
++++ b/frontend/app/community-library.html
+@@ -76,7 +76,7 @@
+   <link rel="stylesheet" href="/assets/css/app-design.css?v=20260917-r8">
+   <script defer src="/assets/js/option-picker.js?v=20260917-r8"></script>
+ </head>
+-<body class="min-h-screen">
++<body class="min-h-screen resource-library-page">
+   <div class="xy-stars-bg"></div>
+   <div class="xy-meteor"></div>
+ 
+diff --git a/frontend/app/data-merge.html b/frontend/app/data-merge.html
+index b519f41f75f8eaa2f2b96a2e394f4e3e4e206a1a..1d795a3ff8feeaf5fe604ac7c01c589e8c11a887 100644
+--- a/frontend/app/data-merge.html
++++ b/frontend/app/data-merge.html
+@@ -96,29 +96,31 @@
+     .dm-group__head,.dm-file{background:var(--dm-panel-2)}
+     .dm-btn:focus-visible,.dm-drop:focus-visible,.dm-input:focus-visible,.dm-select:focus-visible{outline:3px solid var(--dm-accent);outline-offset:2px}
+     .dm-row>.dm-field{min-width:0;max-width:100%}.dm-select{max-width:100%}.dm-drop__hint,.dm-entry__desc,.dm-file__desc{font-size:13px}
++    .dm-top{position:sticky;top:0;z-index:5;background:var(--dm-bg);min-height:48px;margin:-14px -12px 14px;padding:0 12px;flex-wrap:nowrap}
++    .dm-top h1{font-size:17px;line-height:1.4;margin:0}.dm-top .dm-back{border:0;border-radius:0;font-size:30px;width:44px;height:48px;padding:0;justify-content:center;background:none}
++    .dm-card[hidden]{display:none!important}.dm-actions>.dm-spacer{display:none}.dm-actions .dm-summary{margin-left:auto}.dm-drop{min-height:190px}
+   </style>
+   <script defer src="/assets/js/option-picker.js?v=20260917-r8"></script>
+ </head>
+ <body>
+   <main class="dm-wrap">
+     <div class="dm-top">
+-      <a class="dm-back" href="/app/workshop.html">← 返回工坊</a>
++      <a class="dm-back" href="/app/workshop.html" aria-label="返回创作工坊">‹</a><h1>数据合并</h1>
+     </div>
+-    <h1>惑梦数据合并</h1>
+-    <p class="dm-sub">把多份世界书 / 正则文件导入，勾选要保留的条目，一键合并导出为单个文件。全部处理都在你的浏览器本地完成，不会上传服务器。</p>
++    <p class="dm-sub">导入文件 → 选择条目 → 导出。仅在本机处理，不上传内容。</p>
+ 
+     <section class="dm-card">
+       <h2 class="dm-card__title"><span class="dm-step">1</span> 导入文件</h2>
+       <div id="drop" class="dm-drop" tabindex="0" role="button" aria-label="点击或拖拽上传文件">
+-        <div style="font-size:26px">📁</div>
++        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M3 6h7l2 3h9v11H3zM3 6V4h7l2 2h8v3"/></svg>
+         <div>点击选择，或把文件拖拽到这里</div>
+-        <div class="dm-drop__hint">支持 SillyTavern 世界书（含 entries）与正则（含 findRegex）的 .json 文件，可多选</div>
++        <div class="dm-drop__hint">支持世界书与正则的 JSON 文件，可多选</div>
+       </div>
+       <input id="fileInput" type="file" accept=".json,application/json" multiple hidden>
+       <div id="fileList" style="margin-top:14px"></div>
+     </section>
+ 
+-    <section class="dm-card">
++    <section class="dm-card" id="mergeSelection" hidden>
+       <h2 class="dm-card__title"><span class="dm-step">2</span> 选择要保留的条目</h2>
+       <div class="dm-actions" style="margin-top:0;margin-bottom:12px">
+         <button class="dm-btn dm-btn--ghost" id="selectAll" type="button">全选</button>
+@@ -131,7 +133,7 @@
+       <div id="tree"><div class="dm-empty">还没有导入任何文件</div></div>
+     </section>
+ 
+-    <section class="dm-card">
++    <section class="dm-card" id="mergeExport" hidden>
+       <h2 class="dm-card__title"><span class="dm-step">3</span> 合并导出</h2>
+       <div class="dm-row" style="align-items:flex-end">
+         <div class="dm-field" style="flex:1 1 220px">
+@@ -373,6 +375,8 @@
+       }
+ 
+       function render() {
++        $('mergeSelection').hidden = !state.files.length;
++        $('mergeExport').hidden = !state.files.length;
+         renderFileList();
+         renderTree();
+         updateCount();
+diff --git a/frontend/app/me.html b/frontend/app/me.html
+index a4378b98c79c617a0e2055e394a2ae5c19a330d4..6de811df99bbbb9cdd70be70e580654153650a88 100644
+--- a/frontend/app/me.html
++++ b/frontend/app/me.html
+@@ -85,7 +85,7 @@
+         </section>
+       </div>
+     </main>
+-    <nav class="app-bottom-nav" data-app-bottom-nav></nav>
++    <nav class="app-bottom-nav" data-app-bottom-nav x-show="!panel"></nav>
+   </div>
+ </body>
+ </html>
+diff --git a/frontend/app/rewards.html b/frontend/app/rewards.html
+index 738e15ff0e7cf801609ebbe0bf90c784040fdda9..a9561480819ae2e7662173445579ca15f2fc5784 100644
+--- a/frontend/app/rewards.html
++++ b/frontend/app/rewards.html
+@@ -22,6 +22,7 @@
+     <aside class="app-sidebar" data-app-sidebar></aside>
+     <main class="app-main">
+       <header class="app-topbar">
++        <a href="/app/me.html" class="profile-topbar__back" aria-label="返回我的">‹</a>
+         <h1 x-text="rewardsText('page_title', '积分充值')">积分充值</h1>
+         <div class="grow"></div>
+         <div class="flex gap-2">
+@@ -71,8 +72,8 @@
+             <p class="rw-redeem__note" x-text="paymentNote()"></p>
+             <button class="xy-btn xy-btn-ghost w-full justify-center mt-3" x-show="aifadianAvailable()" @click="openAifadian">前往爱发电购买卡密</button>
+             <div class="rw-redeem__row">
+-              <input class="xy-input flex-1 uppercase font-mono" x-model="redeemInput" @keydown.enter="redeemNow" :placeholder="depositText('redeem_placeholder', 'XY-XXXX-XXXX-XXXX-XXXX')">
+-              <button class="xy-btn xy-btn-ghost shrink-0" @click="redeemNow" :disabled="busy">兑换卡密</button>
++              <input class="xy-input flex-1 uppercase font-mono" x-model="redeemInput" :disabled="busy || !paymentAvailable()" @keydown.enter="redeemNow" aria-label="兑换卡密" :placeholder="depositText('redeem_placeholder', 'XY-XXXX-XXXX-XXXX-XXXX')">
++              <button class="xy-btn xy-btn-ghost shrink-0" @click="redeemNow" :disabled="busy || !paymentAvailable() || !redeemInput.trim()" x-text="busy ? '兑换中…' : '兑换卡密'">兑换卡密</button>
+             </div>
+           </aside>
+         </div>
+diff --git a/frontend/assets/css/app-design.css b/frontend/assets/css/app-design.css
+index 592356084e1cb256affe4e5f9b6d63fdd90988b6..ed8802dab08f18fae350b1903eef10e744a245f4 100644
+--- a/frontend/assets/css/app-design.css
++++ b/frontend/assets/css/app-design.css
+@@ -125,10 +125,10 @@ input,textarea,select{accent-color:var(--ui-accent)}
+ [data-homer-update-section]{padding:18px!important;display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;color:var(--ui-muted);font-size:13px}
+ [data-homer-update-section][hidden]{display:none!important}[data-homer-update-section] h3{margin:0;font-size:14px;color:var(--ui-text)}[data-homer-update-section] p{margin:0;flex:1}[data-homer-update-section] button{font-size:13px}
+ dialog:not(.popup){max-height:calc(100dvh - 32px);max-width:calc(100vw - 24px);border:1px solid var(--ui-line)!important;border-radius:22px!important;background:var(--ui-panel)!important;color:var(--ui-text)!important;box-shadow:var(--ui-float)!important;overflow:auto}
+-dialog::backdrop{background:#1c142660!important;backdrop-filter:blur(3px)}
++dialog::backdrop{background:#0008!important;backdrop-filter:none}
+ .homer-notice{width:min(480px,calc(100vw - 32px));padding:0!important;font:15px/1.7 system-ui!important}.homer-notice header{padding:22px 24px 12px;font-size:21px;font-weight:700}.homer-notice section{padding:8px 24px 20px;overflow-wrap:anywhere}.homer-notice h3{font-size:16px;margin:8px 0}.homer-notice p{white-space:pre-wrap;font-size:14px;color:var(--ui-muted);margin:8px 0}.homer-notice article+article{border-top:1px solid var(--ui-line);padding-top:14px;margin-top:14px}.homer-notice footer{position:sticky;bottom:0;display:flex;gap:10px;padding:14px 24px 22px;background:var(--ui-panel)!important}.homer-notice button{min-height:44px;flex:1;border:1px solid var(--ui-line);border-radius:12px;background:var(--ui-panel-soft);color:var(--ui-text);padding:10px 14px}.homer-notice button:last-child{background:var(--ui-accent)!important;color:#fff!important}.homer-notice button[hidden]{display:none}
+ .xy-modal{border-radius:22px!important;background:var(--ui-panel)!important;border-color:var(--ui-line)!important;max-height:calc(100dvh - 32px);overflow:auto}
+-.xy-modal-backdrop{padding:16px!important;background:#1c142660!important;backdrop-filter:blur(3px)}
++.xy-modal-backdrop{padding:16px!important;background:#0008!important;backdrop-filter:none}
+ .xy-admin{--admin-primary:var(--ui-accent);--admin-primary-soft:var(--ui-accent-soft);--admin-canvas:var(--ui-bg);--admin-panel:var(--ui-panel);--admin-panel-muted:var(--ui-panel-soft);--admin-border:var(--ui-line);--admin-text:var(--ui-text);--admin-text-soft:var(--ui-muted);--admin-text-mute:var(--ui-muted)}
+ .xy-admin .xy-admin-main{max-width:1600px;min-width:0}.xy-admin h1{font-size:25px!important;letter-spacing:-.035em}
+ .xy-admin .xy-admin-mobilebar{background:var(--ui-panel)!important;box-shadow:none!important;border-bottom:1px solid var(--ui-line)!important;backdrop-filter:none!important}
+@@ -148,7 +148,7 @@ dialog::backdrop{background:#1c142660!important;backdrop-filter:blur(3px)}
+ .ui-bulk-field{display:grid;gap:8px;margin:16px 0}.ui-bulk-field>label{display:flex;align-items:center;gap:10px;min-height:32px;font-size:14px}.ui-model-dialog footer{gap:12px}.ui-edit-error{color:var(--ui-danger);font-size:13px;line-height:1.5}.ui-edit-error:empty{display:none}
+ .ui-model-row{display:flex;align-items:center;justify-content:space-between;gap:16px;width:100%;min-height:68px;border:0;border-bottom:1px solid var(--ui-line);background:var(--ui-panel);padding:13px 16px;color:var(--ui-text);text-align:left}
+ .ui-model-row:hover{background:var(--ui-panel-soft)}.ui-model-row strong,.ui-model-row small{display:block}.ui-model-row strong{font-size:14px;overflow-wrap:anywhere}.ui-model-row small{font-size:12px;color:var(--ui-muted);margin-top:3px}.ui-model-row>span:last-child{color:var(--ui-accent);font-size:13px;flex:none}
+-.ui-admin-dialog{position:fixed;inset:0;z-index:100;display:grid;place-items:center;padding:20px;background:#1c142660;backdrop-filter:blur(3px)}
++.ui-admin-dialog{position:fixed;inset:0;z-index:100;display:grid;place-items:center;padding:20px;background:#0008;backdrop-filter:none}
+ .ui-admin-dialog__sheet{width:min(560px,100%);max-height:calc(100dvh - 40px);overflow:auto;overscroll-behavior:contain;background:var(--ui-panel);border-radius:22px;padding:24px;box-shadow:var(--ui-float)}
+ .ui-model-dialog{padding:0!important;width:min(560px,calc(100vw - 24px));border:0!important}.ui-model-dialog .ui-admin-dialog__sheet{max-height:none;box-shadow:none;width:100%}.ui-model-sections{display:flex;width:fit-content;margin-top:4px!important}
+ .ui-admin-dialog__sheet header{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;gap:12px}.ui-admin-dialog__sheet h2{font-size:20px;font-weight:700;margin:0}.ui-admin-dialog__sheet footer{display:flex;justify-content:flex-end;margin-top:18px}
+@@ -177,7 +177,7 @@ dialog::backdrop{background:#1c142660!important;backdrop-filter:blur(3px)}
+ :is(.character-version-dialog__head,.cm-modal__head,.ws-create-head,.xy-modal__head){background:var(--ui-panel)!important;border-color:var(--ui-line)!important;padding:20px!important}
+ :is(.character-dialog-close,.cm-close,.farm-modal-close,.ws-create-close,.xy-modal__head>button){width:44px!important;height:44px!important;min-width:44px;border:0!important;border-radius:12px!important;background:var(--ui-panel-soft)!important;color:var(--ui-muted)!important}
+ :is(.ws-create-option,.ws-create-option__icon){background:var(--ui-panel-soft)!important;color:var(--ui-text)!important;border-color:var(--ui-line)!important}
+-:is(.ws-create-mask,.farm-modal-backdrop,.cm-mask,.cm-backdrop,.character-version-backdrop,.xy-modal-mask){background:#1c142660!important;backdrop-filter:blur(3px)}
++:is(.ws-create-mask,.farm-modal-backdrop,.cm-mask,.cm-backdrop,.character-version-backdrop,.xy-modal-mask){background:#0008!important;backdrop-filter:none}
+ .cm-modal :is(.cm-field>label,.cm-checks label,.cm-chip,.cm-version,.cm-version small){color:var(--ui-text)!important}
+ .cm-modal :is(input:not([type=checkbox]),select,textarea){min-height:44px;padding:10px 12px;border:1px solid var(--ui-line)!important;border-radius:12px;background:var(--ui-panel-soft)!important;color:var(--ui-text)!important;font-size:15px;line-height:1.6}
+ .cm-modal :is(.cm-version,.cm-chip){background:var(--ui-panel-soft)!important;border-color:var(--ui-line)!important}
+diff --git a/frontend/assets/css/community-reference.css b/frontend/assets/css/community-reference.css
+index c6c98302982a0ccf7b83e0d60d6f9916ac1e17d1..fcb357c2a4968c93c49095c75d1e214bfdc59ab2 100644
+--- a/frontend/assets/css/community-reference.css
++++ b/frontend/assets/css/community-reference.css
+@@ -24,11 +24,19 @@ html body.community-app .c-search-header{gap:0;padding:0 8px 0 4px}.community-ap
+ html body.community-app .c-tabs{gap:26px;border-color:var(--c-line)}.community-app .c-tabs [aria-pressed=true],.community-app .c-tabs [aria-current=page]{border-bottom-color:#242a31}
+ html body.community-app .c-detail{padding:16px 16px 20px}.community-app .c-detail h2{font-size:23px;line-height:1.5;margin:18px 0}.community-app .c-detail-text{font-size:16px;line-height:1.8}.community-app .c-detail .c-follow{border:1px solid #dce2e8;border-radius:4px;background:white;color:#306798;min-height:36px}
+ html body.community-app .c-comments{border-top:6px solid var(--c-soft)}.community-app .c-comments>header{border-bottom:1px solid var(--c-line);margin-bottom:8px}.community-app .c-comments>header h2{font-size:17px}
+-html body.community-app .c-reply-dock{box-shadow:none;padding-top:8px}.community-app .c-reply-dock textarea{border-radius:6px;background:var(--c-soft)}
+-html body.community-app .c-detail-actions{border-block:1px solid var(--c-line);margin-top:20px}.community-app .c-detail-actions button{background:transparent;border-radius:0;min-height:48px}
++html body.community-app .c-reply-dock{box-shadow:none;padding-top:8px}html body.community-app .c-reply-dock textarea{border-radius:6px;background:var(--c-soft)}
++html body.community-app :is(.c-reply-dock textarea,.c-title-input,.c-body-input,.c-search-form input):focus-visible{outline:none;box-shadow:inset 0 -1px var(--c-accent)}
++html body.community-app .c-detail-actions{border-block:1px solid var(--c-line);margin-top:20px}html body.community-app .c-detail-actions button{background:transparent;border-radius:0;min-height:48px}
+ html body.community-screen-compose .c-editor{padding-bottom:calc(100px + env(safe-area-inset-bottom))}
+ html body.community-screen-compose .c-editor-tools{position:fixed;bottom:var(--community-keyboard,0px);left:50%;transform:translateX(-50%);width:min(100%,720px);margin:0;padding:8px 16px max(8px,env(safe-area-inset-bottom));background:white;z-index:30;justify-content:space-around;gap:4px;border-top:1px solid var(--c-line)}
+ html body.community-screen-compose .c-body-input{min-height:300px}.community-app .c-editor-tools button{white-space:nowrap}
+ html body.community-screen-compose .c-emoji{position:fixed;bottom:calc(64px + var(--community-keyboard,0px));left:50%;transform:translateX(-50%);width:min(100%,720px);padding:12px;background:#f3f4f5;z-index:31;border-top:1px solid var(--c-line)}
+ html body.community-app .c-sheet{border-radius:12px 12px 0 0;width:min(100%,540px);margin:auto auto 0;border:0}.community-app .c-sheet>div>button{min-height:52px;font-size:15px}.community-app .c-sheet>div>button:last-child{border-top:6px solid var(--c-soft);margin-top:8px}
+ html body.community-app .c-primary{border-radius:6px;background:#272e35;color:#fff}
++html[data-theme=dark] body.community-app{--c-text:#edf0f4;--c-muted:#b0b6c0;--c-line:#363b43;--c-soft:#292e35;--c-accent:#8bbcf1;--ui-bg:#171b20;color-scheme:dark}
++html[data-theme=dark] body.community-app :is(.c-page,.c-header,.c-post,.c-reply-dock,.c-title-input,.c-body-input,.c-form-row input,.c-form-row select,.c-sheet,.c-editor-tools,.c-report textarea,.c-report select){background:#1d2229;color:var(--c-text)}
++html[data-theme=dark] body.community-app :is(.c-author strong,.c-post-copy p,.c-home-tabs button,.c-tabs button){color:var(--c-text)}
++html[data-theme=dark] body.community-app :is(.c-search-form input,.c-reply-dock textarea,.c-channel-icon,.c-avatar,.c-emoji){background:var(--c-soft);color:var(--c-text)}
++html[data-theme=dark] body.community-app .c-detail .c-follow{background:var(--c-soft);border-color:var(--c-line);color:var(--c-accent)}
++html[data-theme=dark] body.community-app .c-home-tabs .is-active::after{background:var(--c-text)}
++html[data-theme=dark] body.community-app .community-local-banner{background:#3b3220;color:#e5c886}
+diff --git a/frontend/assets/css/dialogs.css b/frontend/assets/css/dialogs.css
+index 740eb6d2bebfafe75d335e63bc461e8b4698c639..f0c7a977f9cdaf0050bd17dd53ac9deb63bc6394 100644
+--- a/frontend/assets/css/dialogs.css
++++ b/frontend/assets/css/dialogs.css
+@@ -1,5 +1,5 @@
+ .homer-action-dialog{box-sizing:border-box;width:min(420px,calc(100vw - 40px));max-height:calc(100dvh - 48px);overflow:auto;border:0;border-radius:22px;padding:24px;background:#fff;color:#28232f;box-shadow:0 20px 80px #10072040;font:15px/1.65 system-ui,sans-serif}
+-.homer-action-dialog::backdrop{background:#15102066;backdrop-filter:blur(2px)}
++.homer-action-dialog::backdrop{background:#0008;backdrop-filter:none}
+ .homer-action-dialog h2{margin:0 0 12px;font-size:19px;font-weight:650;color:#28232f}
+ .homer-action-dialog p{margin:0 0 24px;color:#6a6272;overflow-wrap:anywhere;white-space:pre-wrap}
+ .homer-action-dialog footer{display:flex;justify-content:flex-end;gap:12px}
+diff --git a/frontend/assets/css/product-design.css b/frontend/assets/css/product-design.css
+index fa3d4ff1b533397b18206cadda1601a9ea5f4198..1118a568937e0c7f7cd9a5674edf6ab75ef817c1 100644
+--- a/frontend/assets/css/product-design.css
++++ b/frontend/assets/css/product-design.css
+@@ -30,20 +30,7 @@ html body .app-bottom-nav svg{width:23px!important;height:23px!important;stroke-
+ html body :is(.segmented,.chip-row){scrollbar-width:none}
+ html body :is(.ui-state,.ws-empty,.social-empty){min-height:180px;background:transparent!important;border:0!important;gap:12px;line-height:1.6}
+ html body :is(.ws-empty__ico,.ws-create-option__icon){background:var(--ui-panel-soft)!important;color:var(--ui-accent)!important}
+-/* Creator workspace: one primary creation action, then readable utility rows. */
+-html body.hub-page--workshop .ws-quicknav--focused{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:0!important;background:var(--ui-panel);border:1px solid var(--ui-line);border-radius:16px;overflow:hidden}
+-html body.hub-page--workshop .ws-navitem{border:0!important;border-radius:0!important;min-height:82px!important;padding:16px!important;box-shadow:none!important;align-items:center!important;background:transparent!important;border-bottom:1px solid var(--ui-line)!important;gap:12px!important}
+-html body.hub-page--workshop .ws-navitem:nth-child(odd){border-right:1px solid var(--ui-line)!important}
+-html body.hub-page--workshop .ws-navitem__ico{width:28px!important;height:28px!important;min-width:28px;background:none!important;border-radius:0!important;color:var(--ui-accent)!important;display:grid;place-items:center}
+-html body.hub-page--workshop .ws-navitem__ico svg{width:24px;height:24px;stroke-width:1.8}
+-html body.hub-page--workshop .ws-navitem__text strong{font-size:15px!important;color:var(--ui-text)!important;font-weight:600}
+-html body.hub-page--workshop .ws-navitem__text em{font-size:12px!important;color:var(--ui-muted)!important;margin-top:3px}
+-html body.hub-page--workshop .ws-section-head{margin-top:24px;margin-bottom:12px}
+-html body.hub-page--workshop .ws-section-head h3{font-size:17px;font-weight:650;color:var(--ui-text)}
+-html body.hub-page--workshop .ws-cards{display:flex;flex-direction:column;gap:0;border-radius:16px;overflow:hidden;background:var(--ui-panel)}
+-html body.hub-page--workshop .ws-card:not(.ws-card--add){display:grid;grid-template-columns:64px minmax(0,1fr);gap:14px;padding:14px;border:0;border-bottom:1px solid var(--ui-line);border-radius:0;min-height:92px;background:var(--ui-panel)}
+-html body.hub-page--workshop .ws-card__cover{height:80px!important;border-radius:8px;overflow:hidden}.hub-page--workshop .ws-card__body{padding:0!important;align-self:center}.hub-page--workshop .ws-card__name{font-size:15px!important}.hub-page--workshop .ws-card__desc{font-size:13px!important;color:var(--ui-muted)!important}
+-html body.hub-page--workshop .ws-card--add{min-height:56px;flex-direction:row;border:0;border-radius:0;background:var(--ui-panel-soft);font-size:14px}
++/* Workshop geometry is owned by tavo-reference.css. */
+ /* Personal/account pages stay in the original navigation rather than a second hub. */
+ html body .profile-center{gap:16px!important}.profile-center .profile-identity-main h2{font-size:22px!important;line-height:1.4}.profile-center .profile-identity-main p{font-size:13px!important}
+ html body .profile-wallet-card{padding:20px!important;border:0!important;border-radius:16px!important;background:var(--ui-panel)!important}
+@@ -90,15 +77,7 @@ html body.xy-admin .xy-glass{border-radius:16px!important;padding:18px!important
+ html body.xy-admin .ui-node-panel{background:var(--ui-panel)!important;border:0!important;padding:12px!important}.xy-admin .ui-save-bar{gap:8px;flex-wrap:wrap}.xy-admin .ui-save-bar>div{flex-wrap:wrap;gap:8px}
+ html body.xy-admin .ui-model-list{border-radius:12px;max-height:52dvh}.xy-admin .ui-model-row{min-height:64px;box-shadow:none!important}
+ html body.xy-admin :is(.ui-node-credentials,.ui-bulk-field){gap:10px}.xy-admin .ui-model-selection{background:var(--ui-panel-soft);border:0}.xy-admin .ui-model-selection button:not(.xy-btn){background:var(--ui-panel)}
+-/* Community pages retain independent routes and the established content structure. */
+-html body.community-app{--c-bg:var(--ui-bg);--c-text:var(--ui-text);--c-muted:var(--ui-muted);--c-line:var(--ui-line);--c-soft:var(--ui-panel-soft);--c-accent:var(--ui-accent)}
+-html body.community-app :is(.c-page,.c-header,.c-post,.c-reply-dock,.c-title-input,.c-body-input,.c-form-row input,.c-form-row select,.c-sheet){background:var(--ui-panel)!important;color:var(--ui-text)!important}
+-html body.community-app .c-header{min-height:56px;padding-inline:12px;border-bottom:1px solid var(--ui-line)}.community-app .c-header h1{font-size:19px!important;font-weight:650!important}
+-html body.community-app .c-post{padding:16px!important;border-bottom:6px solid var(--ui-bg)!important}.community-app .c-post h2{font-size:17px!important;line-height:1.5}.community-app .c-post-copy p{font-size:14px!important;line-height:1.75;color:var(--ui-muted)}
+-html body.community-app .c-topic-icon{background:var(--ui-accent-soft)!important;color:var(--ui-accent)!important;box-shadow:none!important}
+-html body.community-app .c-tabs button[aria-pressed=true]{color:var(--ui-accent)!important}.community-app .c-compose-fab{border-radius:16px!important;background:var(--ui-accent)!important;color:#fff!important;box-shadow:0 5px 14px #27203322!important}
+-html body.community-app .c-reply-dock{border-top:1px solid var(--ui-line);box-shadow:none!important}.community-app .c-reply-dock textarea{border-radius:12px!important;background:var(--ui-panel-soft)!important;color:var(--ui-text)!important}
+-html body.community-app .c-empty{padding:56px 20px!important}.community-app .c-empty h2{font-size:17px!important}.community-app .c-empty p{font-size:13px!important;line-height:1.6}
++/* Community geometry and tokens are owned by community-reference.css. */
+ /* Secondary pages share the same surface system without reskinning farm artwork. */
+ html body :is(.rw-balance,.rw-redeem,.rw-page .ws-panel,.cm-card,.cm-contest){border-radius:16px!important;box-shadow:none!important;background:var(--ui-panel)!important;color:var(--ui-text)!important;border-color:var(--ui-line)!important}
+ html body .rw-top{gap:16px!important}.rw-page .ws-stats{background:var(--ui-panel-soft)!important;border:0!important}.rw-page .rw-balance__num{font-size:32px!important;color:var(--ui-text)!important}.rw-page .ws-headline__copy{font-size:13px!important;color:var(--ui-muted)!important}
+@@ -109,12 +88,20 @@ html body :is(.cm-mask,.ws-create-mask,.xy-modal-mask,.character-version-backdro
+ html body :is(.cm-modal,.ws-create-dialog,.xy-modal,.character-version-dialog,.farm-seed-modal,.ui-model-dialog){border:0!important;border-radius:20px!important;background:var(--ui-panel)!important;color:var(--ui-text)!important;box-shadow:var(--ui-float)!important}
+ html body :is(.cm-modal,.ws-create-dialog,.xy-modal,.character-version-dialog,.farm-seed-modal,.ui-model-dialog) :is(h2,h3){font-size:18px!important;line-height:1.4;font-weight:650!important}
+ html body :is(.cm-modal__head,.ws-create-head,.character-version-dialog__head){padding:16px!important;border-bottom:1px solid var(--ui-line)!important}
+-html body .ui-admin-dialog__sheet{padding:20px!important;border-radius:20px}.ui-admin-dialog__sheet footer{position:sticky;bottom:-20px;background:var(--ui-panel);padding:12px 0;gap:8px}.ui-admin-dialog__sheet footer button{flex:1;min-width:0}
++html body .ui-admin-dialog__sheet{padding:20px!important;border-radius:20px}.ui-admin-dialog__sheet footer{position:sticky;bottom:-20px;background:var(--ui-panel);padding:12px 0;gap:8px}.ui-admin-dialog__sheet footer button{flex:1;min-width:0;white-space:nowrap;padding-inline:8px!important}
+ /* Picker geometry is owned by option-picker.css; do not re-skin it here. */
+ html body .homer-action-dialog{border-radius:20px!important;background:var(--ui-panel,#fff)!important;color:var(--ui-text,#202124)!important}.homer-action-dialog :is(h2,p){color:inherit!important}.homer-action-dialog footer button{border-radius:12px!important}
++/* Complex resource editing uses the full phone viewport; short choices stay sheets. */
++html body.resource-library-page .cm-tabs{flex-wrap:nowrap;overflow-x:auto;gap:20px;border-bottom:1px solid var(--ui-line);border-radius:0;padding:0 2px;scrollbar-width:none}
++html body.resource-library-page .cm-tab{flex:none;min-height:48px;padding:6px 0;border:0;border-bottom:2px solid transparent;border-radius:0;background:none;box-shadow:none;color:var(--ui-muted);font-size:14px}
++html body.resource-library-page .cm-tab.is-active{color:var(--ui-text);border-bottom-color:var(--ui-text);background:none;box-shadow:none}
++html body.resource-library-page .cm-modal__head p{color:var(--ui-muted)}
++html body.resource-library-page .cm-modal .cm-actions{position:sticky;bottom:-22px;background:var(--ui-panel);padding:12px 0 max(12px,env(safe-area-inset-bottom));border-top:1px solid var(--ui-line)}
++html body.resource-library-page .cm-modal .cm-actions button{flex:1}
++html body.resource-library-page .cm-close{width:44px;height:44px;min-height:44px;background:none;color:var(--ui-text);font-size:24px}
++@media(max-width:620px){html body.resource-library-page .cm-mask{padding:0!important}html body.resource-library-page .cm-modal{width:100%;height:100dvh;max-height:100dvh;border-radius:0!important}html body.resource-library-page .cm-modal__head{flex:none;min-height:56px}html body.resource-library-page .cm-modal__body{flex:1;min-height:0;padding:16px}html body.resource-library-page .cm-modal .cm-actions{bottom:-16px}}
+ @media(max-width:600px){
+  html body .app-page-pad{padding:8px 16px 24px!important}
+- html body.hub-page--workshop .ws-navitem{padding:12px!important;gap:8px!important}.hub-page--workshop .ws-navitem__text em{font-size:11px!important}
+  html body.xy-admin .ui-save-bar{position:static}.xy-admin .ui-model-selection>div{align-items:flex-start}.xy-admin .ui-node-list{max-width:100%;scrollbar-width:none}
+  html body .ui-model-dialog{margin:auto auto 0;width:100%!important;max-height:90dvh;border-radius:22px 22px 0 0!important}.ui-model-dialog .ui-admin-dialog__sheet{border-radius:22px 22px 0 0;padding-bottom:max(20px,env(safe-area-inset-bottom))!important}
+ }
+@@ -157,7 +144,7 @@ html body.profile-center-page .profile-avatar{width:84px!important;height:84px!i
+ html body.profile-center-page .profile-identity-main h2{font-size:20px!important}.profile-center-page .profile-identity-main p{display:none}.profile-center-page .profile-edit-link{align-self:center;font-size:12px;border:0;background:none;padding:8px 0;white-space:nowrap;color:var(--ui-muted)}
+ .profile-community-nav{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--ui-panel);padding:0 12px 14px;margin-top:-6px}
+ .profile-community-nav a{display:flex;align-items:center;justify-content:center;flex-direction:column;gap:7px;min-height:70px;color:var(--ui-text);text-decoration:none;font-size:12px}.profile-community-nav svg{width:22px;height:22px}
+-html body.profile-center-page .profile-wallet-card{position:relative;display:flex!important;align-items:center;justify-content:space-between;padding:16px 20px!important;border-radius:0!important;min-height:76px!important;gap:10px}
++html body.profile-center-page .profile-wallet-card{position:relative;display:flex;align-items:center;justify-content:space-between;padding:16px 20px!important;border-radius:0!important;min-height:76px!important;gap:10px}
+ html body.profile-center-page .profile-wallet-card>div:first-child{display:flex;align-items:baseline;gap:12px}.profile-center-page .profile-wallet-card strong{font-size:25px!important}.profile-center-page .profile-wallet-breakdown{display:none!important}
+ html body.profile-center-page .profile-wallet-card em{position:static!important;white-space:nowrap;font-size:12px;color:var(--ui-muted)!important}
+ html body.profile-center-page .profile-shortcuts{padding:4px 12px!important;border-radius:0!important;background:var(--ui-panel)!important}.profile-center-page .profile-shortcuts a{border:0!important}.profile-center-page .profile-shortcuts small{display:none}.profile-center-page .profile-shortcuts span{font-size:12px}.profile-center-page .profile-shortcuts svg{color:var(--ui-text)}
+diff --git a/frontend/assets/css/tavo-reference.css b/frontend/assets/css/tavo-reference.css
+index 0797a034798edc620e43a6af888afd471c763001..ae0d3c6710b20ebf99fa90eb76aadc3f403c062b 100644
+--- a/frontend/assets/css/tavo-reference.css
++++ b/frontend/assets/css/tavo-reference.css
+@@ -68,7 +68,7 @@ html body.ref-workshop .app-topbar h1{font-size:18px!important;font-weight:750!i
+ html body.ref-workshop .app-topbar>.xy-btn{min-height:30px!important;padding:5px 12px!important;background:linear-gradient(105deg,#824cff,#f08035)!important;border:0!important;border-radius:24px!important;color:#fff!important}
+ html body.ref-workshop .ws-quicknav{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:4px!important;margin:8px 0 26px!important;padding:0!important}
+ html body.ref-workshop .ws-navitem{display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center;gap:8px!important;min-height:86px!important;padding:8px 2px!important;border:0!important;background:none!important;box-shadow:none!important}
+-html body.ref-workshop .ws-navitem__ico{width:44px;height:44px;border-radius:14px!important;color:#5f5f5f!important;background:#e6e6e6!important;display:grid;place-items:center}
++html body.ref-workshop .ws-navitem__ico{width:44px;height:44px;flex:0 0 44px;border-radius:14px!important;color:#5f5f5f!important;background:#e6e6e6!important;display:grid;place-items:center}
+ html body.ref-workshop .ws-navitem__text strong{font-size:13px!important;color:#474747!important;font-weight:500!important;white-space:nowrap}
+ .ref-workshop :is(.ws-navitem__ico,.ws-create-option__icon) svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+ html body.ref-workshop .ws-main{padding:0!important;background:none!important;border:0!important;box-shadow:none!important}.ref-workshop .ws-section-head{margin-bottom:10px}

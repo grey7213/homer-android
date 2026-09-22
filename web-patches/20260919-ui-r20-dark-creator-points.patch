@@ -1,0 +1,247 @@
+diff --git a/frontend/admin.html b/frontend/admin.html
+index 5e0bd3ee5c574e7b9628d82ff7fa9fc261c0eff1..e45e3655314bcd728d26b87d8f6f1ccec81b7d0c 100644
+--- a/frontend/admin.html
++++ b/frontend/admin.html
+@@ -1137,6 +1137,7 @@
+             <p class="xy-glass p-6" x-show="!socialReportError && !socialReports.length">暂无待处理的举报</p>
+             <div class="space-y-3"><template x-for="report in socialReports" :key="report.id"><article class="xy-glass p-5"><h3 class="font-bold" x-text="report.title || '无标题帖子'"></h3><p class="whitespace-pre-wrap my-3" x-text="report.reason"></p><p class="text-sm text-slate-400" x-text="formatTime(report.created_at)"></p><button class="xy-btn xy-btn-ghost mt-3" :disabled="!!report.deleted" @click="removeReportedPost(report)" x-text="report.deleted ? '已下架' : '下架帖子'"></button></article></template></div>
+           </section>
++          <template x-if="activeTab === 'creator-revenue'"><section class="revenue-admin" x-init="loadCreatorRevenue()" aria-label="创作收益配置"><h1>创作收益</h1><p>创作者获得角色卡实际消耗积分的一部分。收益只能作为积分使用，不可提现。</p><form @submit.prevent="saveCreatorRevenue"><label for="creator-revenue-rate">创作者收益比例</label><div><input id="creator-revenue-rate" class="xy-input" inputmode="decimal" type="number" min="0" max="100" step="0.01" x-model="revenueRate" :disabled="!revenueLoaded||revenueBusy"><span>%</span></div><small>默认 35%。修改后仅对新的消费生效，已结算收益不会重算。</small><p class="revenue-example" x-show="revenueLoaded">每消耗 100 积分，创作者获得 <b x-text="revenueRate"></b> 积分；不足 1 积分的部分累计结算。</p><p role="alert" x-text="revenueError" x-show="revenueError"></p><footer><button class="xy-btn xy-btn-ghost" type="button" @click="loadCreatorRevenue" :disabled="revenueBusy">重新读取</button><button class="xy-btn xy-btn-primary" :disabled="!revenueLoaded||revenueBusy" x-text="revenueBusy?'处理中…':'保存比例'"></button></footer></form></section></template>
+           <section x-show="activeTab === 'notifications'" aria-label="通知管理">
+             <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
+               <div><h1 class="text-2xl font-bold xy-gradient-text">通知管理</h1>
+diff --git a/frontend/app/assets/js/app-core.js b/frontend/app/assets/js/app-core.js
+index 76e47c2e13c835d20b683ff65390d9d4ec113c54..b0f25672475235624cf32896bac7bf85a5d40051 100644
+--- a/frontend/app/assets/js/app-core.js
++++ b/frontend/app/assets/js/app-core.js
+@@ -201,6 +201,7 @@ export const api = {
+     return rawRequest(`/console/api/web/redemptions?${qs}`);
+   },
+   rewards: () => rawRequest('/console/api/web/rewards'),
++  earnings: () => rawRequest('/console/api/web/earnings'),
+   claimDailyReward: () => rawRequest('/console/api/web/rewards/daily', { method: 'POST', body: {} }),
+   farmState: () => rawRequest('/console/api/web/farm/state'),
+   farmFriends: () => rawRequest('/console/api/web/farm/friends'),
+diff --git a/frontend/app/assets/js/earnings.js b/frontend/app/assets/js/earnings.js
+index 68de741bc0d63632e113197bdd5e773ab6940f70..81562d0ebb7239e31c30c46ad86820ae90e22406 100644
+--- a/frontend/app/assets/js/earnings.js
++++ b/frontend/app/assets/js/earnings.js
+@@ -1,17 +1,16 @@
+ import {api,requireAuth} from './app-core.js';
+-// Extension contract: /console/api/web/rewards -> data.earnings.
+-// No payment, reward-claim or withdrawal request is made by this read-only view.
+-let data=null,kind='all',revision=0;
+ const $=id=>document.getElementById(id);
+-const amount=row=>Number.isFinite(row?.amount)&&typeof row.unit==='string'?`${row.amount.toLocaleString('zh-CN',{maximumFractionDigits:2})} ${row.unit}`:'—';
+-function render(){
+- for(const [key,id] of [['creator','creator'],['invite','invite']]){
+-  const entry=data?.summary?.[key];$(id+'-total').textContent=amount(entry);$(id+'-state').textContent=entry?'已入账收益':'结算数据暂未接入';
+- }
+- const list=Array.isArray(data?.list)?data.list.filter(r=>['creator','invite'].includes(r.kind)&&(kind==='all'||r.kind===kind)):[];
+- $('earnings-list').replaceChildren();$('earnings-status').textContent=!data?'收益服务暂未接入，接入后会在这里展示创作分成与邀请奖励。':!list.length?'暂无这类收益记录':'';
+- for(const row of list){const li=document.createElement('li'),title=document.createElement('span'),value=document.createElement('strong'),meta=document.createElement('small');title.textContent=row.title||(row.kind==='creator'?'创作分成':'邀请奖励');value.textContent=amount(row);meta.textContent=[row.created_at,row.status_label].filter(v=>typeof v==='string').join(' · ');li.append(title,value,meta);$('earnings-list').append(li);}
++const points=n=>Number.isSafeInteger(n)&&n>=0?n.toLocaleString('zh-CN'):'—';
++let revision=0;
++async function load(){
++ const version=++revision;$('refresh-earnings').disabled=true;$('earnings-status').textContent='正在读取收益…';
++ try{
++  const result=await api.earnings();if(version!==revision)return;const data=result?.data??result;
++  if(data?.unit!=='积分'||!Array.isArray(data.cards))throw Error('收益服务暂未接入，请更新服务端后重试。');
++  $('creator-total').textContent=points(data.creator_points);$('invite-total').textContent=points(data.invite_points)+(Number.isSafeInteger(data.invite_points)?' 积分':'');$('invite-state').textContent=data.invite_points==null?'尚未接入邀请结算':'累计获得的邀请积分';
++  $('earnings-list').replaceChildren();$('earnings-status').textContent=data.cards.length?'':'还没有角色卡收益。有人使用你的角色卡后，已结算收益会出现在这里。';
++  for(const card of data.cards){const row=document.createElement('li'),name=document.createElement('span'),value=document.createElement('strong');name.textContent=card.name||'未命名角色卡';value.textContent=points(card.points)+' 积分';row.append(name,value);$('earnings-list').append(row);}
++ }catch(error){$('earnings-status').textContent=error.status===404||error.code===404?'收益服务暂未接入，请更新服务端后重试。':error.message||'未能读取收益，请检查网络后刷新。';}
++ finally{if(version===revision)$('refresh-earnings').disabled=false;}
+ }
+-async function load(){const version=++revision;$('refresh-earnings').disabled=true;$('earnings-status').textContent='正在读取收益…';try{const result=await api.rewards();if(version!==revision)return;data=result?.data?.earnings||null;render();}catch{$('earnings-status').textContent='未能读取收益，请检查网络后点击刷新。';}finally{if(version===revision)$('refresh-earnings').disabled=false;}}
+-document.querySelectorAll('[data-kind]').forEach(button=>button.onclick=()=>{kind=button.dataset.kind;document.querySelectorAll('[data-kind]').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));render();});
+ $('refresh-earnings').onclick=load;if(requireAuth())void load();
+diff --git a/frontend/app/assets/js/notifications.js b/frontend/app/assets/js/notifications.js
+index a74c4bfabdb6aacc964f92cfb264f810adb2b0b7..05d80bf2e46b03a6f859755602f2c225c738a5a1 100644
+--- a/frontend/app/assets/js/notifications.js
++++ b/frontend/app/assets/js/notifications.js
+@@ -80,13 +80,13 @@ export async function openCurrentNotifications() {
+   const community = await import('./community-controls.js?v=20260917-r8');
+   community.styles();
+   sheet.setAttribute('aria-label', '当前通知');
+-  const header = document.createElement('header'); header.textContent = '通知中心';
++  const header = document.createElement('header');const heading=document.createElement('h2');heading.textContent='通知中心';
+   const content = document.createElement('section'); content.className = 'ui-state';
+   content.setAttribute('aria-live', 'polite'); content.textContent = '正在读取通知…';
+   const footer = document.createElement('footer');
+   const retry = document.createElement('button'); retry.type = 'button'; retry.textContent = '重试'; retry.hidden = true;
+   const close = document.createElement('button'); close.type = 'button'; close.textContent = '关闭';
+-  close.textContent='×';close.setAttribute('aria-label','关闭通知中心');header.append(close);
++  close.textContent='‹';close.setAttribute('aria-label','关闭通知中心');const spacer=document.createElement('span');spacer.className='notice-head-spacer';spacer.setAttribute('aria-hidden','true');header.append(close,heading,spacer);
+   footer.append(retry);footer.hidden=true;sheet.append(header, content, footer);
+   dialog = sheet; document.body.append(sheet); sheet.showModal();
+   let controller, revision=0;
+@@ -104,7 +104,11 @@ export async function openCurrentNotifications() {
+       if (!sheet.open || owner() !== user || current!==revision) return;
+       const list = (body?.data?.list || body?.list || []).filter(n => n && n.enabled !== false && typeof n.title === 'string' && typeof n.content === 'string');
+       content.replaceChildren(); content.className = '';
+-      if (!list.length) { content.className = 'ui-state'; content.textContent = '暂无通知，有新消息会在这里显示。'; }
++      if (!list.length) {
++        content.className='ui-state notice-empty';
++        const mark=document.createElement('div');mark.className='notice-empty-mark';mark.setAttribute('aria-hidden','true');mark.innerHTML='<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 20a10 10 0 0 1 20 0v9l4 5H10l4-5zM20 39h8M22 8h4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
++        const title=document.createElement('h3');title.textContent='暂时没有新通知';const help=document.createElement('p');help.textContent='站内公告与重要更新会显示在这里。';content.append(mark,title,help);
++      }
+       for (const notice of list) {
+         const article = document.createElement('article');
+         const title = document.createElement('h3'); title.textContent = notice.title;
+@@ -116,19 +120,15 @@ export async function openCurrentNotifications() {
+     } finally { clearTimeout(timeout); }
+   };
+   retry.onclick = load;
+-  await load();
+   if(owner()!=='guest'){
+-    try{
+-      const state=await community.social('bootstrap');
+-      if(!sheet.open || owner()!==user || !state.consented)return;
+       const tabs=community.element('nav','',{class:'community-tabs'});
+       const select=b=>{for(const node of tabs.children)node.setAttribute('aria-pressed',String(node===b));};
+       const app=community.button('应用通知',()=>{select(app);return load();});
+-      const social=community.button('互动与处理结果',()=>{sheet.close();location.href='/app/community-messages.html';});
++      const social=community.button('互动消息',()=>{sheet.close();location.href='/app/community-messages.html';});
+       tabs.setAttribute('aria-label','通知分类');tabs.append(app,social);select(app);
+       header.after(tabs);
+-    }catch{/* Existing application notices remain usable if community is unavailable. */}
+   }
++  await load();
+ }
+ if (!window.__homerNoticesInstalled) {
+   window.__homerNoticesInstalled = true;
+diff --git a/frontend/app/earnings.html b/frontend/app/earnings.html
+index 4bd3feaa48110497a72733136c59b197ba779d86..f39b484059c89f8485f92440c848688f6d07bd2a 100644
+--- a/frontend/app/earnings.html
++++ b/frontend/app/earnings.html
+@@ -4,8 +4,7 @@
+ <script type="module" src="/app/assets/js/earnings.js"></script></head>
+ <body class="earnings-page"><main>
+ <header><a href="/app/me.html" aria-label="返回我的">‹</a><h1>我的收益</h1><button id="refresh-earnings">刷新</button></header>
+-<p class="earnings-intro">查看创作带来的分成和邀请奖励。充值、赠送额度及账户余额不计入这里。</p>
+-<section class="earnings-summary" aria-label="收益分类"><article><span>创作分成</span><strong id="creator-total">—</strong><small id="creator-state">读取结算信息</small></article><article><span>邀请奖励</span><strong id="invite-total">—</strong><small id="invite-state">读取结算信息</small></article></section>
+-<section class="earnings-records"><h2>收益明细</h2><nav aria-label="收益类型"><button aria-pressed="true" data-kind="all">全部</button><button aria-pressed="false" data-kind="creator">创作分成</button><button aria-pressed="false" data-kind="invite">邀请奖励</button></nav><div id="earnings-status" role="status">正在读取收益…</div><ol id="earnings-list"></ol></section>
+-<p class="earnings-footnote">金额、单位和结算状态以服务端账单为准。这里只展示收益，不提供充值入口。</p>
++<section class="earnings-total"><span>累计创作收益</span><div><strong id="creator-total">—</strong><span>积分</span></div><p>由角色卡使用产生，已结算积分自动计入账户。不可提现或兑换现金。</p></section>
++<section class="earnings-records"><div class="earnings-section-title"><h2>我的角色卡</h2><span>累计收益</span></div><div id="earnings-status" role="status">正在读取收益…</div><ol id="earnings-list"></ol></section>
++<section class="earnings-invite"><div><h2>邀请奖励</h2><p id="invite-state">尚未接入邀请结算</p></div><strong id="invite-total">—</strong></section>
+ </main></body></html>
+diff --git a/frontend/assets/css/dialog-refinement.css b/frontend/assets/css/dialog-refinement.css
+new file mode 100644
+index 0000000000000000000000000000000000000000..531f3057c37cf206b78fb579cdf426ab2b6a3b34
+--- /dev/null
++++ b/frontend/assets/css/dialog-refinement.css
+@@ -0,0 +1,27 @@
++/* R20 task surfaces: compact choices; notifications get a full, readable page. */
++html body .homer-option-picker{border-radius:20px 20px 0 0!important;padding:8px 16px max(18px,env(safe-area-inset-bottom))!important;box-shadow:none!important}
++html body .homer-option-picker__head{padding:8px 0 14px!important;display:flex!important;justify-content:space-between!important;border-bottom:1px solid var(--app-line)!important}
++html body .homer-option-picker__head h2{font-size:18px!important;text-align:left!important;font-weight:650!important;margin:0!important}
++html body .homer-option-picker__head button{font-size:24px!important;background:none!important;color:var(--app-muted)!important;width:40px!important;height:40px!important;min-height:40px!important;border:0!important}
++html body .homer-option-picker__list{padding:4px 0!important}
++html body .homer-option-picker__option{border-radius:0!important;margin:0!important;padding:16px 4px!important;min-height:56px!important;background:none!important;font-size:16px!important;font-weight:400!important;border-bottom:1px solid var(--app-line)!important}
++html body .homer-option-picker__option:last-child{border-bottom:0!important}
++html body .homer-option-picker__check{color:var(--app-text)!important;font-size:20px!important;font-weight:500!important}
++html body .homer-option-picker::backdrop{background:#0005!important}
++html body .homer-notice-center{width:min(680px,100vw)!important;max-width:100vw!important;height:100dvh!important;max-height:100dvh!important;border-radius:0!important;margin:0 auto!important;box-shadow:none!important;inset:0!important;background:var(--app-bg)!important}
++html body .homer-notice-center>header{flex:none;min-height:58px;padding:0 12px!important;gap:8px;border-bottom:0!important;background:var(--app-panel)}
++html body .homer-notice-center>header h2{flex:1;margin:0;font-size:18px;font-weight:600;text-align:center}
++html body .homer-notice-center>header button{background:none!important;border-radius:0!important;color:var(--app-text)!important;font-size:32px!important;width:44px!important;min-height:44px!important}
++.notice-head-spacer{width:44px;flex:none}
++html body .homer-notice-center>nav{flex:none;margin:0!important;padding:0 20px!important;gap:26px!important;background:var(--app-panel)!important;border-radius:0!important;border-bottom:1px solid var(--app-line)}
++html body .homer-notice-center>nav button{position:relative;flex:none!important;background:transparent!important;box-shadow:none!important;border-radius:0!important;padding:14px 0!important;font-size:15px!important;font-weight:400!important;color:var(--app-muted)!important}
++html body .homer-notice-center>nav button[aria-pressed=true]{color:var(--app-text)!important;font-weight:600!important}
++html body .homer-notice-center>nav button[aria-pressed=true]::after{content:'';position:absolute;bottom:0;left:calc(50% - 10px);width:20px;height:3px;border-radius:3px;background:var(--app-text)}
++html body .homer-notice-center>section{flex:1;min-height:0!important;padding:24px!important}
++html body .homer-notice-center>section.notice-empty{display:flex!important;flex-direction:column;justify-content:flex-start;align-items:center;padding-top:clamp(70px,18vh,170px)!important}
++.notice-empty-mark{display:grid;place-items:center;width:88px;height:88px;border-radius:50%;background:var(--app-fill);color:var(--app-muted);margin-bottom:24px}.notice-empty-mark svg{width:48px;height:48px}
++html body .homer-notice-center .notice-empty h3{font-size:17px;font-weight:600;margin:0 0 8px}
++html body .homer-notice-center .notice-empty p{font-size:14px;color:var(--app-muted);margin:0;line-height:1.6}
++.revenue-admin{max-width:640px;margin:auto;color:var(--app-text)}.revenue-admin h1{font:650 24px/1.3 system-ui;margin:12px 0}.revenue-admin>p{color:var(--app-muted);font-size:14px;line-height:1.7;margin:12px 0 24px}
++.revenue-admin form{padding:24px;border-radius:18px;background:var(--app-panel);border:1px solid var(--app-line)}.revenue-admin label{display:block;font-size:15px;font-weight:600;margin-bottom:12px}.revenue-admin form>div{display:flex;align-items:center;gap:12px}.revenue-admin input{width:140px;font-size:24px!important}.revenue-admin small{display:block;color:var(--app-muted);font-size:13px;line-height:1.7;margin:16px 0}.revenue-example{padding:16px;border-radius:12px;background:var(--app-fill);font-size:14px;line-height:1.7}.revenue-admin [role=alert]{color:var(--app-danger);margin-top:16px}.revenue-admin footer{display:flex;justify-content:flex-end;gap:12px;margin-top:24px;flex-wrap:wrap}
++@media(min-width:700px){html body .homer-option-picker{margin:auto!important;border-radius:20px!important}html body .homer-notice-center{height:min(780px,90dvh)!important;border-radius:16px!important;margin:auto!important}}
+diff --git a/frontend/assets/css/earnings.css b/frontend/assets/css/earnings.css
+index 3c4ee7ce55c6b2a7333757e5178bfbd68aad45b6..fcc9fa909bc2ea34c3d208cecc20a3a624a0a218 100644
+--- a/frontend/assets/css/earnings.css
++++ b/frontend/assets/css/earnings.css
+@@ -1,4 +1,8 @@
+ @import url('./theme.css');
++.earnings-total{margin:16px 0 24px;padding:24px;border-radius:20px;background:var(--app-panel)}
++.earnings-total>span{font-size:14px;color:var(--app-muted)}.earnings-total>div{display:flex;align-items:baseline;gap:10px;margin:10px 0}.earnings-total strong{font-size:40px;letter-spacing:-1px;font-weight:650}.earnings-total p{font-size:13px;line-height:1.7;color:var(--app-muted);margin:0}
++.earnings-section-title{display:flex;justify-content:space-between;align-items:center;gap:12px}.earnings-section-title span{color:var(--app-muted);font-size:12px}
++.earnings-invite{display:flex;align-items:center;justify-content:space-between;margin-top:16px;padding:20px 16px;border-radius:18px;background:var(--app-panel)}.earnings-invite h2{margin:0!important;font-size:15px!important}.earnings-invite p{font-size:12px;color:var(--app-muted);margin:6px 0 0}
+ .earnings-page{margin:0;background:var(--app-bg);color:var(--app-text);font:15px/1.5 system-ui}
+ .earnings-page main{max-width:680px;margin:auto;padding:0 16px 40px}
+ .earnings-page header{display:flex;align-items:center;gap:12px;min-height:60px;position:sticky;top:0;background:var(--app-bg);z-index:1}
+diff --git a/frontend/assets/css/surface-controls.css b/frontend/assets/css/surface-controls.css
+index dae84fa330a4f65c8a4aac33a93d0033ef26e7af..d5dbb8aa86b5acfc2df16aa234d96acfab9b2160 100644
+--- a/frontend/assets/css/surface-controls.css
++++ b/frontend/assets/css/surface-controls.css
+@@ -1,7 +1,7 @@
+ /* App-owned surfaces only; never style chat messages or card HTML documents. */
+ @import url('./theme.css');
+ html:not([data-homer-input=keyboard]) body :is(dialog,[role=dialog],.xy-modal) :focus-visible{outline:none!important}
+-html body .homer-option-picker__option[aria-checked=true]{background:var(--app-fill)!important;color:var(--app-text)!important;box-shadow:none!important;border:0!important}
++html body .homer-option-picker__option[aria-checked=true]{background:transparent!important;color:var(--app-text)!important;box-shadow:none!important;border:0!important;font-weight:600!important}
+ html body .homer-option-picker__check{color:var(--app-accent)}
+ html body:not(.homer-runtime){--fy-bg:var(--app-bg);--fy-card:var(--app-panel);--fy-text:var(--app-text);--fy-text-soft:var(--app-muted);--fy-border:var(--app-line);--fy-accent:var(--app-accent);--fy-accent-2:var(--app-accent);--fy-accent-soft:var(--app-tint)}
+ /* Search/edit controls previously inherited white background with dark-mode text. */
+diff --git a/frontend/assets/css/theme.css b/frontend/assets/css/theme.css
+index f8e11e68a1eef33e4c0c0fdcc2563d2bcb05720c..2e7e4d60a989c272c43ee2325aafcf14ddbb622e 100644
+--- a/frontend/assets/css/theme.css
++++ b/frontend/assets/css/theme.css
+@@ -2,5 +2,5 @@
+ :root{color-scheme:light;
+  --app-bg:#f2f2f7;--app-panel:#fff;--app-fill:#eeeef0;--app-text:#1c1c1e;--app-muted:#626268;--app-line:#e2e2e8;--app-accent:#0066d6;--app-tint:#e8f1ff;--app-on-accent:#fff;--app-danger:#bb2925;
+ }
+-:root[data-theme=dark]{--app-bg:#141416;--app-panel:#202024;--app-fill:#2c2c30;--app-text:#f5f5f7;--app-muted:#b1b1b8;--app-line:#3c3c42;--app-accent:#80baff;--app-tint:#203b58;--app-on-accent:#10243a;--app-danger:#ff9891;color-scheme:dark}
+-@media(prefers-color-scheme:dark){:root:not([data-theme=light]):not([data-theme=dark]){--app-bg:#141416;--app-panel:#202024;--app-fill:#2c2c30;--app-text:#f5f5f7;--app-muted:#b1b1b8;--app-line:#3c3c42;--app-accent:#80baff;--app-tint:#203b58;--app-on-accent:#10243a;--app-danger:#ff9891;color-scheme:dark}}
++:root[data-theme=dark]{--app-bg:#131517;--app-panel:#1e1f21;--app-fill:#262829;--app-text:#eceeef;--app-muted:#b3b8bc;--app-line:#343638;--app-accent:#b6d7e8;--app-tint:#2b353b;--app-on-accent:#15242c;--app-danger:#ffaaa6;color-scheme:dark}
++@media(prefers-color-scheme:dark){:root:not([data-theme=light]):not([data-theme=dark]){--app-bg:#131517;--app-panel:#1e1f21;--app-fill:#262829;--app-text:#eceeef;--app-muted:#b3b8bc;--app-line:#343638;--app-accent:#b6d7e8;--app-tint:#2b353b;--app-on-accent:#15242c;--app-danger:#ffaaa6;color-scheme:dark}}
+diff --git a/frontend/assets/js/admin-app.js b/frontend/assets/js/admin-app.js
+index b2d0355db2d1ac221b006325e26b4b54c975870b..07728cde2e4b3c2273f019ee659a7e9ef727b6de 100644
+--- a/frontend/assets/js/admin-app.js
++++ b/frontend/assets/js/admin-app.js
+@@ -12,6 +12,9 @@ function adminPanel() {
+     adminInfo: null,
+     socialReports: [], socialReportError: '',
+     notifications: [],
++    revenueRate:'35',revenueLoaded:false,revenueBusy:false,revenueError:'',
++    async loadCreatorRevenue(){this.revenueBusy=true;this.revenueError='';this.revenueLoaded=false;try{const r=await api.admin.creatorRevenue(),d=r?.data??r;if(!Number.isInteger(d?.rate_bps))throw Error('收益配置服务暂未接入');this.revenueRate=String(d.rate_bps/100);this.revenueLoaded=true;}catch(e){this.revenueError=e.message||'读取失败，请重试';}finally{this.revenueBusy=false;}},
++    async saveCreatorRevenue(){if(!this.revenueLoaded||this.revenueBusy)return;const raw=String(this.revenueRate).trim(),percent=Number(raw);if(!/^\d{1,3}(\.\d{1,2})?$/.test(raw)||percent<0||percent>100){this.revenueError='请输入 0–100 的百分比，最多两位小数';return;}this.revenueBusy=true;this.revenueError='';try{const r=await api.admin.saveCreatorRevenue(Math.round(percent*100));this.revenueRate=String((r?.data??r).rate_bps/100);this.showToast('收益比例已更新，仅影响之后的消费','success');}catch(e){this.revenueError=e.message||'保存失败，原比例保持不变';}finally{this.revenueBusy=false;}},
+     notificationForm: null,
+     notificationBusy: false,
+     notificationError: '',
+@@ -19,6 +22,7 @@ function adminPanel() {
+     errorDetail: '',
+ 
+     tabs: [
++      {id:'creator-revenue',label:'创作收益',icon:'<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 20V10m8 10V4m8 16V7"/></svg>'},
+       { id: 'community', label: '社区管理', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 3h18v14H9l-6 4V3z"/></svg>' },
+       { id: 'notifications', label: '通知管理', icon: '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M6 8a6 6 0 0112 0v8l2 2H4l2-2V8m4 12h4"/></svg>' },
+       { id: 'stats', label: '数据总览', icon: '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>' },
+diff --git a/frontend/assets/js/api.js b/frontend/assets/js/api.js
+index a82978c29f60d12aad45746b239c79004d0c6b1d..74f4a4925a2cd552ddb667988e939282fd7d2089 100644
+--- a/frontend/assets/js/api.js
++++ b/frontend/assets/js/api.js
+@@ -173,6 +173,8 @@ export const api = {
+ 
+   // 管理员接口
+   admin: {
++    creatorRevenue: () => request('/admin/api/creator-revenue'),
++    saveCreatorRevenue: (rate_bps) => request('/admin/api/creator-revenue', {method:'PUT',body:{rate_bps}}),
+     notifications: () => request('/admin/api/notifications'),
+     saveNotification: (item) => request('/admin/api/notifications' + (item.id ? '/' + encodeURIComponent(item.id) : ''),
+       { method: item.id ? 'PUT' : 'POST', body: { title: item.title, content: item.content, enabled: !!item.enabled } }),
+diff --git a/frontend/assets/js/option-picker.js b/frontend/assets/js/option-picker.js
+index af4d70c0332ea35f61d2dc9eaf3c872f156cebcf..e9daf57c5183999ed1edf167535dbf04edfcc0f5 100644
+--- a/frontend/assets/js/option-picker.js
++++ b/frontend/assets/js/option-picker.js
+@@ -17,6 +17,7 @@
+   document.head.append(css);
+   const surfaces=document.createElement('link');surfaces.rel='stylesheet';surfaces.href=new URL('../css/surface-controls.css',source).href;document.head.append(surfaces);
+   const overlays=document.createElement('link');overlays.rel='stylesheet';overlays.href=new URL('../css/overlay-system.css',source).href;document.head.append(overlays);
++  const refinements=document.createElement('link');refinements.rel='stylesheet';refinements.href=new URL('../css/dialog-refinement.css',source).href;document.head.append(refinements);
+   let active = null;
+   function el(tag, className, text) {
+     const node = document.createElement(tag);

@@ -12,6 +12,7 @@ import re
 import time
 import unicodedata
 import uuid
+from promotion_guard import PromotionRejected, classify as classify_promotion, record_rejection
 from urllib.parse import urlparse
 from community_policy import VERSION, CATEGORIES, AGREEMENT, GUIDELINES, DEFAULT_TOPICS
 
@@ -229,6 +230,10 @@ class Community:
             except Exception: action='pending'
         elif has_media or re.search(r'https?://',text):
             if action!='rejected': action='pending'
+        promotion=classify_promotion(text)
+        if promotion['action']!='allow':
+            matched.append({'category':'diversion','action':'block' if promotion['action']=='mute' else 'review'})
+            if action!='rejected': action='rejected' if promotion['action']=='mute' else 'pending'
         return {'status':action,'matches':matched}
 
     def content_data(self,comment=False):
@@ -249,6 +254,8 @@ class Community:
         tags=list(dict.fromkeys(string(t,24,True) for t in tags))
         topic='' if comment else string(self.body.get('topic',''),40,True)
         if not comment and not self.one('SELECT 1 FROM social_topics WHERE name=? AND enabled=1',(topic,)): fail('请选择有效版块')
+        promotion=classify_promotion(title+'\n'+content)
+        if promotion['action']=='mute': raise PromotionRejected(title+'\n'+content,self.path,promotion)
         verdict=self.screen(title+'\n'+content,bool(images or video))
         if verdict['status']=='rejected': fail('内容未通过规则检查，请修改后重试',422,'content_rejected')
         return dict(content=content,title=title,images=json.dumps(images),video=video,topic=topic,
@@ -607,7 +614,20 @@ class Community:
                 if target!=self.uid and not profile['following_public']: return {'list':[],'private':True}
                 join='f.author_id=m.user_id' if action=='following' else 'f.user_id=m.user_id'
                 where='f.user_id=?' if action=='following' else 'f.author_id=?'
-                return {'list':self.rows('SELECT m.user_id,m.name,m.avatar FROM social_follows f JOIN social_members m ON '+join+' WHERE '+where+' AND '+self.block_sql('m.user_id')+' LIMIT 100',(target,self.uid,self.uid))}
+                limit=max(1,min(integer(self.q('limit'),40),100))
+                cursor=string(self.q('cursor'),160)
+                query=string(self.q('q'),100).strip().lower()
+                base=' FROM social_follows f JOIN social_members m ON '+join+' WHERE '+where+' AND '+self.block_sql('m.user_id')
+                args=(target,self.uid,self.uid)
+                filtered=base+' AND (instr(lower(m.name),?)>0 OR instr(lower(m.user_id),?)>0)'
+                items=self.rows('SELECT m.user_id,m.name,m.avatar,m.bio,EXISTS(SELECT 1 FROM social_follows mine WHERE mine.user_id=? AND mine.author_id=m.user_id) following,EXISTS(SELECT 1 FROM social_follows back WHERE back.user_id=m.user_id AND back.author_id=?) followed_by'+filtered+' AND m.user_id>? ORDER BY m.user_id LIMIT ?', (self.uid,self.uid,*args,query,query,cursor,limit+1))
+                counts={}
+                for kind in ('following','followers'):
+                    member='f.author_id' if kind=='following' else 'f.user_id'
+                    owner='f.user_id' if kind=='following' else 'f.author_id'
+                    counts[kind]=self.count('SELECT count(*) FROM social_follows f JOIN social_members m ON m.user_id='+member+' WHERE '+owner+'=? AND '+self.block_sql('m.user_id'),args)
+                return {'list':items[:limit],'has_more':len(items)>limit,'next_cursor':items[limit-1]['user_id'] if len(items)>limit else '',
+                        'total':self.count('SELECT count(*)'+filtered,(*args,query,query)),'counts':counts}
             profile.pop('last_active',None); profile.pop('notifications',None)
             profile['posts']=self.count("SELECT count(*) FROM social_posts WHERE user_id=? AND deleted=0 AND status='published'",(target,))
             profile['likes']=self.count("SELECT count(*) FROM social_likes l JOIN social_posts p ON p.id=l.post_id WHERE p.user_id=? AND p.deleted=0 AND p.status='published'",(target,))
@@ -807,6 +827,16 @@ def handle(method,path,query,body,ctx):
             result=Community(ctx,method,path[len(prefix):].strip('/'),query,body).dispatch()
             ctx['conn'].execute('RELEASE community_request')
             return {'code':0,'data':result,'message':'ok'}
+        except PromotionRejected as exc:
+            ctx['conn'].execute('ROLLBACK TO community_request'); ctx['conn'].execute('RELEASE community_request')
+            ctx['conn'].execute('SAVEPOINT promotion_penalty')
+            try:
+                sid=record_rejection(ctx['conn'],ctx['user']['id'],exc)
+                ctx['conn'].execute('RELEASE promotion_penalty')
+            except Exception:
+                ctx['conn'].execute('ROLLBACK TO promotion_penalty'); ctx['conn'].execute('RELEASE promotion_penalty')
+                raise
+            return {'code':403,'__http__':403,'kind':exc.kind,'message':str(exc),'sanction_id':sid}
         except (Rejected,sqlite3.IntegrityError) as exc:
             ctx['conn'].execute('ROLLBACK TO community_request'); ctx['conn'].execute('RELEASE community_request')
             status=getattr(exc,'status',409)

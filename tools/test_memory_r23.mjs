@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import {createHomerMemoryAccess} from '../sillytavern-runtime/public/scripts/extensions/third-party/SillyTavern-MemoryBooks/homerMemoryAccess.js';
+let book='chat-book',chat='chat-a',writes=0,fail=false;
+let data={entries:{'1':{uid:1,comment:'记忆一',content:'明天清晨出发',stmemorybooks:true,disable:false,order:42},'2':{uid:2,comment:'作者设定',content:'不能公开的设定',stmemorybooks:false}}};
+const api=createHomerMemoryAccess({binding:()=>book,chatKey:()=>chat,load:async()=>data,save:async(_,d)=>{if(fail)throw Error('save failed');data=d;writes++;},writeLane:async(_,fn)=>fn(),changed:()=>{}});
+let snapshot=await api.list();assert.equal(snapshot.items.length,1);assert.equal(snapshot.items[0].id,'1');
+await assert.rejects(()=>api.update(snapshot,{id:'2',revision:JSON.stringify(data.entries['2'])},{content:'泄漏'}),/不存在/);
+await api.update(snapshot,snapshot.items[0],{content:'后天出发',disabled:true});
+assert.equal(data.entries['1'].order,42);assert.equal(data.entries['1'].disable,true);assert.equal(data.entries['2'].content,'不能公开的设定');
+await assert.rejects(()=>api.update(snapshot,snapshot.items[0],{content:'旧草稿'}),/发生变化/);
+snapshot=await api.list();fail=true;await assert.rejects(()=>api.update(snapshot,snapshot.items[0],{content:'失败不能丢失原文'}),/save failed/);assert.equal(data.entries['1'].content,'后天出发');fail=false;
+chat='chat-b';await assert.rejects(()=>api.update(snapshot,snapshot.items[0],{content:'串会话'}),/已切换/);chat='chat-a';
+await api.update(snapshot,snapshot.items[0],{remove:true});assert.equal(data.entries['1'],undefined);assert.ok(data.entries['2']);
+book=null;assert.deepEqual((await api.list()).items,[]);assert.equal(writes,2);
+console.log('Memory R23: filtering, edits, preserve metadata, stale revision, failed save, switched chat and deletion passed');

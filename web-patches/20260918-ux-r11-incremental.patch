@@ -1,0 +1,981 @@
+diff --git a/frontend/admin.html b/frontend/admin.html
+index eae61dc875d10ca74affbb2093ed16834d82d117..4caed043e2fc7fc33210d6ba2234b7575557508b 100644
+--- a/frontend/admin.html
++++ b/frontend/admin.html
+@@ -1031,7 +1031,7 @@
+                       </div>
+                       <div class="space-y-3 ui-preset-entries overflow-y-auto pr-1">
+                         <template x-for="entry in globalPresetEntries()" :key="entry.identifier || entry.id || entry.scriptName">
+-                          <details class="rounded-xl border border-white/10 bg-black/20 overflow-hidden">
++                          <details class="rounded-xl border border-white/10 bg-black/20 overflow-hidden" x-data="{entryOpen:false}" @toggle="entryOpen=$el.open">
+                             <summary class="cursor-pointer px-4 py-3 flex items-center justify-between gap-3" @click="closeOtherPresetEntries($event)">
+                               <span class="min-w-0">
+                                 <span class="block text-sm text-slate-100 break-all" x-text="entry.name || entry.scriptName || entry.identifier || entry.id"></span>
+@@ -1039,7 +1039,7 @@
+                               </span>
+                               <span class="text-[10px] rounded-full px-2 py-1 shrink-0" :class="isGlobalPresetEntryEnabled(entry) ? 'bg-emerald-400/15 text-emerald-300' : 'bg-slate-400/10 text-slate-400'" x-text="isGlobalPresetEntryEnabled(entry) ? '启用' : '停用'"></span>
+                             </summary>
+-                            <div class="border-t border-white/10 p-4 space-y-4">
++                            <template x-if="entryOpen"><div class="border-t border-white/10 p-4 space-y-4">
+                               <template x-if="globalPresetKind === 'prompt'">
+                                 <div class="space-y-4">
+                                   <div class="flex gap-4 flex-wrap text-xs text-slate-300">
+@@ -1094,6 +1094,7 @@
+                                 <button type="button" class="xy-btn xy-btn-ghost text-xs mt-2" @click="applyGlobalEntryJson(entry)">应用条目 JSON</button>
+                               </details>
+                             </div>
++                            </template>
+                           </details>
+                         </template>
+                       </div>
+@@ -1167,26 +1168,27 @@
+             </template>
+ 
+             <template x-if="siteForm">
+-              <form class="space-y-6" @submit.prevent="saveSiteSettings">
+-                <section class="xy-glass p-6">
+-                  <div class="flex items-center justify-between gap-3 mb-5">
+-                    <div>
+-                      <h2 class="font-semibold text-white">群聊页</h2>
+-                      <p class="text-xs text-slate-500 mt-1">管理群聊列表、创建面板、输入框、toast 和确认提示</p>
+-                    </div>
+-                    <a href="/app/group-chat.html" target="_blank" class="xy-link text-sm">打开群聊 →</a>
+-                  </div>
+-                  <div class="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
+-                    <template x-for="item in groupChatCopyItems" :key="item.key">
+-                      <div>
+-                        <label class="xy-label" x-text="item.label"></label>
+-                        <input class="xy-input" x-model="siteForm.group_chat[item.key]" :maxlength="item.max">
+-                      </div>
+-                    </template>
+-                  </div>
+-                </section>
+-
+-                <section class="xy-glass p-6">
++<form class="space-y-6" @submit.prevent="saveSiteSettings" x-data="{configSection:'0'}">
++                <label class="ui-config-selector">配置分类<select class="xy-input" x-model="configSection" aria-label="运营配置分类">
++                  <option value="0">官网首页</option>
++                  <option value="1">登录 / 注册</option>
++                  <option value="2">App 导航标签</option>
++                  <option value="3">App 首页 / 探索</option>
++                  <option value="4">用户中心 / 我的页</option>
++                  <option value="5">我的角色管理</option>
++                  <option value="6">空状态 / 工作台 / 图片聊天</option>
++                  <option value="7">角色详情 / 聊天页</option>
++                  <option value="8">角色编辑器</option>
++                  <option value="9">首页功能卡片</option>
++                  <option value="10">下载信息</option>
++                  <option value="11">App 公告</option>
++                  <option value="12">App 信息中心</option>
++                  <option value="13">农场每日奖励</option>
++                  <option value="14">购买与兑换</option>
++                </select><small>切换分类不会丢失当前修改；完成后统一点击「保存配置」。</small></label>
++                <!-- Obsolete group-chat copy remains in stored configuration, not in the app editor. -->
++
++                <section class="xy-glass p-6" x-show="configSection === '0'">
+                   <div class="flex items-center justify-between gap-3 mb-5">
+                     <div>
+                       <h2 class="font-semibold text-white">官网首页</h2>
+@@ -1262,7 +1264,7 @@
+                   </div>
+                 </section>
+ 
+-                <section class="xy-glass p-6">
++                <section class="xy-glass p-6" x-show="configSection === '1'">
+                   <div class="flex items-center justify-between gap-3 mb-5">
+                     <div>
+                       <h2 class="font-semibold text-white">登录 / 注册</h2>
+@@ -1280,7 +1282,7 @@
+                   </div>
+                 </section>
+ 
+-                <section class="xy-glass p-6">
++                <section class="xy-glass p-6" x-show="configSection === '2'">
+                   <div class="flex items-center justify-between gap-3 mb-5">
+                     <div>
+                       <h2 class="font-semibold text-white">App 导航标签</h2>
+@@ -1325,7 +1327,7 @@
+                   </div>
+                 </section>
+ 
+-                <section class="xy-glass p-6">
++                <section class="xy-glass p-6" x-show="configSection === '3'">
+                   <div class="flex items-center justify-between gap-3 mb-5">
+                     <div>
+                       <h2 class="font-semibold text-white">App 首页 / 探索</h2>
+@@ -1378,7 +1380,7 @@
+                   </div>
+                 </section>
+ 
+-                <section class="xy-glass p-6">
++                <section class="xy-glass p-6" x-show="configSection === '4'">
+                   <div class="flex items-center justify-between gap-3 mb-5">
+                     <div>
+                       <h2 class="font-semibold text-white">用户中心 / 我的页</h2>
+@@ -1415,7 +1417,7 @@
+                   </div>
+                 </section>
+ 
+-                <section class="xy-glass p-6">
++                <section class="xy-glass p-6" x-show="configSection === '5'">
+                   <div class="flex items-center justify-between gap-3 mb-5">
+                     <div>
+                       <h2 class="font-semibold text-white">我的角色管理</h2>
+@@ -1433,7 +1435,7 @@
+                   </div>
+                 </section>
+ 
+-                <section class="xy-glass p-6">
++                <section class="xy-glass p-6" x-show="configSection === '6'">
+                   <div class="flex items-center justify-between gap-3 mb-5">
+                     <div>
+                       <h2 class="font-semibold text-white">空状态 / 工作台 / 图片聊天</h2>
+@@ -1450,7 +1452,7 @@
+                   </div>
+                 </section>
+ 
+-                <section class="xy-glass p-6">
++                <section class="xy-glass p-6" x-show="configSection === '7'">
+                   <div class="flex items-center justify-between gap-3 mb-5">
+                     <div>
+                       <h2 class="font-semibold text-white">角色详情 / 聊天页</h2>
+@@ -1487,7 +1489,7 @@
+                   </div>
+                 </section>
+ 
+-                <section class="xy-glass p-6">
++                <section class="xy-glass p-6" x-show="configSection === '8'">
+                   <div class="flex items-center justify-between gap-3 mb-5">
+                     <div>
+                       <h2 class="font-semibold text-white">角色编辑器</h2>
+@@ -1518,7 +1520,7 @@
+ 
+ 
+ 
+-                <section class="xy-glass p-6">
++                <section class="xy-glass p-6" x-show="configSection === '9'">
+                   <div class="flex items-center justify-between gap-3 mb-5">
+                     <div>
+                       <h2 class="font-semibold text-white">首页功能卡片</h2>
+@@ -1556,7 +1558,7 @@
+                   </div>
+                 </section>
+ 
+-                <section class="xy-glass p-6">
++                <section class="xy-glass p-6" x-show="configSection === '10'">
+                   <div class="grid xl:grid-cols-[360px_1fr] gap-6">
+                     <div>
+                       <div class="flex items-center justify-between gap-3 mb-4">
+@@ -1621,7 +1623,7 @@
+                   </div>
+                 </section>
+ 
+-                <section class="xy-glass p-6">
++                <section class="xy-glass p-6" x-show="configSection === '11'">
+                   <div class="flex items-center justify-between gap-3 mb-5">
+                     <div>
+                       <h2 class="font-semibold text-white">App 公告</h2>
+@@ -1652,7 +1654,7 @@
+                   </div>
+                 </section>
+ 
+-                <section class="xy-glass p-6">
++                <section class="xy-glass p-6" x-show="configSection === '12'">
+                   <div class="flex items-center justify-between gap-3 mb-5">
+                     <div>
+                       <h2 class="font-semibold text-white">App 信息中心</h2>
+@@ -1700,7 +1702,7 @@
+                   </div>
+                 </section>
+ 
+-                <section class="xy-glass p-6">
++                <section class="xy-glass p-6" x-show="configSection === '13'">
+                   <div class="flex items-center justify-between gap-3 mb-5">
+                     <div>
+                       <h2 class="font-semibold text-white">农场每日奖励</h2>
+@@ -1755,7 +1757,7 @@
+                   </div>
+                 </section>
+ 
+-                <section class="xy-glass p-6">
++                <section class="xy-glass p-6" x-show="configSection === '14'">
+                   <div class="flex items-center justify-between gap-3 mb-5">
+                     <div>
+                       <h2 class="font-semibold text-white">购买与兑换</h2>
+diff --git a/frontend/app/assets/css/app.css b/frontend/app/assets/css/app.css
+index 9a090445d92bd32d406c256d2597b0e9ea900560..d6762fac4b641f9f362db20409ac5f8c7ef2568f 100644
+--- a/frontend/app/assets/css/app.css
++++ b/frontend/app/assets/css/app.css
+@@ -4639,3 +4639,11 @@ select.xy-input option,
+   }
+ }
+ .ws-grid.ws-grid--creation{grid-template-columns:minmax(0,1fr)}
++.history-search{display:grid;gap:8px;margin-bottom:14px;color:var(--ui-muted,#666);font-size:13px}
++@media(max-width:760px){
++  .list-row.history-row{display:grid!important;grid-template-columns:minmax(0,1fr) 48px!important;align-items:center;gap:8px}
++  .history-row .row-actions{width:48px!important;grid-column:auto!important;align-self:start}
++  .history-row__main>div{min-width:0;flex:1}
++  .history-row__main{grid-column:auto!important}
++  .history-more-btn{min-width:48px;min-height:48px}
++}
+diff --git a/frontend/app/assets/js/community-controls.js b/frontend/app/assets/js/community-controls.js
+index 6bb82a48e1c40e6c12e86b1f7e70ec6d8b9ae586..a9440d8b357ac042fae9e8e9c99f0eb44c058201 100644
+--- a/frontend/app/assets/js/community-controls.js
++++ b/frontend/app/assets/js/community-controls.js
+@@ -4,6 +4,10 @@ import {canUseLocal,enableLocal,disableLocal,localEnabled,resetLocal} from './co
+ 
+ export const social = async (path, method='GET', body) => {
+   const response = await api.social(path, {method, ...(body === undefined ? {} : {body})});
++  // Older hosts return HTTP 200 with an empty generic placeholder for unknown routes.
++  // It is not an empty community, and must never be treated as a successful write.
++  if(response?.path && response?.data && Object.keys(response.data).length===0)
++    throw Error('社区服务尚未部署完成，请联系管理员。当前操作没有保存。');
+   return response?.data ?? response;
+ };
+ export function element(tag, text='', attrs={}) {
+@@ -53,6 +57,7 @@ export async function policy(bootstrap, required=false) {
+ export async function authorizeCommunity() {
+   if(new URLSearchParams(location.search).get('acceptance')==='local')await enableLocal();
+   let data;try{data=await social('bootstrap');}catch(error){if(error.status===404||error.code===404)throw Error('社区服务暂未连接，请稍后重试或联系管理员。');throw error;}
++  if(typeof data.available!=='boolean')throw Error('社区服务尚未部署完成，请联系管理员。');
+   if(!data.available)throw Error('社区暂时维护中，请稍后再试。');
+   if(data.local)mountLocalBanner();
+   if(!data.consented && !await policy(data,true))return null;
+@@ -60,6 +65,12 @@ export async function authorizeCommunity() {
+ }
+ 
+ export function mountLocalBanner(){
++  if(!localEnabled()){
++    document.querySelectorAll('[data-local-acceptance]').forEach(node=>node.remove());
++    delete document.body.dataset.communityLocal;
++    for(const a of document.querySelectorAll('[data-community-nav]'))if(a.querySelector('span'))a.querySelector('span').textContent='社区';
++    return;
++  }
+   if(!localEnabled()||document.querySelector('[data-local-acceptance]'))return;
+   document.body.dataset.communityLocal='true';
+   styles();
+@@ -70,6 +81,9 @@ export function mountLocalBanner(){
+   }));const root=document.querySelector('[data-local-slot]')||document.querySelector('main')||document.body;root.prepend(banner);
+ }
+ 
++for(const event of ['storage','pageshow','homer:app-enter','homer:page-visible','homer:community-mode'])
++  window.addEventListener(event,()=>mountLocalBanner());
++
+ // Create text nodes and verified anchors, never execute post HTML.
+ export async function renderCommunityText(node,content) {
+   if(!node)return;
+diff --git a/frontend/app/assets/js/community-local.js b/frontend/app/assets/js/community-local.js
+index eb35c38453fdb81fb09ef91f588c745d74225e2c..efa292278716a64bd5abb583f3dde1f8e6d6e20b 100644
+--- a/frontend/app/assets/js/community-local.js
++++ b/frontend/app/assets/js/community-local.js
+@@ -5,7 +5,7 @@ const categories={politics:'政治敏感',conflict:'引战／带节奏',attack:'
+ const topics=['交流闲聊','角色故事','创作交流','攻略分享','意见反馈'];
+ const policy={version:'local-2026-09-16',agreement:'本机交互验收模式\n这里的帖子、评论、举报和管理操作只存储在本机，不会上传，不会处罚真实账号。退出模式后返回真实服务。\n社区用户协议\n请确保有权发布内容，不冒充他人、不泄露隐私。禁止政治敏感、引战／带节奏、人身攻击、广告 spam、造谣传谣、侵犯隐私、违法违规、恶意灌水、刷屏、恶意引流、冒充官方和钓鱼链接。可对处理结果申诉。',guidelines:'社区行为规范\n讨论作品，尊重不同意见；不以举报人数直接处罚。审核结合上下文，区分虚构创作和现实攻击。限制应说明原因及期限；禁言仅影响社区互动，不影响其他功能。',categories};
+ let accessOwner='',accessPromise,dbPromise,queue=Promise.resolve(),localSession=false;const urls=new Map();
+-window.addEventListener('homer-account-cleared',()=>{accessOwner='';accessPromise=null;for(const url of urls.values())URL.revokeObjectURL(url);urls.clear();});
++window.addEventListener('homer-account-cleared',()=>{accessOwner='';accessPromise=null;localSession=false;for(const url of urls.values())URL.revokeObjectURL(url);urls.clear();});
+ const owner=()=>String(getCachedUser()?.id||'');
+ export function debugBuild(){try{return window.HomerNative?.isDebugBuild()===true;}catch{return false;}}
+ export function localEnabled(){try{return debugBuild()&&!!owner()&&localStorage.getItem(PREFIX+owner())==='on';}catch{return false;}}
+@@ -20,8 +20,8 @@ export async function canUseLocal(){
+   }).catch(()=>false);
+   return accessPromise;
+ }
+-export async function enableLocal(){if(!await canUseLocal())throw Error('本机验收仅供 debug 包中的管理员使用');localStorage.setItem(PREFIX+owner(),'on');}
+-export function disableLocal(){localStorage.removeItem(PREFIX+owner());}
++export async function enableLocal(){if(!await canUseLocal())throw Error('本机验收仅供 debug 包中的管理员使用');localStorage.setItem(PREFIX+owner(),'on');window.dispatchEvent(new Event('homer:community-mode'));}
++export function disableLocal(){localStorage.removeItem(PREFIX+owner());window.dispatchEvent(new Event('homer:community-mode'));}
+ function database(){return dbPromise ||= new Promise((resolve,reject)=>{const req=indexedDB.open('homer-community-acceptance',1);req.onupgradeneeded=()=>req.result.createObjectStore('accounts');req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(Error('本机验收存储不可用'));});}
+ async function read(id){const db=await database();return new Promise((resolve,reject)=>{const tx=db.transaction('accounts'),request=tx.objectStore('accounts').get(id);request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(Error('读取本机验收数据失败'));});}
+ async function write(id,value){const db=await database();return new Promise((resolve,reject)=>{const tx=db.transaction('accounts','readwrite');tx.objectStore('accounts').put(value,id);tx.oncomplete=resolve;tx.onerror=()=>reject(Error('本机空间不足，操作未保存'));tx.onabort=()=>reject(Error('本机保存被中断'));});}
+diff --git a/frontend/app/assets/js/community-screen.js b/frontend/app/assets/js/community-screen.js
+index a63dfae622ed26c0763ca196866b3f1be5f22565..bd4fe12d1d6538a9d42fc45475f97f5ec2b3aa21 100644
+--- a/frontend/app/assets/js/community-screen.js
++++ b/frontend/app/assets/js/community-screen.js
+@@ -26,6 +26,13 @@ window.communityScreen=()=>{
+       window.addEventListener('pagehide',()=>{this.remember();this.saveDraft();});
+       window.addEventListener('homer-account-cleared',()=>{location.replace('/app/login.html');});
+       window.addEventListener('pageshow',e=>{if(e.persisted){this.enter(true);}});
++      window.addEventListener('homer:page-visible',()=>{
++        if(this.ready && this.localMode!==localEnabled()){
++          // A retained local screen must never become a live post editor.
++          this.ready=false;this.posts=[];this.detail=null;
++          location.replace('/app/community.html');
++        }
++      });
+       // A small visualViewport correction keeps the reply bar above the soft keyboard.
+       const viewport=()=>{const v=window.visualViewport;document.documentElement.style.setProperty('--community-keyboard',Math.max(0,innerHeight-(v?.height||innerHeight)-(v?.offsetTop||0))+'px');};
+       window.visualViewport?.addEventListener('resize',viewport);viewport();
+@@ -66,7 +73,7 @@ window.communityScreen=()=>{
+     openPost(post){this.go(postURL(post.id));},
+     openEditor(post=null){if(this.muted){this.notify('当前处于禁言状态，暂不能发布');return;}this.go('/app/community-compose.html'+(post?'?edit='+encodeURIComponent(post.id):''));},
+     openUser(id){this.go(String(id)===String(this.user.id)?'/app/community-activity.html':'/app/community-profile.html?user='+encodeURIComponent(id));},
+-    saveDraft(){if(page!=='compose'||!this.ready||this.publishing)return;const draft=localEnabled()?storeLocalDraft(this.draft):this.draft;this.draftSaved=writePageCache(draftKey(this.editingId),this.user,{draft});if(!this.draftSaved)this.editorError='草稿保存失败，请勿关闭页面';},
++    saveDraft(){if(page!=='compose'||!this.ready||this.publishing)return;const draft=this.localMode?storeLocalDraft(this.draft):this.draft;this.draftSaved=writePageCache(draftKey(this.editingId),this.user,{draft});if(!this.draftSaved)this.editorError='草稿保存失败，请勿关闭页面';},
+     closeEditor(){this.saveDraft();this.back();},
+     async publish(){
+       if(this.publishing||this.uploading||this.muted||!this.draft.content.trim())return;
+diff --git a/frontend/app/assets/js/community.js b/frontend/app/assets/js/community.js
+index 9ec8b4875713c6398c7d61ffab44e56df92a7588..096d3dc1f00ad7df8530b18048d51eec86a832fd 100644
+--- a/frontend/app/assets/js/community.js
++++ b/frontend/app/assets/js/community.js
+@@ -146,6 +146,8 @@ function communityPage() {
+     editingWorkId: '',
+     form: emptyWorkForm(),
+     saving: false,
++    importing: false,
++    uploadingCover: false,
+     contests: [],
+     contest: null,
+     rankings: [],
+@@ -153,7 +155,7 @@ function communityPage() {
+     contestForm: { title: '', content: '', reward: '', start_at: '', end_at: '' },
+ 
+     async init() {
+-      if (!await allowCommunityPreview()) return;
++      // Resource publishing belongs to the existing creator workspace, not admin preview.
+       injectLayout('workshop');
+       if (!requireAuth()) return;
+       const cached = getCachedUser();
+@@ -291,6 +293,33 @@ function communityPage() {
+       try { return JSON.parse(raw); } catch { return raw; }
+     },
+ 
++    async importWorkFile(event) {
++      const file=event.target.files?.[0];if(!file)return;
++      this.importing=true;
++      try {
++        if(file.size>8*1024*1024)throw Error('文件不能超过 8 MB');
++        const raw=await file.text();
++        if(this.form.type!=='ui_template')JSON.parse(raw);
++        this.form.content_text=raw;
++        if(!this.form.name.trim())this.form.name=file.name.replace(/\.[^.]+$/,'').slice(0,120);
++        this.showNotice('文件已读入，检查名称与公开范围后再发布');
++      } catch(error){this.showNotice(error instanceof SyntaxError?'文件不是有效的 JSON，请重新选择导出的世界书或预设文件':error.message);}
++      finally{this.importing=false;event.target.value='';}
++    },
++
++    async chooseWorkCover(event) {
++      const file=event.target.files?.[0];if(!file)return;
++      this.uploadingCover=true;
++      try {
++        if(!['image/png','image/jpeg','image/webp'].includes(file.type)||file.size>8*1024*1024)throw Error('请选择 8 MB 以内的 PNG、JPG 或 WebP 图片');
++        const image=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(Error('图片读取失败'));reader.readAsDataURL(file);});
++        const result=responseData(await api.uploadCover(image,file.name));
++        const url=result.url||result.path||result.cover_url;if(!url)throw Error('封面上传未完成，请重试');
++        this.form.cover_url=url;
++      }catch(error){this.showNotice(error.message);}
++      finally{this.uploadingCover=false;event.target.value='';}
++    },
++
+     parseStructuredEntries(type) {
+       const raw = this.form.content_text.trim();
+       if (!raw) throw new Error(`${this.typeLabel(type)}至少需要一个条目`);
+@@ -307,7 +336,7 @@ function communityPage() {
+     },
+ 
+     async submitWork() {
+-      if (this.saving || !this.form.name.trim()) return;
++      if (this.saving || this.importing || this.uploadingCover || !this.form.name.trim()) return;
+       if (this.editingWorkId && !this.form.version_name.trim()) {
+         this.showNotice('发布新版本前请填写版本名称');
+         return;
+diff --git a/frontend/app/assets/js/explore.js b/frontend/app/assets/js/explore.js
+index 1e5ce3e62889bc7681adaf15dab7a61a55f627b6..f172baa0f0e9f3600f456ed434810191e30f902c 100644
+--- a/frontend/app/assets/js/explore.js
++++ b/frontend/app/assets/js/explore.js
+@@ -274,8 +274,8 @@ function explorePage() {
+         if (this.activeSort === 'random') params.seed = this.randomSeed;
+         if (this.activeCategory !== 'all') params.tag = this.activeCategory;
+         if (this.searchKeyword) params.q = this.searchKeyword;
+-        if (this.activeZone === 'all') params.zone = 'all';
+-        else if (!this.searchKeyword) params.zone = 'clean';
++        // Searching must not silently expand a selected pure zone to the full library.
++        params.zone = this.activeZone === 'all' ? 'all' : 'clean';
+         if (this.pictureless) params.pictureless = 'true';
+         const r = await fetchExplorePage(params, requestController.signal);
+         if (requestEpoch !== this._listEpoch) return;
+diff --git a/frontend/app/assets/js/farm.js b/frontend/app/assets/js/farm.js
+index 447eb2f474d8dec70dcb3fb4257e524fa099102a..c7777adacbcc8e0e6c931d201ca055b26f32b3c4 100644
+--- a/frontend/app/assets/js/farm.js
++++ b/frontend/app/assets/js/farm.js
+@@ -109,7 +109,8 @@ function farmPage() {
+     friendsMode: 'empty',
+     friendsMessage: '',
+     seeds: BASE_SEEDS.map(item => ({ ...item })),
+-    coins: 0,
++    get coins() { return this.points; },
++    unifiedBalance: false,
+     xp: 0,
+     energy: 0,
+     energyMax: 5,
+@@ -213,8 +214,10 @@ function farmPage() {
+       this.nowMs = Date.now() + this.serverOffsetMs;
+       if (raw.account_balance) this.applyCredits(raw.account_balance);
+       else if (profile.points != null) this.points = intValue(profile.points, this.points);
+-      // 农场币是独立货币，与账号积分分开显示。
+-      this.coins = intValue(profile.coins ?? profile.farm_coins, this.coins);
++      // Do not pretend that an old independent-currency server has been migrated.
++      this.unifiedBalance = !!raw.account_balance && profile.points != null
++        && intValue(profile.points, -1) === intValue(profile.coins, -2);
++      if (!this.unifiedBalance) this.loadError = '农场积分服务需要更新，暂不能种植或收获。账号积分不受影响，请联系管理员。';
+       this.xp = intValue(profile.xp ?? profile.experience, this.xp);
+       this.energy = intValue(profile.energy, this.energy);
+       this.energyMax = intValue(profile.energy_max ?? raw.energy_max, 5);
+@@ -362,7 +365,7 @@ function farmPage() {
+     plotActionHint(plot) {
+       if (plot.locked) return `连续活跃 ${plot.unlockDays} 天后开放`;
+       if (plot.empty) return '选择一种种子开始种植';
+-      if (plot.ready) return '作物已经成熟，收获可获得农场币和经验';
++      if (plot.ready) return '作物已经成熟，收获可增加账号积分和经验';
+       if (plot.watered) return `已浇水 · 还需 ${this.plotStatus(plot)}`;
+       return `消耗 1 体力浇水，可缩短剩余成熟时间 20%`;
+     },
+@@ -392,7 +395,7 @@ function farmPage() {
+       const plot = this.seedPlot;
+       if (!plot || this.busy) return;
+       if (this.coins < seed.cost) {
+-        this.showToast('农场币不足，先收获已有作物吧', 'error');
++        this.showToast('账号积分不足，先收获已有作物吧', 'error');
+         return;
+       }
+       await this.runAction('plant', plot.plotNo, () => api.farmPlant(plot.plotNo, seed.apiKind, makeIdempotencyKey(`plant-${plot.plotNo}-${seed.apiKind}`)), `${seed.name}已经种下`);
+@@ -421,6 +424,7 @@ function farmPage() {
+     },
+ 
+     async runAction(action, plotNo, request, fallbackMessage) {
++      if (!this.unifiedBalance) { this.showToast('农场积分服务尚未更新，此操作没有提交', 'error'); return; }
+       this.busy = true;
+       this.activePlotNo = plotNo;
+       try {
+@@ -440,7 +444,7 @@ function farmPage() {
+         } else {
+           this.showToast(data.message || fallbackMessage, 'success');
+         }
+-        if (action === 'harvest') {
++        if (['plant', 'harvest', 'steal'].includes(action)) {
+           const refreshed = await Promise.allSettled([api.credits(), api.rewards(), api.profile()]);
+           if (refreshed[0].status === 'fulfilled') this.applyCredits(refreshed[0].value);
+           if (refreshed[1].status === 'fulfilled') this.applyDailyMeta(refreshed[1].value);
+diff --git a/frontend/app/assets/js/home.js b/frontend/app/assets/js/home.js
+index 942e7293419fe8fd16a0f46800b760d16830514b..5d731af4e4f0db273cf3a4a8779fff57504296f9 100644
+--- a/frontend/app/assets/js/home.js
++++ b/frontend/app/assets/js/home.js
+@@ -9,8 +9,9 @@ async function openHome() {
+     return;
+   }
+   try {
+-    const bootstrap = await api.social('bootstrap');
+-    if (bootstrap?.available) {
++    const response = await api.social('bootstrap');
++    const bootstrap = response?.data ?? response;
++    if (bootstrap?.available === true) {
+       go('/app/community.html');
+       return;
+     }
+diff --git a/frontend/app/assets/js/hub-pages.js b/frontend/app/assets/js/hub-pages.js
+index 5702ef7e3fd0a0120a09165424a647d6e97fc370..81f0c0ecac51fa6532e2c6577b8f70f6f0d999be 100644
+--- a/frontend/app/assets/js/hub-pages.js
++++ b/frontend/app/assets/js/hub-pages.js
+@@ -2,6 +2,7 @@ import { confirmAction, showMessage } from '/assets/js/dialogs.js?v=20260917-r8'
+ import { api, requireAuth, getCachedUser, setCachedUser, clearAuth, ApiError } from '/app/assets/js/app-core.js?v=20260917-r8';
+ import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260917-r8';
+ import { readPageCache, writePageCache } from './page-cache.js';
++import { messagePreview } from '/assets/js/message-preview.js';
+ 
+ async function loadUser(ctx) {
+   if (!requireAuth()) return false;
+@@ -88,7 +89,7 @@ export function favoritesPage() {
+ 
+ export function historiesPage() {
+   return {
+-    user: null, points: 0, loading: false, conversations: [], siteSettings: null,
++    user: null, points: 0, loading: false, conversations: [], siteSettings: null, search: '',
+     copyingId: '', deletingId: '', likingId: '', favoritingId: '',
+     _listEpoch: 0,
+     async init() {
+@@ -112,7 +113,17 @@ export function historiesPage() {
+       return c?.app_name || c?.title || this.chatText('unnamed_conversation', '未命名会话');
+     },
+     conversationPreview(c) {
+-      return c?.last_message || c?.app_summary || this.chatText('continue_preview', '点击继续对话');
++      return messagePreview(c?.last_message || c?.app_summary) || this.chatText('continue_preview', '点击继续对话');
++    },
++    get filteredConversations() {
++      const q = this.search.trim().toLocaleLowerCase();
++      return this.conversations.filter(c => !q || `${this.conversationTitle(c)} ${this.conversationPreview(c)}`.toLocaleLowerCase().includes(q));
++    },
++    conversationDate(c) {
++      const raw = c.updated_at || c.created_at;
++      if (!raw) return '';
++      const d = new Date(typeof raw === 'number' && raw < 1e12 ? raw * 1000 : raw);
++      return Number.isNaN(d.getTime()) ? '' : d.toLocaleString('zh-CN', {month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
+     },
+     archiveLabel(c) {
+       const count = Number(c?.archive_count || 1);
+diff --git a/frontend/app/assets/js/me.js b/frontend/app/assets/js/me.js
+index d02908151767d23358412c8bee5b654d6e2edaa0..1a878a68418a8b22382ba90f6db50c1dec0edfa6 100644
+--- a/frontend/app/assets/js/me.js
++++ b/frontend/app/assets/js/me.js
+@@ -21,6 +21,7 @@ function mePage() {
+     persona: { name: '', description: '' },
+     savingPersona: false,
+     siteSettings: null,
++    adminVerified: false,
+ 
+     async init() {
+       injectLayout('me');
+@@ -50,6 +51,8 @@ function mePage() {
+ 
+     applyProfile(profile) {
+       this.user = profile || null;
++      // Never grant a management entry from the persisted profile alone.
++      this.adminVerified = profile?.is_admin === true || profile?.is_env_admin === true || profile?.role === 'admin';
+       if (profile) {
+         this.syncProfileForm(profile);
+         setCachedUser(profile);
+diff --git a/frontend/app/community-library.html b/frontend/app/community-library.html
+index fbbd048ac0f77a428e1398c6693efbbbf4aa08aa..3a09900a935396a19709fca46ff10b7fb3d70c30 100644
+--- a/frontend/app/community-library.html
++++ b/frontend/app/community-library.html
+@@ -48,6 +48,8 @@
+     .cm-field { margin-bottom: 14px; }
+     .cm-field > label { display: block; margin-bottom: 6px; color: rgba(237,233,254,.68); font-size: 12px; font-weight: 750; }
+     .cm-field textarea { min-height: 105px; resize: vertical; }
++    .cm-field input[type="file"] { display:block; width:100%; min-width:0; box-sizing:border-box; margin-top:6px; font-size:13px; }
++    .cm-field input[type="file"]::file-selector-button { min-height:40px; margin-right:8px; padding:6px 12px; border:0; border-radius:8px; background:#f8deea; color:#8f1743; font-weight:700; }
+     .cm-checks { display: flex; flex-wrap: wrap; gap: 14px; margin: 12px 0 16px; }
+     .cm-checks label { display: inline-flex; align-items: center; gap: 7px; color: rgba(237,233,254,.72); font-size: 12px; }
+     .cm-checks input { accent-color: #fb7185; }
+@@ -204,12 +206,12 @@
+             <div class="cm-field"><label>作品类型</label><select class="xy-input" x-model="form.type" :disabled="!!editingWorkId"><option value="mod">Mod（世界书）</option><option value="ui_template">UI 模板</option><option value="preset">预设</option></select></div>
+             <div class="cm-field"><label>作品名称 *</label><input class="xy-input" maxlength="120" x-model="form.name" placeholder="作品名称"></div>
+             <div class="cm-field"><label>作品简介</label><textarea class="xy-input" maxlength="2000" x-model="form.summary" placeholder="公开展示的作品说明"></textarea></div>
+-            <div class="cm-field"><label>封面 URL（可选）</label><input class="xy-input" x-model="form.cover_url" placeholder="/media-cache/... 或 HTTPS 图片"></div>
+-            <div class="cm-field" x-show="form.type === 'ui_template'"><label>演示 HTML</label><textarea class="xy-input" x-model="form.demo_html" placeholder="演示将在无同源、无网络、无脚本权限的 iframe 中静态展示"></textarea></div>
+-            <div class="cm-field"><label x-text="form.type === 'mod' ? '世界书 JSON / 内容' : (form.type === 'preset' ? '预设 JSON / 内容' : 'UI 模板源码 / 内容')"></label><textarea class="xy-input" x-model="form.content_text" placeholder='例如：{"entries":[{"name":"条目名称","content":"正文"}]}'></textarea></div>
++            <div class="cm-field"><label>封面图片（可选）<input type="file" accept="image/png,image/jpeg,image/webp" @change="chooseWorkCover" :disabled="uploadingCover"></label><p x-show="uploadingCover" role="status">正在上传封面…</p><img x-show="form.cover_url" :src="form.cover_url" alt="作品封面预览" style="max-width:160px;max-height:120px;object-fit:cover"><details><summary>使用图片链接</summary><input class="xy-input" x-model="form.cover_url" placeholder="HTTPS 图片链接"></details></div>
++            <div class="cm-field" x-show="form.type === 'ui_template'"><label>演示 HTML</label><textarea class="xy-input" x-model="form.demo_html" placeholder="隔离预览支持内联交互，不允许访问账号、存储或网络"></textarea></div>
++            <div class="cm-field"><label>从文件导入<input type="file" :accept="form.type === 'ui_template' ? '.json,.html,.txt' : '.json,application/json'" @change="importWorkFile" :disabled="importing"></label><p>先选择导出的作品文件，无需手动复制源码。导入不会自动发布。</p><details><summary>查看或编辑导入内容</summary><textarea class="xy-input" x-model="form.content_text" placeholder='例如：{"entries":[{"name":"条目名称","content":"正文"}]}'></textarea></details></div>
+             <template x-if="editingWorkId"><div><div class="cm-field"><label>新版本名称 *</label><input class="xy-input" maxlength="80" x-model="form.version_name" placeholder="例如：v2 · 夏日扩展"></div><div class="cm-field"><label>本版作者介绍 *</label><textarea class="xy-input" maxlength="4000" x-model="form.version_description" placeholder="必填：说明这一版修改了什么、适合怎样使用"></textarea></div></div></template>
+             <div class="cm-checks"><label><input type="checkbox" x-model="form.is_public"> 公开发布</label><label><input type="checkbox" x-model="form.is_open_source"> 开源（详情页只读展示实际内容）</label></div>
+-            <div class="cm-actions"><button type="button" class="xy-btn xy-btn-primary text-sm" :disabled="saving || !form.name.trim()" @click="submitWork()" x-text="saving ? '发布中…' : (editingWorkId ? '发布新版本' : '发布')"></button><button type="button" class="xy-btn xy-btn-ghost text-sm" @click="createOpen = false">取消</button></div>
++            <div class="cm-actions"><button type="button" class="xy-btn xy-btn-primary text-sm" :disabled="saving || importing || uploadingCover || !form.name.trim()" @click="submitWork()" x-text="saving ? '发布中…' : (editingWorkId ? '发布新版本' : '发布')"></button><button type="button" class="xy-btn xy-btn-ghost text-sm" @click="createOpen = false">取消</button></div>
+           </div>
+         </section>
+       </div>
+diff --git a/frontend/app/farm.html b/frontend/app/farm.html
+index b0d406914a2257b0df73840eb937af541b7aee59..f00579e9d0b9dc3a1adee3ba7c1e2b4b5d97f803 100644
+--- a/frontend/app/farm.html
++++ b/frontend/app/farm.html
+@@ -23,7 +23,7 @@
+           <h1>惑梦农场</h1>
+         </div>
+         <div class="grow"></div>
+-        <a class="farm-wallet-link" href="/app/rewards.html"><span>惑梦币</span><b x-text="Number(points || 0).toLocaleString('zh-CN')"></b><em>充值</em></a>
++        <a class="farm-wallet-link" href="/app/rewards.html"><span>积分</span><b x-text="Number(points || 0).toLocaleString('zh-CN')"></b><em>充值</em></a>
+         <button class="farm-icon-button" type="button" @click="loadAll(true)" :disabled="loading || busy" aria-label="刷新农场" title="刷新农场">
+           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M20 11a8.1 8.1 0 10.5 4M20 4v7h-7"/></svg>
+         </button>
+@@ -48,13 +48,13 @@
+               <div>
+                 <span class="farm-kicker">今天也要照顾好灵感</span>
+                 <h2>欢迎回来，<b x-text="user?.name || '农场主'"></b></h2>
+-              <p>种下代码与灵感。种植消耗农场币，收获返还更多农场币；每日第一次有效收获，还会得到 <strong x-text="dailyRewardPoints"></strong> 惑梦币。</p>
++              <p>种植与收获直接使用账号积分余额。每日第一次有效收获，另可获得 <strong x-text="dailyRewardPoints"></strong> 积分。</p>
+               </div>
+               <div class="farm-streak"><span>连续活跃</span><b x-text="streakDays"></b><em>天</em></div>
+             </section>
+ 
+             <section class="farm-stats" aria-label="农场状态">
+-              <div><span class="farm-stat-icon is-coin">◆</span><p>农场币<strong x-text="coins.toLocaleString('zh-CN')"></strong></p></div>
++              <div><span class="farm-stat-icon is-coin">◆</span><p>积分<strong x-text="coins.toLocaleString('zh-CN')"></strong></p></div>
+               <div><span class="farm-stat-icon is-energy">♥</span><p>体力<strong><b x-text="energy"></b>/<span x-text="energyMax"></span></strong></p></div>
+               <div><span class="farm-stat-icon is-xp">✦</span><p>农场经验<strong x-text="xp.toLocaleString('zh-CN')"></strong></p></div>
+               <div><span class="farm-stat-icon is-level">L</span><p>农场等级<strong x-text="level"></strong></p></div>
+@@ -99,14 +99,14 @@
+               <aside class="farm-side">
+                 <section class="pixel-panel farm-daily-card" :class="{ 'is-claimed': dailyClaimed }">
+                   <div class="farm-daily-card__top"><span>日</span><div><h2>今日首收奖励</h2><p>北京时间自然日</p></div><b>+<em x-text="dailyRewardPoints"></em></b></div>
+-                  <div class="farm-daily-track"><i :class="{ done: dailyClaimed }"></i><span x-text="dailyClaimed ? '今日惑梦币已领取' : '收获任意一株成熟作物即可领取'"></span></div>
++                  <div class="farm-daily-track"><i :class="{ done: dailyClaimed }"></i><span x-text="dailyClaimed ? '今日积分已领取' : '收获任意一株成熟作物即可领取'"></span></div>
+                   <p>旧版 APK 签到与农场共享同一份每日记录，不会重复领取。</p>
+                 </section>
+ 
+                 <section class="pixel-panel farm-guide-card">
+                   <h2>作物图鉴</h2>
+                   <template x-for="seed in seeds" :key="seed.kind">
+-                    <div class="farm-seed-row"><span x-html="cropSprite({ cropKind: seed.kind, stage: 4 })"></span><p><b x-text="seed.name"></b><small><em>◆ <span x-text="seed.cost"></span> 农场币</em> · <span x-text="seed.durationLabel"></span></small></p><strong>+<span x-text="seed.rewardCoins"></span> 农场币</strong></div>
++                    <div class="farm-seed-row"><span x-html="cropSprite({ cropKind: seed.kind, stage: 4 })"></span><p><b x-text="seed.name"></b><small><em>◆ <span x-text="seed.cost"></span> 积分</em> · <span x-text="seed.durationLabel"></span></small></p><strong>+<span x-text="seed.rewardCoins"></span> 积分</strong></div>
+                   </template>
+                 </section>
+               </aside>
+@@ -135,14 +135,14 @@
+           <button class="farm-modal-close" type="button" @click="closeSeedPicker" aria-label="关闭">×</button>
+           <span class="farm-kicker">SEED STORAGE</span>
+           <h2 id="farm-seed-title">选择一包种子</h2>
+-          <p>花费农场币种植，成熟后可收回更多农场币与经验。</p>
++          <p>花费积分种植，成熟后可收回更多积分与经验。</p>
+           <div class="farm-seed-options">
+             <template x-for="seed in seeds" :key="seed.kind">
+               <button type="button" @click="plantSeed(seed)" :disabled="busy || coins < seed.cost">
+                 <span class="farm-seed-sprite" x-html="cropSprite({ cropKind: seed.kind, stage: 4 })"></span>
+                 <strong x-text="seed.name"></strong>
+                 <small x-text="seed.durationLabel + '成熟'"></small>
+-                <span class="farm-seed-economy"><em>◆ <b x-text="seed.cost"></b> 农场币</em><i>→</i><strong>◆ <b x-text="seed.rewardCoins"></b> 农场币</strong></span>
++                <span class="farm-seed-economy"><em>◆ <b x-text="seed.cost"></b> 积分</em><i>→</i><strong>◆ <b x-text="seed.rewardCoins"></b> 积分</strong></span>
+               </button>
+             </template>
+           </div>
+diff --git a/frontend/app/histories.html b/frontend/app/histories.html
+index 628b6330b4ee82d1e034b114a43d55a4e7b59774..924282b65bbc13bccdf7a8cadcfca83978fb6e1e 100644
+--- a/frontend/app/histories.html
++++ b/frontend/app/histories.html
+@@ -20,6 +20,8 @@
+     <main class="app-main">
+       <header class="app-topbar"><h1 x-text="appNavText('histories', '历史会话')">历史会话</h1></header>
+       <section class="app-page-pad max-w-5xl mx-auto">
++        <label class="history-search">搜索会话<input type="search" class="xy-input" x-model="search" placeholder="搜索角色名或对话摘要"></label>
++        <p x-show="search && !filteredConversations.length" role="status">没有匹配的会话，试试其他关键词。</p>
+         <div class="list-panel">
+           <template x-if="!loading && conversations.length === 0">
+             <div class="p-10 text-center text-violet-200/70">
+@@ -27,13 +29,14 @@
+               <a href="/app/explore.html" class="xy-link mt-2 inline-flex" x-text="emptyText('histories_empty_hint', '去探索选个角色吧')">去探索选个角色吧</a>
+             </div>
+           </template>
+-          <template x-for="c in conversations" :key="c.id">
++          <template x-for="c in filteredConversations" :key="c.id">
+             <div class="list-row history-row" x-data="{ open: false }" :class="{ 'is-menu-open': open }" @click.away="open = false">
+               <a class="history-row__main flex items-center gap-4 min-w-0 text-inherit no-underline" :href="conversationHref(c)">
+                 <img :src="c.app_icon || '/assets/img/apk/avatar.webp?v=20260901-persistent-pages'" alt="" onerror="this.src='/assets/img/apk/avatar.webp?v=20260901-persistent-pages'">
+                 <div class="min-w-0">
+                   <div class="title truncate" x-text="conversationTitle(c)"></div>
+                   <div class="meta truncate" x-text="conversationPreview(c)"></div>
++                  <time class="meta" x-text="conversationDate(c)"></time>
+                   <div class="history-row__tags" x-show="archiveLabel(c) || userTagList(c).length">
+                     <span class="history-row__tag" x-show="archiveLabel(c)" x-text="archiveLabel(c)"></span>
+                     <template x-for="tag in userTagList(c)" :key="tag">
+diff --git a/frontend/app/me.html b/frontend/app/me.html
+index 5eea36ed65de1fe0c87c14e5ef00325fd01609f2..2007e513d9ae6868fab2464618ef557ac5592b96 100644
+--- a/frontend/app/me.html
++++ b/frontend/app/me.html
+@@ -45,7 +45,7 @@
+         <nav class="profile-shortcuts" aria-label="个人中心快捷入口">
+           <a href="/app/my-apps.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5"/></svg><span>我的投稿</span><small>角色与草稿</small></a>
+           <a href="/app/rewards.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 19V9m5 10V5m5 14v-7m5 7V3"/></svg><span>收益</span><small>奖励与积分</small></a>
+-          <a href="/app/workshop.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v14m7-7H5"/></svg><span>管理</span><small>创作工坊</small></a>
++          <a href="/app/workshop.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v14m7-7H5"/></svg><span>创作</span><small>创作工坊</small></a>
+         </nav>
+ 
+         <details class="profile-settings" id="profile-settings" x-ref="settingsPanel">
+@@ -53,8 +53,8 @@
+           <div class="profile-settings__body">
+             <section class="profile-setting-section">
+               <h3>个人资料</h3>
+-              <div class="profile-form-grid"><label>展示 ID<input class="xy-input" x-model="profileForm.display_id" maxlength="32" placeholder="xy_user_001"></label><label>头像 URL<input class="xy-input" x-model="profileForm.avatar_url" placeholder="https://..."></label></div>
+-              <div class="profile-setting-actions"><button class="xy-btn xy-btn-primary" @click="saveProfile" :disabled="savingProfile || uploadingAvatar">保存资料</button><button class="xy-btn xy-btn-ghost" @click="clearAvatar">恢复默认头像</button><a class="xy-btn xy-btn-ghost" href="/dashboard.html">完整账户</a></div>
++              <div class="profile-form-grid"><label>展示 ID<input class="xy-input" x-model="profileForm.display_id" maxlength="32" placeholder="xy_user_001"></label><label>更换头像<input type="file" accept="image/*" @change="onAvatarChange" :disabled="uploadingAvatar"></label></div>
++              <div class="profile-setting-actions"><button class="xy-btn xy-btn-primary" @click="saveProfile" :disabled="savingProfile || uploadingAvatar">保存资料</button><button class="xy-btn xy-btn-ghost" @click="clearAvatar">恢复默认头像</button><a x-show="adminVerified" class="xy-btn xy-btn-ghost" href="/admin.html">管理后台</a></div>
+             </section>
+             <section class="profile-setting-section">
+               <h3>我的人设</h3><p>聊天时角色会用这份信息认识你。</p>
+diff --git a/frontend/app/rewards.html b/frontend/app/rewards.html
+index 266c550b9a900ac56633b3dd565c097dfc56e360..738e15ff0e7cf801609ebbe0bf90c784040fdda9 100644
+--- a/frontend/app/rewards.html
++++ b/frontend/app/rewards.html
+@@ -102,6 +102,7 @@
+                 <h3 x-text="depositText('subscriptions_title', '月度订阅')">月度订阅</h3>
+                 <span class="rw-rate" x-text="depositText('subscriptions_note', '订阅为月度额度包，额度用完后可继续兑换积分包。')"></span>
+               </div>
++              <p class="rw-rate">可回复次数随模型与实际用量变化，套餐描述中的次数仅供参考；以当前模型的计费说明为准。</p>
+               <div class="rw-plans rw-plans--subs">
+                 <template x-for="sub in (deposit?.subscriptions || [])" :key="sub.id">
+                   <button class="rw-plan" :class="{ 'ring-2 ring-violet-400': selectedPlan?.id === sub.id }" @click="selectPlan(sub)">
+diff --git a/frontend/assets/css/app-design.css b/frontend/assets/css/app-design.css
+index 132e67af836d72075bb985e71fe5c087050c8189..fce1b85d555690976a46c44d42c806e0681549a5 100644
+--- a/frontend/assets/css/app-design.css
++++ b/frontend/assets/css/app-design.css
+@@ -93,7 +93,21 @@ input,textarea,select{accent-color:var(--ui-accent)}
+ .ui-story-card.is-pictureless{height:235px!important}.ui-story-card.is-pictureless img{display:none!important}.ui-story-card.is-pictureless .ui-story-info{padding-top:25px}
+ .home-load-more{margin:0!important;padding:12px 24px 28px!important;min-height:0!important}
+ .history-row{padding:17px!important;gap:12px;border-bottom:1px solid var(--ui-line);background:var(--ui-panel)!important}
++@media(max-width:760px){
++  body.creator-editor-page .editor-toolbar{display:grid!important;grid-template-columns:repeat(6,minmax(0,1fr))!important;gap:8px!important;padding:12px!important;position:relative!important}
++  body.creator-editor-page .editor-toolbar__identity{order:-3;grid-column:span 4;min-width:0!important;width:auto!important}
++  body.creator-editor-page .editor-toolbar__identity strong{font-size:20px!important;white-space:nowrap!important}
++  body.creator-editor-page .editor-toolbar__identity small,body.creator-editor-page .editor-toolbar>.grow{display:none!important}
++  body.creator-editor-page .editor-toolbar__primary{order:-2;grid-column:span 2;min-width:0!important;min-height:48px;width:auto!important}
++  body.creator-editor-page .editor-toolbar__btn,body.creator-editor-page .editor-pill{grid-column:span 2;min-width:0!important;width:auto!important;max-width:none!important;min-height:44px!important;padding:8px 6px!important}
++  body.creator-editor-page .editor-toolbar__btn span{display:inline!important}
++  body.creator-editor-page .creator-editor__tabs{position:relative!important;top:auto!important}
++}
+ .history-row__main img{width:56px!important;height:64px!important;border-radius:14px!important;object-fit:cover}
++.ui-config-selector{display:grid;gap:8px;position:sticky;top:0;z-index:5;background:var(--ui-panel,#fff);padding:14px;border:1px solid var(--ui-line,#ddd);border-radius:12px}
++.ui-config-selector small{color:var(--ui-muted,#626775);font-size:12px;line-height:1.5}
++@media(max-width:767px){.xy-admin .ui-config-selector{top:76px}}
++@media(prefers-reduced-motion:reduce){.xy-admin *{animation:none!important;scroll-behavior:auto!important}}
+ .history-row .title{font-size:16px!important;font-weight:650;color:var(--ui-text)!important}.history-row .meta{font-size:13px!important;color:var(--ui-muted)!important;margin-top:4px}
+ .history-more-btn{min-width:44px;min-height:44px;border-radius:12px!important;color:var(--ui-muted)!important}
+ .history-more-pop{border:1px solid var(--ui-line)!important;border-radius:14px!important;background:var(--ui-panel)!important;box-shadow:var(--ui-float)!important;min-width:160px}
+diff --git a/frontend/assets/css/chat-design.css b/frontend/assets/css/chat-design.css
+index 531a31e4a8cd72111c8e5727f07727535e9f9793..0a9f94c9011151ab7a4c43a1aff138d0206a45f3 100644
+--- a/frontend/assets/css/chat-design.css
++++ b/frontend/assets/css/chat-design.css
+@@ -275,3 +275,7 @@ body.homer-runtime #homer-model-dialog .homer-sheet-dialog__actions button[type=
+ body.homer-runtime #homer-model-dialog::backdrop{background:#0005;backdrop-filter:none}
+ body.homer-runtime #stmb-memory-boundary-jump{width:116px!important;min-width:116px!important;max-width:none!important;height:44px!important;min-height:44px!important;border-radius:22px!important;padding:8px 12px!important;gap:6px;color:#fff!important;background:#29485f!important;font-size:12px!important;white-space:nowrap}
+ body.homer-runtime #stmb-memory-boundary-jump::after{content:"未整理记忆";font-family:system-ui;white-space:nowrap}
++body.homer-runtime .homer-preset-panel{max-height:calc(100dvh - 120px);overflow-y:auto}
++body.homer-runtime .homer-preset-panel .homer-status-grid{display:none}
++body.homer-runtime .homer-preset-notice{font-size:12px;line-height:1.5;margin:8px 0}
++body.homer-runtime .homer-preset-row__name{white-space:normal!important;overflow-wrap:anywhere;line-height:1.5}
+diff --git a/frontend/assets/js/admin-app.js b/frontend/assets/js/admin-app.js
+index f76651ecf222bddc2cb225973dd977564c38d296..386a8357b290c9763e1f05bca60480c72842c50c 100644
+--- a/frontend/assets/js/admin-app.js
++++ b/frontend/assets/js/admin-app.js
+@@ -686,6 +686,8 @@ function adminPanel() {
+       try {
+         const result = await api.admin.whoami();
+         this.adminInfo = result.data || result;
++        if (!this.adminInfo?.id || this.adminInfo.is_admin !== true)
++          throw new ApiError('服务器未确认管理员权限', 403);
+         this.state = 'ready';
+         await this.loadStats();
+         this.$nextTick(() => this.installMobileTableLabels());
+@@ -847,6 +849,7 @@ function adminPanel() {
+     },
+     async switchTab(id) {
+       this.activeTab = id;
++      this.$nextTick(() => window.scrollTo({top:0,behavior:'instant'}));
+       if (id === 'community') await this.loadSocialReports();
+       if (id === 'notifications') await this.loadNotifications();
+       if (id === 'stats' && !this.stats) await this.loadStats();
+diff --git a/frontend/assets/js/community-admin.js b/frontend/assets/js/community-admin.js
+index 4a9cc3c9f1793732e0a8a8f5603d345e8f70fdae..2270ea1bc2676f86e1465d05b13ac3b7f4c9fe79 100644
+--- a/frontend/assets/js/community-admin.js
++++ b/frontend/assets/js/community-admin.js
+@@ -34,7 +34,7 @@ export async function mountCommunityAdmin(root){
+   root.replaceChildren(element('h2',localEnabled()?'本机社区管理 · 不上传':'社区管理'),element('p',localEnabled()?'以下操作只影响本机验收数据，不会删除线上内容或处罚真实用户。':'审核内容、处理反馈与管理账号；社区仍按服务端设置控制开放范围。'),nav,toolbar,status,list,pager);
+   const tabs={reports:'举报处理',content:'内容巡查',users:'用户管理',appeals:'申诉',rules:'关键词规则',topics:'版块管理',announcements:'社区公告',stats:'数据统计',logs:'操作日志',config:'开放设置'};
+   for(const [id,title] of Object.entries(tabs))nav.append(button(title,async()=>{tab=id;offset=0;filters={};await load();},{'data-tab':id}));
+-  try{config=await social('admin/config');await load();}catch(error){showError(root,error);root.dataset.mounted='';}
++  try{config=await social('admin/config');if(!config || !config.categories || !config.mode)throw Error('社区管理服务未就绪，请先完成服务端接入；这里不是零条记录。');await load();}catch(error){nav.replaceChildren();toolbar.replaceChildren();pager.replaceChildren();showError(root,error);root.dataset.mounted='';root.append(button('重新连接',()=>mountCommunityAdmin(root)));}
+   function filter(label,key,options){
+     const f=options?select(label,options,filters[key]||''):field(label,filters[key]||'');
+     f.control.onchange=()=>{filters[key]=f.control.value;offset=0;load();};toolbar.append(f.row);
+diff --git a/frontend/assets/js/memory-ui.js b/frontend/assets/js/memory-ui.js
+index 3e58cc362cc9db330b204a6cd72c3f37c8c88959..555d68d76930ceda721f8884f4db8498c7103938 100644
+--- a/frontend/assets/js/memory-ui.js
++++ b/frontend/assets/js/memory-ui.js
+@@ -10,7 +10,10 @@ function enhance(popup) {
+     const step=(name)=>{const s=el('section','homer-memory-step');s.append(el('h3','',name));layout.append(s);return s;};
+     const range=step('1 · 选择要记住的对话');
+     const scene=content.querySelector('#stmb-scene')||content.querySelector('.info-block.warning');
+-    if(scene){range.append(scene);if(scene.matches('.warning'))scene.textContent='还没有选择对话范围。填写下面的起止消息序号即可，不必返回聊天找标记按钮。';}
++    if(scene){
++        if(scene.matches('.warning')){scene.textContent='先选最近 20 条或全部已加载对话，也可手动调整起止序号。';range.append(scene);}
++        else{const preview=el('details','homer-memory-preview');preview.append(el('summary','','查看所选对话摘要'),scene);range.append(preview);}
++    }
+     const ids=[...document.querySelectorAll('#chat .mes[mesid]')].map(e=>Number(e.getAttribute('mesid'))).filter(Number.isInteger);
+     const form=el('div','homer-memory-range');const inputs=[];
+     for(const [label,id,initial] of [['从','homer-memory-from',ids[0]],['到','homer-memory-to',ids.at(-1)]]) {
+@@ -26,7 +29,14 @@ function enhance(popup) {
+         if(!end.classList.contains('on'))end.click();
+         feedback.textContent=`已选择第 ${a+1}–${b+1} 条消息。确认保存位置后，点底部「创建记忆」。`;
+         if(scene?.matches('.warning'))scene.hidden=true;
+-    };form.append(choose);range.append(form,feedback);
++    };form.append(choose);
++    const shortcuts=el('div','homer-memory-range');
++    for(const [label,count] of [['最近 20 条',20],['全部已加载对话',ids.length]]){
++        const button=el('button','',label);button.type='button';button.disabled=!ids.length;
++        button.onclick=()=>{inputs[0].value=String((ids[Math.max(0,ids.length-count)]??0)+1);inputs[1].value=String((ids.at(-1)??0)+1);choose.click();};
++        shortcuts.append(button);
++    }
++    range.append(shortcuts,form,feedback);
+     const progress=content.querySelector('#stmb-memory-status');if(progress){progress.querySelector('[data-i18n="STMemoryBooks_SinceVersion"]')?.remove();range.append(progress);}
+     const storage=step('2 · 确认记忆保存位置');
+     const location=content.querySelector('#stmb-active-lorebook')?.closest('.info-block');if(location)storage.append(location);
+@@ -40,6 +50,13 @@ function enhance(popup) {
+         advanced.append(child);
+     }
+     layout.append(advanced);content.replaceChildren(layout);
++    // Presentation only: retain plugin values and original click/save handlers.
++    for(const option of popup.querySelectorAll('option'))if(/SillyTavern|Current ST/i.test(option.textContent))option.textContent='当前对话模型';
++    for(const button of popup.querySelectorAll('.popup-controls .menu_button')){
++        if(/清除场景|Clear Scene/.test(button.textContent)){button.textContent='取消范围选择';button.title='只取消起止消息标记，不删除聊天记录或记忆';}
++        else if(/创建记忆/.test(button.textContent))button.textContent='创建记忆';
++        else if(/整合记忆/.test(button.textContent))button.textContent='整合已有记忆';
++    }
+ }
+ let installed=false;
+ const boundaryButtons=new WeakSet();
+@@ -62,9 +79,16 @@ function enhanceBoundaryButton(button) {
+     new ResizeObserver(clamp).observe(button);
+     clamp();
+ }
++function refreshMemoryLabels(popup){
++    const labels=[[/创建记忆/,'创建记忆'],[/整合记忆|整合已有记忆/,'整合已有记忆'],[/清除场景/,'取消范围选择']];
++    for(const button of popup.querySelectorAll('.popup-controls .menu_button'))for(const [pattern,label] of labels){
++        if(pattern.test(button.textContent)&&button.textContent!==label){button.textContent=label;if(label==='取消范围选择')button.title='只取消起止标记，不删除聊天或记忆';}
++    }
++    for(const option of popup.querySelectorAll('option'))if(/SillyTavern|Current ST/i.test(option.textContent))option.textContent='当前对话模型';
++}
+ export function installMemoryUi() {
+     if(installed)return;installed=true;
+-    const scan=node=>{if(!(node instanceof Element))return;const parent=node.closest('.stmb-popup');if(parent)enhance(parent);node.querySelectorAll('.stmb-popup').forEach(enhance);if(node.id==='stmb-memory-boundary-jump')enhanceBoundaryButton(node);node.querySelectorAll('#stmb-memory-boundary-jump').forEach(enhanceBoundaryButton);};
++    const scan=node=>{if(!(node instanceof Element))return;const parent=node.closest('.stmb-popup');if(parent){enhance(parent);refreshMemoryLabels(parent);}node.querySelectorAll('.stmb-popup').forEach(p=>{enhance(p);refreshMemoryLabels(p);});if(node.id==='stmb-memory-boundary-jump')enhanceBoundaryButton(node);node.querySelectorAll('#stmb-memory-boundary-jump').forEach(enhanceBoundaryButton);};
+     new MutationObserver(records=>{for(const record of records){scan(record.target);for(const node of record.addedNodes)scan(node);}}).observe(document.body,{childList:true,subtree:true});
+     document.querySelectorAll('.stmb-popup').forEach(enhance);
+     document.querySelectorAll('#stmb-memory-boundary-jump').forEach(enhanceBoundaryButton);
+diff --git a/frontend/assets/js/message-preview.js b/frontend/assets/js/message-preview.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..33e4bc15682965601a3f70a7e94274358ef5ac64
+--- /dev/null
++++ b/frontend/assets/js/message-preview.js
+@@ -0,0 +1,13 @@
++// Text-only history summaries. Never mount or evaluate card HTML / regex scripts.
++export function messagePreview(value, limit = 160) {
++    return String(value || '').slice(0, 100000)
++        .replace(/<(think|thinking|analysis|inner_flow)\b[^>]*>[\s\S]*?(?:<\/\1\s*>|$)/gi, ' ')
++        .replace(/```(?:html|javascript|js|css|json|xml|text)?\s*[\s\S]*?(?:```|$)/gi, ' ')
++        .replace(/<(script|style|head|iframe|svg)\b[^>]*>[\s\S]*?(?:<\/\1\s*>|$)/gi, ' ')
++        .replace(/<!doctype[^>]*>[\s\S]*/gi, ' ')
++        .replace(/<[^>]*>/g, ' ')
++        .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
++        .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
++        .replace(/&nbsp;|&#160;/gi, ' ').replace(/&amp;/gi, '&')
++        .replace(/\s+/g, ' ').trim().slice(0, limit);
++}
+diff --git a/sillytavern-runtime/public/scripts/extensions/homer-bridge/index.js b/sillytavern-runtime/public/scripts/extensions/homer-bridge/index.js
+index e5c512df8fd1b1e6b2a3bdc8cc4f6a964ac7d8bd..8f984fc20444aa248def56ba49b3dbbf0c15acbb 100644
+--- a/sillytavern-runtime/public/scripts/extensions/homer-bridge/index.js
++++ b/sillytavern-runtime/public/scripts/extensions/homer-bridge/index.js
+@@ -8,6 +8,7 @@ import {
+     setOnlineStatus,
+ } from '../../../script.js';
+ import { oai_settings } from '../../openai.js';
++import { messagePreview } from '/assets/js/message-preview.js';
+ import { allowScopedScripts } from '../regex/engine.js';
+ import { extension_settings } from '../../extensions.js';
+ import { getContext } from '../../st-context.js';
+@@ -646,6 +647,10 @@ function canNotifyHost() {
+ }
+ 
+ function notifyHost(type, payload = {}) {
++    if (type === 'navigate') {
++        setDrawerOpen();
++        setPanelOpen(false);
++    }
+     if (!canNotifyHost()) {
+         return;
+     }
+@@ -2304,7 +2309,7 @@ function createPresetRow(entry) {
+     const meta = createElement(
+         'span',
+         'homer-preset-row__meta',
+-        `${positionLabel} · ${entry.role} · ${stateLabel}${lockLabel}`,
++        `${stateLabel}${lockLabel}`,
+     );
+     copy.append(title, meta);
+     if (entry.toggleable) {
+@@ -2353,7 +2358,7 @@ function renderPresetContainer(container, groups, query, quick = false) {
+         );
+         head.append(copy, createElement('span', 'homer-preset-group__count', `${matching.length} 条`));
+         section.append(head);
+-        const values = quick ? matching.slice(0, 3) : matching;
++        const values = matching;
+         if (values.length) {
+             const list = createElement('div', 'homer-preset-group__list');
+             list.append(...values.map(createPresetRow));
+@@ -3609,11 +3614,11 @@ function openMemoryBooks() {
+     const startedAt = Date.now();
+     const tryOpen = () => {
+         const item = document.querySelector('#stmb-menu-item');
+-        if (item instanceof HTMLElement) {
++        if (item instanceof HTMLElement && item.dataset.homerReady === 'true') {
+             item.click();
+             return;
+         }
+-        if (Date.now() - startedAt < 8000) {
++        if (Date.now() - startedAt < 30000) {
+             window.setTimeout(tryOpen, 180);
+             return;
+         }
+@@ -4300,7 +4305,7 @@ function populateHistoryList(historyCount, historyList) {
+         );
+         copy.append(
+             itemHead,
+-            createElement('small', '', String(conversation?.last_message || '开始新的故事').slice(0, 72)),
++            createElement('small', '', messagePreview(conversation?.last_message, 72) || '点击继续对话'),
+         );
+         const main = createElement('button', 'homer-history-item__main');
+         main.type = 'button';
+@@ -4493,7 +4498,7 @@ function buildRuntimeUi() {
+     );
+     memoryButton.addEventListener('click', () => {
+         returnToDesktopNavigation();
+-        document.querySelector('#homer-memory-dialog')?.showModal();
++        openMemoryBooks();
+     });
+     const modButton = createSettingButton(
+         '◇',
+@@ -4571,7 +4576,11 @@ function buildRuntimeUi() {
+     const expand = createElement('button', 'homer-expand-button', '展开全部条目');
+     expand.type = 'button';
+     expand.addEventListener('click', () => setFullDialogOpen(true));
+-    panel.append(panelHead, statusGrid, notice, quickList, expand);
++    const quickSearch = document.createElement('input');
++    quickSearch.type = 'search'; quickSearch.className = 'homer-preset-search';
++    quickSearch.placeholder = '搜索开关名称'; quickSearch.setAttribute('aria-label', '搜索会话开关');
++    quickSearch.addEventListener('input', () => renderPresetLists(quickSearch.value));
++    panel.append(panelHead, statusGrid, notice, quickSearch, quickList, expand);
+ 
+     const dialog = createElement('dialog', 'homer-preset-dialog');
+     dialog.id = 'homer-preset-dialog';
+@@ -4627,6 +4636,18 @@ function buildRuntimeUi() {
+         }
+     });
+     document.body.append(root);
++    // The native Back contract must include custom panels, not only HTML dialogs.
++    const previousCloseOverlay = window.HomerCloseOverlay;
++    window.HomerCloseOverlay = () => {
++        if (typeof previousCloseOverlay === 'function' && previousCloseOverlay()) return true;
++        // Preserve the top modal's cancellation behavior before touching its parent.
++        if ([...document.querySelectorAll('dialog[open]')].some(el => el.getClientRects().length)) return false;
++        if (!panel.hidden) { setPanelOpen(false); return true; }
++        if (root.querySelector('.homer-chat-drawer.is-open, #homer-left-drawer.is-open, #homer-right-drawer.is-open')) {
++            setDrawerOpen(); return true;
++        }
++        return false;
++    };
+     // The runtime form shell may fill the viewport; anchor to the actual input
+     // form's geometry rather than the shell's percentage height.
+     continuationLayoutObserver?.disconnect();
+diff --git a/sillytavern-runtime/public/scripts/extensions/third-party/SillyTavern-MemoryBooks/index.build.js b/sillytavern-runtime/public/scripts/extensions/third-party/SillyTavern-MemoryBooks/index.build.js
+index 28550a14c326de62b07472f5258f4a1c01374eb5..d3086c078483faca2e458917df47e707b58093f2 100644
+--- a/sillytavern-runtime/public/scripts/extensions/third-party/SillyTavern-MemoryBooks/index.build.js
++++ b/sillytavern-runtime/public/scripts/extensions/third-party/SillyTavern-MemoryBooks/index.build.js
+@@ -2952,7 +2952,7 @@ Return ONLY the JSON, no other text.`,STMemoryBooks_DisplayName_summary:"Summary
+                 <span data-i18n="STMemoryBooks_MenuItem">Memory Books</span>
+             </div>
+         </div>
+-        `),o=$("#extensionsMenu");if(o.length>0)o.append(e),mn(e[0]);else console.warn("STMemoryBooks: Extensions menu not found - retrying initialization")}function fv(){$(document).on("click",Io.menuItem,cS),_o.on(Br.CHAT_CHANGED,e_),_o.on(ms,rs),_o.on(Br.WORLDINFO_UPDATED,(o,r)=>{yf(o,r)}),_o.on(Br.MESSAGE_DELETED,(o)=>{let r=Ce();ud(o,r),co()}),_o.on(Br.MESSAGE_RECEIVED,t_),_o.on(Br.GENERATION_STARTED,(o,r,n)=>{bf=n||!1;try{if(an)toastr.clear(an)}catch(s){}an=null,sa=null,ln=null});let e=Object.values(Io).filter((o)=>o.includes("model_")||o.includes("temp_")).join(", ");_o.on(Br.GENERATE_AFTER_DATA,(o)=>{if(bf)return;if(dt&&rl){let r=rl.effectiveConnection||rl.connection||{},s={openai:"openai",claude:"claude",openrouter:"openrouter",ai21:"ai21",makersuite:"makersuite",google:"makersuite",vertexai:"vertexai",mistralai:"mistralai",custom:"custom",cohere:"cohere",perplexity:"perplexity",groq:"groq",chutes:"chutes",nanogpt:"nanogpt",deepseek:"deepseek",electronhub:"electronhub",aimlapi:"aimlapi",xai:"xai",pollinations:"pollinations",moonshot:"moonshot",fireworks:"fireworks",cometapi:"cometapi",azure_openai:"azure_openai",zai:"zai",siliconflow:"siliconflow"}[r.api]||"openai";if(o.chat_completion_source=s,o.include_reasoning=!1,r.model)o.model=r.model;if(typeof r.temperature==="number")o.temperature=r.temperature}}),window.addEventListener("beforeunload",ZT),window.addEventListener("resize",Uf)}async function Sv(e){if(dt){toastr.warning(S("Memory generation is already in progress.","STMemoryBooks_ManualFix_InProgress"),"STMemoryBooks");return}let o=ft("MemoryManualRepair"),r=o.epoch;try{dt=!0;let n=ln;if(!n?.compiledScene||!n?.profileSettings||!n?.lorebookValidation?.valid){toastr.error(S("Missing failure context; cannot apply corrected JSON.","STMemoryBooks_ManualFix_NoContext"),"STMemoryBooks");return}if(ge(r),!n?.sceneData||n.sceneData.sceneEnd===void 0||n.sceneData.sceneStart===void 0){toastr.error(S("Missing scene range; cannot apply corrected JSON.","STMemoryBooks_ManualFix_NoSceneRange"),"STMemoryBooks");return}let s=String(e||"").trim();if(!s){toastr.error(S("Corrected JSON is empty.","STMemoryBooks_ManualFix_EmptyJson"),"STMemoryBooks");return}let a;try{a=Gl(s)}catch(_){let C=_?.message||"Failed to parse corrected JSON.",E=_?.code?` [${_.code}]`:"";toastr.error(R`Corrected JSON is still invalid${E}: ${C}`,"STMemoryBooks");return}if(!a.content&&!a.summary&&!a.memory_content){toastr.error(S("Corrected JSON is missing content.","STMemoryBooks_ManualFix_MissingContent"),"STMemoryBooks");return}if(!a.title){toastr.error(S("Corrected JSON is missing title.","STMemoryBooks_ManualFix_MissingTitle"),"STMemoryBooks");return}if(!Array.isArray(a.keywords)){toastr.error(S("Corrected JSON is missing keywords array.","STMemoryBooks_ManualFix_MissingKeywords"),"STMemoryBooks");return}let{compiledScene:i,profileSettings:l}=n,m=(a.content||a.summary||a.memory_content||"").trim(),d=(a.title||"Memory").trim(),c=Array.isArray(a.keywords)?a.keywords.filter((_)=>_&&typeof _==="string"&&_.trim()!==""):[],u=n.sceneStats||null,p=n.sceneRange||`${i.metadata.sceneStart}-${i.metadata.sceneEnd}`,f={content:m,extractedTitle:d,metadata:{sceneRange:p,messageCount:i.metadata?.messageCount,characterName:i.metadata?.characterName,userName:i.metadata?.userName,chatId:i.metadata?.chatId,characterFilterNames:Array.isArray(i.metadata?.characterFilterNames)?[...i.metadata.characterFilterNames]:void 0,createdAt:new Date().toISOString(),profileUsed:l.name,presetUsed:l.preset||"custom",tokenUsage:u?{estimatedTokens:u.estimatedTokens}:void 0,generationMethod:"manual-json-repair",version:"2.0"},suggestedKeys:c,titleFormat:l.titleFormat||il,lorebookSettings:{constVectMode:l.constVectMode,position:l.position,orderMode:l.orderMode,orderValue:l.orderValue,preventRecursion:l.preventRecursion,delayUntilRecursion:l.delayUntilRecursion,outletName:Number(l.position)===7?l.outletName||"":void 0},lorebook:{content:m,comment:`Auto-generated memory from messages ${p}. Profile: ${l.name}.`,key:c||[],keysecondary:[],selective:!0,constant:!1,order:100,position:"before_char",disable:!1,addMemo:!0,excludeRecursion:!1,delayUntilRecursion:!0,probability:100,useProbability:!1}};ge(r);let y=n.settings||Ce(),k={...n.memoryBooksContext||qe(),manualGroupLorebookBindings:n.manualGroupLorebookBindings||null},h=await is(y,k);if(!h.valid)throw Error(h.error);let g=y?.moduleSettings?.manualModeEnabled&&k.isGroupChat&&Yo(),b=g?{}:Vm(f,i,k),T=g?await ml(f,n.lorebookValidation,h):await Nn(f,n.lorebookValidation,b);if(ge(r),!T.success)throw Error(T.error||"Failed to add memory to lorebook");try{let _=l.effectiveConnection||l.connection||{};console.debug("STMemoryBooks: Passing profile to runAfterMemory",{api:_.api,model:_.model,temperature:_.temperature}),await Mi(i,l,{chatRef:n.chatRef||null,chatKey:n.chatKey||null,sceneContext:n.memoryBooksContext||k,sceneMarkers:n.sceneMarkers||{},settings:y})}catch(_){console.warn("STMemoryBooks: runAfterMemory failed:",_)}ge(r);try{let _=q()||{};_.highestMemoryProcessed=n.sceneData.sceneEnd,delete _.highestMemoryProcessedManuallySet,Me(),co()}catch(_){console.warn("STMemoryBooks: Failed to update highestMemoryProcessed baseline:",_)}Ga();let B=n.memoryFetchResult?.actualCount>0?` (with ${n.memoryFetchResult.actualCount} context ${n.memoryFetchResult.actualCount===1?"memory":"memories"})`:"";toastr.clear(),an=null,sa=null,ln=null,toastr.success(R`Memory "${T.entryTitle}" created successfully${B}!`,"STMemoryBooks")}catch(n){if(Te(n))return;console.error("STMemoryBooks: Manual JSON repair failed:",n),toastr.error(R`Failed to create memory from corrected JSON: ${n.message}`,"STMemoryBooks")}finally{o.finish(),dt=!1}}async function gv(e){if(ol){toastr.warning(S("Summary consolidation is already in progress.","STMemoryBooks_ArcManualFix_InProgress"),"STMemoryBooks");return}try{ol=!0;let o=xr;if(!o?.lorebookName||!o?.lorebookData||!Array.isArray(o?.selectedEntries)||!o?.options){toastr.error(S("Missing failure context; cannot apply corrected summary JSON.","STMemoryBooks_ArcManualFix_NoContext"),"STMemoryBooks");return}let r=String(e||"").trim();if(!r){toastr.error(S("Corrected JSON is empty.","STMemoryBooks_ArcManualFix_EmptyJson"),"STMemoryBooks");return}let n;try{n=ra(r)}catch(A){let K=A?.message||"Failed to parse corrected summary JSON.",D=A?.code?` [${A.code}]`:"";toastr.error(R`Corrected summary JSON is still invalid${D}: ${K}`,"STMemoryBooks");return}let s=Array.isArray(n?.summaries)?n.summaries:[];if(s.length===0){toastr.error(S("Corrected JSON is missing summaries.","STMemoryBooks_ArcManualFix_MissingArcs"),"STMemoryBooks");return}let a=s.some((A)=>Array.isArray(A?.member_ids)&&A.member_ids.length>0);if(s.length>1&&!a){toastr.error(S("Multiple summaries require member_ids to avoid ambiguous assignment. Add member_ids or reduce to one summary.","STMemoryBooks_ArcManualFix_MultiArcNeedsMemberIds"),"STMemoryBooks");return}let l=o.selectedEntries.map((A)=>String(A?.uid)).filter(Boolean),m=new Map;l.forEach((A,K)=>{m.set(A,A);let D=String(K+1).padStart(3,"0");m.set(D,A),m.set(String(K+1),A)});let d=(A)=>m.get(String(A).trim()),c=new Set;(Array.isArray(n?.unassigned_items)?n.unassigned_items:[]).forEach((A)=>{let K=d(A?.id);if(K)c.add(K)});let p=l.filter((A)=>!c.has(A)),f=s.map((A)=>{let K=String(A?.title||"").trim(),D=String(A?.summary||"").trim(),te=Array.isArray(A?.keywords)?A.keywords:[];te=te.filter((J)=>typeof J==="string"&&J.trim()).map((J)=>J.trim());let X=null;if(Array.isArray(A?.member_ids))X=A.member_ids.map(d).filter((J)=>J!==void 0);if(!X||X.length===0)X=p;return X=Array.from(new Set(X)).filter(Boolean),{title:K,summary:D,keywords:te,memberIds:X}}),y=Ce(),k=String(y?.moduleSettings?.summaryOrderMode||"auto").toLowerCase(),h=k==="manual"||k==="reverse"?k:"auto",g=le(Number.isFinite(Number(y?.moduleSettings?.summaryOrderValue))?Math.trunc(Number(y.moduleSettings.summaryOrderValue)):100,0,9999),b=le(Number.isFinite(Number(y?.moduleSettings?.summaryReverseStart))?Math.trunc(Number(y.moduleSettings.summaryReverseStart)):9999,100,9999),T=ir(o?.summaryEntrySettings||y?.moduleSettings?.summaryEntrySettings||{orderMode:h,orderValue:g,reverseStart:b},{...An,orderMode:h,orderValue:g,reverseStart:b}),B=le(Number(o?.targetTier??1),1,6),_=xe(B),C=await vr({lorebookName:o.lorebookName,lorebookData:o.lorebookData,summaryCandidates:f,targetTier:B,disableOriginals:!!o.disableOriginals,summaryEntrySettings:T,orderMode:o.summaryOrderMode||h,orderValue:o.summaryOrderValue!==void 0&&o.summaryOrderValue!==null?le(Number(o.summaryOrderValue),0,9999):g,reverseStart:o.summaryReverseStart!==void 0&&o.summaryReverseStart!==null?le(Number(o.summaryReverseStart),100,9999):b}),E=Array.isArray(C?.results)?C.results.length:f.length,L=E===1?_.toLowerCase():nn(_).toLowerCase();toastr.success(R`Created ${E} ${L} from corrected JSON.`,"STMemoryBooks"),wr=null,xr=null;try{toastr.clear(To)}catch(A){}To=null,await sn({created:E,targetTier:B,lorebookName:o.lorebookName,lorebookData:o.lorebookData})}catch(o){if(Te(o))return;console.error("STMemoryBooks: applyManualFixedSummaryJson failed:",o),toastr.error(R`Failed to apply corrected summary JSON: ${o.message}`,"STMemoryBooks")}finally{ol=!1}}function Lm(e){try{let o=(f)=>I(String(f??"")),r=o(e?.message||S("Unknown error","STMemoryBooks_UnknownError")),n=o(e?.code||""),s=String(e?.retryRawText||e?.rawText||"").trim(),a=String(e?.rawText||"").trim(),i=!!xr?.lorebookName&&!!xr?.lorebookData,l=(f)=>String(f||"").split(/[\n,]+/g).map((y)=>String(y||"").trim()).map((y)=>y.replace(/^["']|["']$/g,"")).map((y)=>y.replace(/^\d+\.\s*/,"")).map((y)=>y.replace(/^[\-\*\u2022]\s*/,"")).map((y)=>y.trim()).filter(Boolean).slice(0,30),m=(f)=>{let y=String(f||"");try{let _=ra(y),C=Array.isArray(_?.summaries)?_.summaries[0]:null;if(C)return{title:String(C.title||"").trim(),summary:String(C.summary||"").trim(),keywords:Array.isArray(C.keywords)?C.keywords:[]}}catch{}let k="",h="",g=[],b=y.match(/(?:^|\n)\s*(?:title|arc\s*title)\s*[:\-]\s*(.+)\s*$/im)||y.match(/(?:^|\n)\s*#{1,6}\s*(.+)\s*$/m);if(b)k=String(b[1]||"").trim().replace(/^["']|["']$/g,"");let T=y.match(/(?:^|\n)\s*(?:summary|arc\s*summary|content)\s*[:\-]\s*([\s\S]*?)(?=\n\s*(?:keywords?|tags?)\s*[:\-]|\n\s*$)/im);if(T)h=String(T[1]||"").trim();else if(k){let C=y.split(k).slice(1).join(k).split(/\n\s*\n/g).map((E)=>E.trim()).filter(Boolean);if(C.length)h=C[0]}let B=y.match(/(?:^|\n)\s*(?:keywords?|tags?)\s*[:\-]\s*([\s\S]*)$/im);if(B)g=l(B[1]);else{let _=y.split(/\r?\n/).filter((C)=>/^\s*(?:[\-\*\u2022]|\d+\.)\s+/.test(C)).slice(0,60).join(`
++        `),o=$("#extensionsMenu");if(o.length>0)o.append(e),mn(e[0]);else console.warn("STMemoryBooks: Extensions menu not found - retrying initialization")}function fv(){$(document).on("click",Io.menuItem,cS),document.querySelector("#stmb-menu-item")?.setAttribute("data-homer-ready","true"),_o.on(Br.CHAT_CHANGED,e_),_o.on(ms,rs),_o.on(Br.WORLDINFO_UPDATED,(o,r)=>{yf(o,r)}),_o.on(Br.MESSAGE_DELETED,(o)=>{let r=Ce();ud(o,r),co()}),_o.on(Br.MESSAGE_RECEIVED,t_),_o.on(Br.GENERATION_STARTED,(o,r,n)=>{bf=n||!1;try{if(an)toastr.clear(an)}catch(s){}an=null,sa=null,ln=null});let e=Object.values(Io).filter((o)=>o.includes("model_")||o.includes("temp_")).join(", ");_o.on(Br.GENERATE_AFTER_DATA,(o)=>{if(bf)return;if(dt&&rl){let r=rl.effectiveConnection||rl.connection||{},s={openai:"openai",claude:"claude",openrouter:"openrouter",ai21:"ai21",makersuite:"makersuite",google:"makersuite",vertexai:"vertexai",mistralai:"mistralai",custom:"custom",cohere:"cohere",perplexity:"perplexity",groq:"groq",chutes:"chutes",nanogpt:"nanogpt",deepseek:"deepseek",electronhub:"electronhub",aimlapi:"aimlapi",xai:"xai",pollinations:"pollinations",moonshot:"moonshot",fireworks:"fireworks",cometapi:"cometapi",azure_openai:"azure_openai",zai:"zai",siliconflow:"siliconflow"}[r.api]||"openai";if(o.chat_completion_source=s,o.include_reasoning=!1,r.model)o.model=r.model;if(typeof r.temperature==="number")o.temperature=r.temperature}}),window.addEventListener("beforeunload",ZT),window.addEventListener("resize",Uf)}async function Sv(e){if(dt){toastr.warning(S("Memory generation is already in progress.","STMemoryBooks_ManualFix_InProgress"),"STMemoryBooks");return}let o=ft("MemoryManualRepair"),r=o.epoch;try{dt=!0;let n=ln;if(!n?.compiledScene||!n?.profileSettings||!n?.lorebookValidation?.valid){toastr.error(S("Missing failure context; cannot apply corrected JSON.","STMemoryBooks_ManualFix_NoContext"),"STMemoryBooks");return}if(ge(r),!n?.sceneData||n.sceneData.sceneEnd===void 0||n.sceneData.sceneStart===void 0){toastr.error(S("Missing scene range; cannot apply corrected JSON.","STMemoryBooks_ManualFix_NoSceneRange"),"STMemoryBooks");return}let s=String(e||"").trim();if(!s){toastr.error(S("Corrected JSON is empty.","STMemoryBooks_ManualFix_EmptyJson"),"STMemoryBooks");return}let a;try{a=Gl(s)}catch(_){let C=_?.message||"Failed to parse corrected JSON.",E=_?.code?` [${_.code}]`:"";toastr.error(R`Corrected JSON is still invalid${E}: ${C}`,"STMemoryBooks");return}if(!a.content&&!a.summary&&!a.memory_content){toastr.error(S("Corrected JSON is missing content.","STMemoryBooks_ManualFix_MissingContent"),"STMemoryBooks");return}if(!a.title){toastr.error(S("Corrected JSON is missing title.","STMemoryBooks_ManualFix_MissingTitle"),"STMemoryBooks");return}if(!Array.isArray(a.keywords)){toastr.error(S("Corrected JSON is missing keywords array.","STMemoryBooks_ManualFix_MissingKeywords"),"STMemoryBooks");return}let{compiledScene:i,profileSettings:l}=n,m=(a.content||a.summary||a.memory_content||"").trim(),d=(a.title||"Memory").trim(),c=Array.isArray(a.keywords)?a.keywords.filter((_)=>_&&typeof _==="string"&&_.trim()!==""):[],u=n.sceneStats||null,p=n.sceneRange||`${i.metadata.sceneStart}-${i.metadata.sceneEnd}`,f={content:m,extractedTitle:d,metadata:{sceneRange:p,messageCount:i.metadata?.messageCount,characterName:i.metadata?.characterName,userName:i.metadata?.userName,chatId:i.metadata?.chatId,characterFilterNames:Array.isArray(i.metadata?.characterFilterNames)?[...i.metadata.characterFilterNames]:void 0,createdAt:new Date().toISOString(),profileUsed:l.name,presetUsed:l.preset||"custom",tokenUsage:u?{estimatedTokens:u.estimatedTokens}:void 0,generationMethod:"manual-json-repair",version:"2.0"},suggestedKeys:c,titleFormat:l.titleFormat||il,lorebookSettings:{constVectMode:l.constVectMode,position:l.position,orderMode:l.orderMode,orderValue:l.orderValue,preventRecursion:l.preventRecursion,delayUntilRecursion:l.delayUntilRecursion,outletName:Number(l.position)===7?l.outletName||"":void 0},lorebook:{content:m,comment:`Auto-generated memory from messages ${p}. Profile: ${l.name}.`,key:c||[],keysecondary:[],selective:!0,constant:!1,order:100,position:"before_char",disable:!1,addMemo:!0,excludeRecursion:!1,delayUntilRecursion:!0,probability:100,useProbability:!1}};ge(r);let y=n.settings||Ce(),k={...n.memoryBooksContext||qe(),manualGroupLorebookBindings:n.manualGroupLorebookBindings||null},h=await is(y,k);if(!h.valid)throw Error(h.error);let g=y?.moduleSettings?.manualModeEnabled&&k.isGroupChat&&Yo(),b=g?{}:Vm(f,i,k),T=g?await ml(f,n.lorebookValidation,h):await Nn(f,n.lorebookValidation,b);if(ge(r),!T.success)throw Error(T.error||"Failed to add memory to lorebook");try{let _=l.effectiveConnection||l.connection||{};console.debug("STMemoryBooks: Passing profile to runAfterMemory",{api:_.api,model:_.model,temperature:_.temperature}),await Mi(i,l,{chatRef:n.chatRef||null,chatKey:n.chatKey||null,sceneContext:n.memoryBooksContext||k,sceneMarkers:n.sceneMarkers||{},settings:y})}catch(_){console.warn("STMemoryBooks: runAfterMemory failed:",_)}ge(r);try{let _=q()||{};_.highestMemoryProcessed=n.sceneData.sceneEnd,delete _.highestMemoryProcessedManuallySet,Me(),co()}catch(_){console.warn("STMemoryBooks: Failed to update highestMemoryProcessed baseline:",_)}Ga();let B=n.memoryFetchResult?.actualCount>0?` (with ${n.memoryFetchResult.actualCount} context ${n.memoryFetchResult.actualCount===1?"memory":"memories"})`:"";toastr.clear(),an=null,sa=null,ln=null,toastr.success(R`Memory "${T.entryTitle}" created successfully${B}!`,"STMemoryBooks")}catch(n){if(Te(n))return;console.error("STMemoryBooks: Manual JSON repair failed:",n),toastr.error(R`Failed to create memory from corrected JSON: ${n.message}`,"STMemoryBooks")}finally{o.finish(),dt=!1}}async function gv(e){if(ol){toastr.warning(S("Summary consolidation is already in progress.","STMemoryBooks_ArcManualFix_InProgress"),"STMemoryBooks");return}try{ol=!0;let o=xr;if(!o?.lorebookName||!o?.lorebookData||!Array.isArray(o?.selectedEntries)||!o?.options){toastr.error(S("Missing failure context; cannot apply corrected summary JSON.","STMemoryBooks_ArcManualFix_NoContext"),"STMemoryBooks");return}let r=String(e||"").trim();if(!r){toastr.error(S("Corrected JSON is empty.","STMemoryBooks_ArcManualFix_EmptyJson"),"STMemoryBooks");return}let n;try{n=ra(r)}catch(A){let K=A?.message||"Failed to parse corrected summary JSON.",D=A?.code?` [${A.code}]`:"";toastr.error(R`Corrected summary JSON is still invalid${D}: ${K}`,"STMemoryBooks");return}let s=Array.isArray(n?.summaries)?n.summaries:[];if(s.length===0){toastr.error(S("Corrected JSON is missing summaries.","STMemoryBooks_ArcManualFix_MissingArcs"),"STMemoryBooks");return}let a=s.some((A)=>Array.isArray(A?.member_ids)&&A.member_ids.length>0);if(s.length>1&&!a){toastr.error(S("Multiple summaries require member_ids to avoid ambiguous assignment. Add member_ids or reduce to one summary.","STMemoryBooks_ArcManualFix_MultiArcNeedsMemberIds"),"STMemoryBooks");return}let l=o.selectedEntries.map((A)=>String(A?.uid)).filter(Boolean),m=new Map;l.forEach((A,K)=>{m.set(A,A);let D=String(K+1).padStart(3,"0");m.set(D,A),m.set(String(K+1),A)});let d=(A)=>m.get(String(A).trim()),c=new Set;(Array.isArray(n?.unassigned_items)?n.unassigned_items:[]).forEach((A)=>{let K=d(A?.id);if(K)c.add(K)});let p=l.filter((A)=>!c.has(A)),f=s.map((A)=>{let K=String(A?.title||"").trim(),D=String(A?.summary||"").trim(),te=Array.isArray(A?.keywords)?A.keywords:[];te=te.filter((J)=>typeof J==="string"&&J.trim()).map((J)=>J.trim());let X=null;if(Array.isArray(A?.member_ids))X=A.member_ids.map(d).filter((J)=>J!==void 0);if(!X||X.length===0)X=p;return X=Array.from(new Set(X)).filter(Boolean),{title:K,summary:D,keywords:te,memberIds:X}}),y=Ce(),k=String(y?.moduleSettings?.summaryOrderMode||"auto").toLowerCase(),h=k==="manual"||k==="reverse"?k:"auto",g=le(Number.isFinite(Number(y?.moduleSettings?.summaryOrderValue))?Math.trunc(Number(y.moduleSettings.summaryOrderValue)):100,0,9999),b=le(Number.isFinite(Number(y?.moduleSettings?.summaryReverseStart))?Math.trunc(Number(y.moduleSettings.summaryReverseStart)):9999,100,9999),T=ir(o?.summaryEntrySettings||y?.moduleSettings?.summaryEntrySettings||{orderMode:h,orderValue:g,reverseStart:b},{...An,orderMode:h,orderValue:g,reverseStart:b}),B=le(Number(o?.targetTier??1),1,6),_=xe(B),C=await vr({lorebookName:o.lorebookName,lorebookData:o.lorebookData,summaryCandidates:f,targetTier:B,disableOriginals:!!o.disableOriginals,summaryEntrySettings:T,orderMode:o.summaryOrderMode||h,orderValue:o.summaryOrderValue!==void 0&&o.summaryOrderValue!==null?le(Number(o.summaryOrderValue),0,9999):g,reverseStart:o.summaryReverseStart!==void 0&&o.summaryReverseStart!==null?le(Number(o.summaryReverseStart),100,9999):b}),E=Array.isArray(C?.results)?C.results.length:f.length,L=E===1?_.toLowerCase():nn(_).toLowerCase();toastr.success(R`Created ${E} ${L} from corrected JSON.`,"STMemoryBooks"),wr=null,xr=null;try{toastr.clear(To)}catch(A){}To=null,await sn({created:E,targetTier:B,lorebookName:o.lorebookName,lorebookData:o.lorebookData})}catch(o){if(Te(o))return;console.error("STMemoryBooks: applyManualFixedSummaryJson failed:",o),toastr.error(R`Failed to apply corrected summary JSON: ${o.message}`,"STMemoryBooks")}finally{ol=!1}}function Lm(e){try{let o=(f)=>I(String(f??"")),r=o(e?.message||S("Unknown error","STMemoryBooks_UnknownError")),n=o(e?.code||""),s=String(e?.retryRawText||e?.rawText||"").trim(),a=String(e?.rawText||"").trim(),i=!!xr?.lorebookName&&!!xr?.lorebookData,l=(f)=>String(f||"").split(/[\n,]+/g).map((y)=>String(y||"").trim()).map((y)=>y.replace(/^["']|["']$/g,"")).map((y)=>y.replace(/^\d+\.\s*/,"")).map((y)=>y.replace(/^[\-\*\u2022]\s*/,"")).map((y)=>y.trim()).filter(Boolean).slice(0,30),m=(f)=>{let y=String(f||"");try{let _=ra(y),C=Array.isArray(_?.summaries)?_.summaries[0]:null;if(C)return{title:String(C.title||"").trim(),summary:String(C.summary||"").trim(),keywords:Array.isArray(C.keywords)?C.keywords:[]}}catch{}let k="",h="",g=[],b=y.match(/(?:^|\n)\s*(?:title|arc\s*title)\s*[:\-]\s*(.+)\s*$/im)||y.match(/(?:^|\n)\s*#{1,6}\s*(.+)\s*$/m);if(b)k=String(b[1]||"").trim().replace(/^["']|["']$/g,"");let T=y.match(/(?:^|\n)\s*(?:summary|arc\s*summary|content)\s*[:\-]\s*([\s\S]*?)(?=\n\s*(?:keywords?|tags?)\s*[:\-]|\n\s*$)/im);if(T)h=String(T[1]||"").trim();else if(k){let C=y.split(k).slice(1).join(k).split(/\n\s*\n/g).map((E)=>E.trim()).filter(Boolean);if(C.length)h=C[0]}let B=y.match(/(?:^|\n)\s*(?:keywords?|tags?)\s*[:\-]\s*([\s\S]*)$/im);if(B)g=l(B[1]);else{let _=y.split(/\r?\n/).filter((C)=>/^\s*(?:[\-\*\u2022]|\d+\.)\s+/.test(C)).slice(0,60).join(`
+ `);if(_)g=l(_)}return{title:k,summary:h,keywords:g}},d=s?m(s):null,c="";if(c+=`<h3>${o(S("Review Failed Summary Response","STMemoryBooks_ReviewFailedArc_Title"))}</h3>`,c+=`<div><strong>${o(S("Error","STMemoryBooks_ReviewFailedArc_ErrorLabel"))}:</strong> ${r}</div>`,n)c+=`<div><strong>${o(S("Code","STMemoryBooks_ReviewFailedArc_CodeLabel"))}:</strong> ${n}</div>`;if(s){if(c+='<div class="world_entry_form_control">',c+=`<h4>${o(S("Raw AI Response","STMemoryBooks_ReviewFailedArc_RawLabel"))}</h4>`,c+=`<textarea id="stmb-arc-corrected-raw" class="text_pole" style="width: 100%; min-height: 220px; max-height: 360px; white-space: pre; overflow:auto;">${I(s)}</textarea>`,c+='<div class="buttons_block gap10px">',c+=`<button id="stmb-arc-copy-raw" class="menu_button">${o(S("Copy Raw","STMemoryBooks_ReviewFailedArc_CopyRaw"))}</button>`,c+=`<button id="stmb-arc-extract-fields" class="menu_button">${o(S("Extract Title/Summary/Keywords","STMemoryBooks_ReviewFailedArc_ExtractFields"))}</button>`,c+=`<button id="stmb-arc-fill-json" class="menu_button">${o(S("Fill JSON from fields","STMemoryBooks_ReviewFailedArc_FillJson"))}</button>`,c+=`<button id="stmb-arc-apply-corrected-raw" class="menu_button" ${i?"":"disabled"}>${o(S("Create summaries from corrected JSON","STMemoryBooks_ReviewFailedArc_CreateArcs"))}</button>`,c+="</div>",c+='<div class="world_entry_form_control">',c+=`<h4>${o(S("Extractable Fields","STMemoryBooks_ReviewFailedArc_FieldsTitle"))}</h4>`,c+=`<div class="opacity70p">${o(S("Use Extract to populate fields from the raw response, then Fill JSON to generate valid summary JSON.","STMemoryBooks_ReviewFailedArc_FieldsDesc"))}</div>`,c+=`<div class="world_entry_form_control"><label>${o(S("Title","STMemoryBooks_Title"))}</label><input id="stmb-arc-field-title" class="text_pole" style="width:100%" value="${I(String(d?.title||""))}"></div>`,c+=`<div class="world_entry_form_control"><label>${o(S("Summary","STMemoryBooks_Summary"))}</label><textarea id="stmb-arc-field-summary" class="text_pole" style="width:100%; min-height: 110px; white-space: pre-wrap;">${I(String(d?.summary||""))}</textarea></div>`,c+=`<div class="world_entry_form_control"><label>${o(S("Keywords (one per line or comma-separated)","STMemoryBooks_Keywords"))}</label><textarea id="stmb-arc-field-keywords" class="text_pole" style="width:100%; min-height: 90px; white-space: pre-wrap;">${I(Array.isArray(d?.keywords)?d.keywords.join(`
+ `):"")}</textarea></div>`,c+="</div>",!i)c+=`<div class="opacity70p">${o(S("Unable to apply corrected JSON because the original consolidation context is missing.","STMemoryBooks_ReviewFailedArc_NoContext"))}</div>`;if(a&&a!==s)c+=`<details class="world_entry_form_control"><summary class="opacity70p">${o(S("Show original (pre-retry) response","STMemoryBooks_ReviewFailedArc_ShowOriginal"))}</summary>`,c+=`<textarea class="text_pole" style="width: 100%; min-height: 160px; max-height: 260px; white-space: pre; overflow:auto;">${I(a)}</textarea>`,c+="</details>";c+="</div>"}else c+=`<div class="world_entry_form_control opacity70p">${o(S("No raw response was captured.","STMemoryBooks_ReviewFailedArc_NoRaw"))}</div>`;let u=new Oe(Jt.sanitize(c),we.TEXT,"",{wide:!0,large:!0,allowVerticalScrolling:!0,okButton:!1,cancelButton:S("Close","STMemoryBooks_Close")}),p=u.dlg;p.querySelector("#stmb-arc-copy-raw")?.addEventListener("click",async()=>{try{await navigator.clipboard.writeText(s||a),toastr.success(S("Copied raw response","STMemoryBooks_CopiedRaw"),"STMemoryBooks")}catch(f){toastr.error(S("Copy failed","STMemoryBooks_CopyFailed"),"STMemoryBooks")}}),p.querySelector("#stmb-arc-extract-fields")?.addEventListener("click",async()=>{try{let f=p.querySelector("#stmb-arc-corrected-raw")?.value??s??a,y=m(f),k=p.querySelector("#stmb-arc-field-title"),h=p.querySelector("#stmb-arc-field-summary"),g=p.querySelector("#stmb-arc-field-keywords");if(k)k.value=y?.title||"";if(h)h.value=y?.summary||"";if(g)g.value=Array.isArray(y?.keywords)?y.keywords.join(`
+ `):"";toastr.success(S("Extracted fields from response","STMemoryBooks_ReviewFailedArc_ExtractedFieldsToast"),"STMemoryBooks")}catch(f){toastr.error(S("Failed to extract fields","STMemoryBooks_ReviewFailedArc_ExtractFieldsFailed"),"STMemoryBooks")}}),p.querySelector("#stmb-arc-fill-json")?.addEventListener("click",async()=>{try{let f=String(p.querySelector("#stmb-arc-field-title")?.value||"").trim(),y=String(p.querySelector("#stmb-arc-field-summary")?.value||"").trim(),k=p.querySelector("#stmb-arc-field-keywords")?.value||"",h=l(k);if(!f||!y){toastr.warning(S("Title and Summary are required to build a summary.","STMemoryBooks_ReviewFailedArc_TitleSummaryRequired"),"STMemoryBooks");return}let b=JSON.stringify({summaries:[{title:f,summary:y,keywords:h}],unassigned_items:[]},null,2),T=p.querySelector("#stmb-arc-corrected-raw");if(T)T.value=b;toastr.success(S("Filled JSON from fields","STMemoryBooks_ReviewFailedArc_FilledJsonToast"),"STMemoryBooks")}catch(f){toastr.error(S("Failed to build JSON","STMemoryBooks_ReviewFailedArc_FillJsonFailed"),"STMemoryBooks")}}),p.querySelector("#stmb-arc-apply-corrected-raw")?.addEventListener("click",async()=>{let f=p.querySelector("#stmb-arc-corrected-raw")?.value??s??a;gv(f)}),u.show()}catch(o){console.error("STMemoryBooks: Failed to show failed summary response popup:",o)}}function hv(e){try{let o=(c)=>I(String(c||"")),r=e?.code?o(e.code):"",n=o(e?.message||"Unknown error"),s=typeof e?.rawResponse==="string"?e.rawResponse:"",a=typeof e?.providerBody==="string"?e.providerBody:"",i=!!s&&!!ln?.compiledScene&&!!ln?.lorebookValidation?.valid,l="";if(l+=`<h3>${o(S("Review Failed AI Response","STMemoryBooks_ReviewFailedAI_Title"))}</h3>`,l+='<div class="world_entry_form_control">',l+=`<div><strong>${o(S("Error","STMemoryBooks_ReviewFailedAI_ErrorLabel"))}:</strong> ${n}</div>`,r)l+=`<div><strong>${o(S("Code","STMemoryBooks_ReviewFailedAI_CodeLabel"))}:</strong> ${r}</div>`;if(l+="</div>",s){if(l+='<div class="world_entry_form_control">',l+=`<h4>${o(S("Raw AI Response","STMemoryBooks_ReviewFailedAI_RawLabel"))}</h4>`,l+=`<textarea id="stmb-corrected-raw" class="text_pole" style="width: 100%; min-height: 220px; max-height: 360px; white-space: pre; overflow:auto;">${I(s)}</textarea>`,l+='<div class="buttons_block gap10px">',l+=`<button id="stmb-copy-raw" class="menu_button">${o(S("Copy Raw","STMemoryBooks_ReviewFailedAI_CopyRaw"))}</button>`,l+=`<button id="stmb-apply-corrected-raw" class="menu_button" ${i?"":"disabled"}>${o(S("Create Memory from corrected JSON","STMemoryBooks_ReviewFailedAI_CreateMemory"))}</button>`,l+="</div>",!i)l+=`<div class="opacity70p">${o(S("Unable to apply corrected JSON because the original generation context is missing.","STMemoryBooks_ReviewFailedAI_NoContext"))}</div>`;l+="</div>"}else l+=`<div class="world_entry_form_control opacity70p">${o(S("No raw response was captured.","STMemoryBooks_ReviewFailedAI_NoRaw"))}</div>`;if(a)l+='<div class="world_entry_form_control">',l+=`<h4>${o(S("Provider Error Body","STMemoryBooks_ReviewFailedAI_ProviderBody"))}</h4>`,l+=`<pre class="text_pole" style="white-space: pre-wrap; max-height: 200px; overflow:auto;"><code>${I(a)}</code></pre>`,l+=`<div class="buttons_block gap10px"><button id="stmb-copy-provider" class="menu_button">${o(S("Copy Provider Body","STMemoryBooks_ReviewFailedAI_CopyProvider"))}</button></div>`,l+="</div>";let m=new Oe(Jt.sanitize(l),we.TEXT,"",{wide:!0,large:!0,allowVerticalScrolling:!0,okButton:!1,cancelButton:S("Close","STMemoryBooks_Close")}),d=m.dlg;d.querySelector("#stmb-copy-raw")?.addEventListener("click",async()=>{try{await navigator.clipboard.writeText(s),toastr.success(S("Copied raw response","STMemoryBooks_CopiedRaw"),"STMemoryBooks")}catch(c){toastr.error(S("Copy failed","STMemoryBooks_CopyFailed"),"STMemoryBooks")}}),d.querySelector("#stmb-apply-corrected-raw")?.addEventListener("click",async()=>{let c=d.querySelector("#stmb-corrected-raw")?.value??s;Sv(c)}),d.querySelector("#stmb-copy-provider")?.addEventListener("click",async()=>{try{await navigator.clipboard.writeText(a),toastr.success(S("Copied provider body","STMemoryBooks_CopiedProvider"),"STMemoryBooks")}catch(c){toastr.error(S("Copy failed","STMemoryBooks_CopyFailed"),"STMemoryBooks")}}),m.show()}catch(o){console.error("STMemoryBooks: Failed to show failed AI response popup:",o)}}async function Af(){if(kf)return;kf=!0,console.log("STMemoryBooks: Initializing");try{let s=LT?.()||"en";try{let a=await Sf(s);if(a)Em(s,a)}catch(a){console.warn("STMemoryBooks: Failed to load JSON locale bundle:",a)}if(on&&typeof on==="object"){if(on[s])Em(s,on[s]);if(s!=="en"&&on.en)Em(s,Object.fromEntries(Object.entries(on.en).filter(([a])=>!0)))}}catch(s){console.warn("STMemoryBooks: Failed to merge plugin locales:",s)}let e=0,o=20;while(e<o){if($(Io.extensionsMenu).length>0&&_o&&typeof Oe<"u")break;await new Promise((s)=>setTimeout(s,500)),e++}yv();try{mn()}catch(s){}let r=Ce(),n=dc(r);if(!n.valid){if(console.warn("STMemoryBooks: Profile validation issues found:",n.issues),n.fixes.length>0)ie()}try{let s=await zl(r);if(s.removedLegacy>0)ie();if(s.migrated>0)console.log("STMemoryBooks: Migrated profile Additional Context into context settings:",s)}catch(s){console.warn("STMemoryBooks: Failed to migrate Additional Context into context settings; legacy profile entries remain available.",s)}Ma(),Kf(),sy();try{QT()}catch(s){console.error("STMemoryBooks: Failed to initialize chat observer:",s),toastr.error(S("STMemoryBooks: Failed to initialize chat monitoring. Please refresh the page.","STMemoryBooks_FailedToInitializeChatMonitoring"),"STMemoryBooks");return}fv(),ff(),await rs(),Jn("memory",z_),Jn("consolidation",H_),fp(o_),kp(),await Jm(),pv();try{dS(),jf(),console.log("STMemoryBooks: Processed existing messages during initialization")}catch(s){console.error("STMemoryBooks: Error processing existing messages during init:",s)}IT.registerHelper("eq",function(s,a){return s===a}),console.log("STMemoryBooks: Extension loaded successfully")}function kv(){let e=[];try{(Of({allowedOnly:!1})||[]).forEach((r,n)=>{let s=`idx:${n}`,a=`${r?.scriptName||"Untitled"}${r?.disabled?" (disabled)":""}`;e.push({key:s,label:a})})}catch(o){console.warn("STMemoryBooks: buildFlatRegexOptions failed",o)}return e}async function bv(){let e=Ce(),o=kv(),r=Array.isArray(e.moduleSettings.selectedRegexOutgoing)?e.moduleSettings.selectedRegexOutgoing:[],n=Array.isArray(e.moduleSettings.selectedRegexIncoming)?e.moduleSettings.selectedRegexIncoming:[],s="";s+='<h3 data-i18n="STMemoryBooks_RegexSelection_Title">\uD83D\uDCD0 Regex selection</h3>',s+='<div class="world_entry_form_control"><small class="opacity70p" data-i18n="STMemoryBooks_RegexSelection_Desc">Selecting a regex here will run it REGARDLESS of whether it is enabled or disabled.</small></div>',s+='<div class="world_entry_form_control">',s+='<h4 data-i18n="STMemoryBooks_RegexSelection_Outgoing">Run regex before sending to AI</h4>',s+='<select id="stmb-regex-outgoing" multiple style="width:100%">';for(let l of o){let m=r.includes(l.key)?" selected":"";s+=`<option value="${I(l.key)}"${m}>${I(l.label)}</option>`}s+="</select>",s+="</div>",s+='<div class="world_entry_form_control">',s+='<h4 data-i18n="STMemoryBooks_RegexSelection_Incoming">Run regex before adding to lorebook (before previews)</h4>',s+='<select id="stmb-regex-incoming" multiple style="width:100%">';for(let l of o){let m=n.includes(l.key)?" selected":"";s+=`<option value="${I(l.key)}"${m}>${I(l.label)}</option>`}s+="</select>",s+="</div>";let a=new Oe(s,we.TEXT,"",{wide:!0,large:!0,allowVerticalScrolling:!0,okButton:S("Save","STMemoryBooks_Save"),cancelButton:S("Close","STMemoryBooks_Close")});try{mn(a.dlg)}catch(l){}if(setTimeout(()=>{try{if(window.jQuery&&typeof window.jQuery.fn.select2==="function"){let l=window.jQuery(a.dlg);window.jQuery("#stmb-regex-outgoing").select2({width:"100%",placeholder:S("Select outgoing regex…","STMemoryBooks_RegexSelect_PlaceholderOutgoing"),closeOnSelect:!1,dropdownParent:l}),window.jQuery("#stmb-regex-incoming").select2({width:"100%",placeholder:S("Select incoming regex…","STMemoryBooks_RegexSelect_PlaceholderIncoming"),closeOnSelect:!1,dropdownParent:l})}}catch(l){console.warn("STMemoryBooks: Select2 initialization failed (using native selects)",l)}},0),await a.show()===_e.AFFIRMATIVE)try{let l=Array.from(a.dlg?.querySelector("#stmb-regex-outgoing")?.selectedOptions||[]).map((d)=>d.value),m=Array.from(a.dlg?.querySelector("#stmb-regex-incoming")?.selectedOptions||[]).map((d)=>d.value);e.moduleSettings.selectedRegexOutgoing=l,e.moduleSettings.selectedRegexIncoming=m,ie(),toastr.success(S("Regex selections saved","STMemoryBooks_RegexSelectionsSaved"),"STMemoryBooks")}catch(l){console.warn("STMemoryBooks: Failed to save regex selections",l),toastr.error(S("Failed to save regex selections","STMemoryBooks_FailedToSaveRegexSelections"),"STMemoryBooks")}}$(document).ready(()=>{if(_o&&Br.APP_READY)_o.on(Br.APP_READY,Af);setTimeout(Af,2000)});export{rl as currentProfile,ic as isMemoryProcessing,ll as validateLorebook};
+diff --git a/sillytavern-runtime/public/scripts/extensions/third-party/SillyTavern-MemoryBooks/index.js b/sillytavern-runtime/public/scripts/extensions/third-party/SillyTavern-MemoryBooks/index.js
+index 028e3fa1c10455a54cfe8427ca1ae9159503f187..fb12f872e12fc443a935753429937ff14254995b 100644
+--- a/sillytavern-runtime/public/scripts/extensions/third-party/SillyTavern-MemoryBooks/index.js
++++ b/sillytavern-runtime/public/scripts/extensions/third-party/SillyTavern-MemoryBooks/index.js
+@@ -9945,6 +9945,9 @@ function createUI() {
+  */
+ function setupEventListeners() {
+   $(document).on("click", SELECTORS.menuItem, showSettingsPopup);
++  // The menu is inserted before asynchronous initialization finishes. The host
++  // must not dispatch a click until the delegated listener is actually installed.
++  document.querySelector('#stmb-menu-item')?.setAttribute('data-homer-ready', 'true');
+ 
+   eventSource.on(event_types.CHAT_CHANGED, handleChatChanged);
+   eventSource.on(MEMORY_TIER_CACHE_REFRESH_EVENT, refreshMemoryTierMacroCache);

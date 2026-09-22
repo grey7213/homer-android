@@ -1,0 +1,1524 @@
+diff --git a/frontend/admin.html b/frontend/admin.html
+index 4caed043e2fc7fc33210d6ba2234b7575557508b..5e0bd3ee5c574e7b9628d82ff7fa9fc261c0eff1 100644
+--- a/frontend/admin.html
++++ b/frontend/admin.html
+@@ -611,7 +611,7 @@
+           </div>
+ 
+           <!-- 模型配置 -->
+-          <div x-show="activeTab === 'llm'">
++          <div x-show="activeTab === 'llm'" class="ui-model-page">
+             <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+               <div>
+                 <h1 class="text-2xl font-bold xy-gradient-text">模型配置</h1>
+@@ -633,7 +633,7 @@
+                 <div class="ui-node-layout" x-show="uiModelSection === 'chat'">
+                   <nav class="ui-node-list" aria-label="API 节点"><template x-for="node in llmForm.presets" :key="node.id"><button type="button" class="ui-node-tab" :class="currentModelNodeId() === node.id ? 'is-active' : ''" @click="uiNodeId = node.id; uiModelSearch = ''"><strong x-text="node.name || '未命名节点'"></strong><small x-text="(node.enabled ? '已启用' : '已停用') + ' · ' + (node.modelConfigs || []).length + ' 个模型'"></small></button></template></nav>
+                   <div><template x-for="preset in visibleModelNodes()" :key="preset.id">
+-                    <div class="ui-node-panel space-y-4">
++                    <div class="ui-node-panel space-y-4" x-data="{connectionOpen:false}">
+                       <div class="flex items-center justify-between gap-3">
+                         <div class="flex items-center gap-3">
+                           <input type="radio" name="default_model_preset" :checked="llmForm.default_model_preset_id === preset.id" @change="setDefaultModelPreset(preset)" class="accent-violet-500">
+@@ -653,6 +653,8 @@
+                           <button type="button" @click="confirmRemoveModelNode(preset)" class="text-red-300 hover:text-red-200 text-xs">删除</button>
+                         </div>
+                       </div>
++                      <button type="button" class="ui-connection-entry" @click="connectionOpen=!connectionOpen" :aria-expanded="connectionOpen"><span><strong>连接设置</strong><small x-text="preset.protocol === 'anthropic' ? 'Anthropic · 密钥与接入地址' : 'OpenAI 兼容 · 密钥与接入地址'"></small></span><span aria-hidden="true" x-text="connectionOpen ? '−' : '›'"></span></button>
++                      <section class="ui-connection-settings" x-show="connectionOpen" aria-label="节点连接设置">
+                       <div class="grid md:grid-cols-2 gap-3">
+                         <div>
+                           <label class="xy-label">供应商名称</label>
+@@ -694,28 +696,35 @@
+                           </div>
+                         </div>
+                       </div>
+-                      <details class="ui-batch-models"><summary>批量添加 / 编辑模型 ID</summary><div>
++                      </section>
++                      <details class="ui-batch-models"><summary>添加模型 / 编辑模型 ID</summary><div>
+                         <label class="xy-label">模型列表（每行一个，或用逗号分隔）</label>
+                         <textarea class="xy-input" style="min-height:90px" x-model="preset.modelsText" @change="syncModelConfigs(preset)" placeholder="gpt-4o-mini&#10;gpt-4o&#10;gemini-2.5-flash"></textarea>
+                         <div class="text-xs text-slate-500 mt-1">用户在编辑器里会看到「供应商 / 模型」的可搜索条目，所有模型共用这个供应商的 Base URL 和 API Key。</div>
+                       </div></details>
+-                      <div class="rounded-xl border border-violet-300/20 bg-violet-400/5 p-4 space-y-3">
++                      <div class="ui-model-catalog">
+                         <div class="flex items-start justify-between gap-3 flex-wrap">
+                           <div>
+-                            <div class="text-sm font-semibold text-white">逐模型预设与计价</div>
+-                            <div class="text-xs text-slate-500 mt-1">每个模型只能绑定一个预设；输入和输出分别计价。</div>
++                            <div class="text-sm font-semibold text-white">模型管理</div>
++                            <div class="text-xs text-slate-500 mt-1">勾选模型批量设置预设和价格，也可单独编辑。</div>
+                           </div>
+-                          <button type="button" class="xy-btn xy-btn-ghost text-xs" @click="syncModelConfigs(preset)">同步模型列表</button>
++                          <button type="button" class="xy-btn xy-btn-ghost text-xs" @click="uiModelSelecting=!uiModelSelecting" :aria-pressed="uiModelSelecting" x-text="uiModelSelecting ? '结束多选' : '批量管理'"></button>
+                         </div>
+                         <template x-if="!(preset.modelConfigs || []).length">
+                           <div class="text-xs text-slate-500 rounded-lg border border-dashed border-white/10 p-3">填写模型列表后点击“同步模型列表”。</div>
+                         </template>
+                         <div class="ui-model-toolbar"><input class="xy-input" x-model="uiModelSearch" placeholder="搜索模型 ID 或名称" aria-label="搜索模型"><span x-text="`${filteredModelConfigs(preset).length} / ${(preset.modelConfigs || []).length} 个模型`"></span></div>
++                        <div class="ui-model-selection" aria-label="批量选择模型" x-show="uiModelSelecting">
++                          <div><strong x-text="`已选 ${selectedModelRows().length} 个模型`" aria-live="polite"></strong><button type="button" @click="uiModelSelected=[]" :disabled="!selectedModelRows().length">清空选择</button></div>
++                          <div><button type="button" @click="selectFilteredModels(preset)" x-text="`全选当前筛选结果（${filteredModelConfigs(preset).length}）`"></button><button type="button" @click="selectAllModels" x-text="`全选全部节点（${allModelRows().length}）`"></button></div>
++                          <button type="button" class="xy-btn xy-btn-primary" @click="openModelBulk" :disabled="!selectedModelRows().length">批量编辑</button>
++                        </div>
+                         <div class="ui-model-list" aria-label="模型列表">
+                           <template x-for="config in filteredModelConfigs(preset)" :key="config.model">
+-                            <button type="button" class="ui-model-row" @click="openModelEditor(config)">
+-                              <span><strong x-text="config.display_name || config.model"></strong><small x-text="config.model + ' · ' + modelPricingHint(config)"></small></span><span>配置 ›</span>
+-                            </button>
++                            <div class="ui-model-row" :class="{'is-selected':uiModelSelected.includes(modelSelectionKey(preset,config))}">
++                              <label class="ui-model-check" x-show="uiModelSelecting"><input type="checkbox" :aria-label="'选择模型 '+(config.display_name || config.model)" :checked="uiModelSelected.includes(modelSelectionKey(preset,config))" @change="toggleModelSelection(preset,config)"></label>
++                              <button type="button" class="ui-model-edit" @click="openModelEditor(config)"><span><strong x-text="config.display_name || config.model"></strong><small x-text="config.model + ' · ' + modelPricingHint(config)"></small></span><span aria-hidden="true">›</span></button>
++                            </div>
+                           </template>
+                           <div class="ui-state" x-show="!filteredModelConfigs(preset).length">没有匹配的模型，换个关键词试试。</div>
+                         </div>
+@@ -942,7 +951,17 @@
+                                 </div>
+                               </div>
+                               <div class="text-xs text-violet-300" x-text="modelPricingHint(uiModelEditor)"></div>
+-                            </div><footer><button type="button" class="xy-btn xy-btn-primary" @click="uiModelEditor = null">完成编辑</button></footer><p class="ui-field-hint">修改暂存于当前页面，点击“保存全部节点”后生效。</p></section></dialog></template>
++                            </div><p role="alert" class="ui-edit-error" x-text="uiModelEditError"></p><footer><button type="button" class="xy-btn xy-btn-ghost" @click="uiModelEditor=null">取消</button><button type="button" class="xy-btn xy-btn-primary" @click="applyModelEditor">应用修改</button></footer><p class="ui-field-hint">修改暂存于当前页面，点击“保存全部节点”后生效。</p></section></dialog></template>
++
++          <template x-if="uiModelBulk"><dialog class="ui-model-dialog ui-bulk-dialog" x-init="$el.showModal()" aria-label="批量编辑模型" @close="uiModelBulk=null" @click.self="uiModelBulk=null"><section class="ui-admin-dialog__sheet">
++            <header><div><p class="ui-eyebrow" x-text="`${uiModelBulk.groups.length} 个节点 · ${uiModelBulk.keys.length} 个模型`"></p><h2>批量编辑模型</h2></div><button type="button" class="ui-icon-button" aria-label="关闭批量编辑" @click="uiModelBulk=null">×</button></header>
++            <p class="ui-field-hint">仅修改勾选的字段。空白表示当前选中模型的值不一致，未勾选项保持原值。</p>
++            <div class="ui-bulk-field"><label><input type="checkbox" x-model="uiModelBulk.applyPreset">修改绑定预设</label><select class="xy-input" aria-label="批量绑定预设" x-model="uiModelBulk.preset_id" :disabled="!uiModelBulk.applyPreset"><option value="">请选择预设</option><template x-for="option in globalPromptPresetOptions()" :key="option.id"><option :value="option.id" x-text="option.name || option.id"></option></template></select></div>
++            <div class="ui-bulk-field"><label><input type="checkbox" x-model="uiModelBulk.applyMode">修改计价方式</label><select class="xy-input" aria-label="批量计价方式" x-model="uiModelBulk.mode" :disabled="!uiModelBulk.applyMode"><option value="">值不一致</option><option value="per_request">按次</option><option value="per_token">按量（1M Token）</option></select></div>
++            <div class="ui-bulk-field"><label><input type="checkbox" x-model="uiModelBulk.applyInput">修改输入单价</label><input class="xy-input" type="number" min="0" step="0.01" aria-label="批量输入单价" placeholder="保持原值" x-model="uiModelBulk.input_price" :disabled="!uiModelBulk.applyInput"></div>
++            <div class="ui-bulk-field"><label><input type="checkbox" x-model="uiModelBulk.applyOutput">修改输出单价</label><input class="xy-input" type="number" min="0" step="0.01" aria-label="批量输出单价" placeholder="保持原值" x-model="uiModelBulk.output_price" :disabled="!uiModelBulk.applyOutput"></div>
++            <p role="alert" class="ui-edit-error" x-text="uiModelEditError"></p><footer><button type="button" class="xy-btn xy-btn-ghost" @click="uiModelBulk=null">取消</button><button type="button" class="xy-btn xy-btn-primary" @click="applyModelBulk" x-text="`应用到 ${uiModelBulk.keys.length} 个模型`"></button></footer><p class="ui-field-hint">应用后仍需“保存全部节点”才会影响用户。不会修改模型 ID、名称或节点密钥。</p>
++          </section></dialog></template>
+ 
+           <!-- 全局预设 -->
+           <div x-show="activeTab === 'global-presets'">
+diff --git a/frontend/app/assets/js/chat.js b/frontend/app/assets/js/chat.js
+index 0ce245cb30a9dfda7a9177f206bdfe0925bb3bfc..8632f08ea4b211a1424f8f0bb2e367508269f124 100644
+--- a/frontend/app/assets/js/chat.js
++++ b/frontend/app/assets/js/chat.js
+@@ -1,6 +1,8 @@
+ import { api, ApiError, getCachedUser } from '/app/assets/js/app-core.js?v=20260917-r8';
+ import { openChatTool } from '/assets/js/chat-tools.js';
+ import { bindChatAppearance } from '/assets/js/chat-appearance.js';
++import { fillModelSelect } from '/assets/js/model-catalog.js';
++import { messageActionIcon, positionChatMenu } from '/assets/js/chat-menu.js';
+ 
+ const HOST_CHANNEL = 'homer:dialogue-host:v1';
+ try { if (localStorage.getItem('ai_xingyue_shell_theme') === 'dark') document.documentElement.setAttribute('data-theme', 'dark'); } catch {}
+@@ -620,13 +622,7 @@ function openModelDialog() {
+   closeDrawers();
+   const data = modelData();
+   const settings = { temperature: 1, top_p: 1, frequency_penalty: 0, presence_penalty: 0, ...(data?.model_settings || {}) };
+-  modelSelect.replaceChildren();
+-  for (const model of data?.models || []) {
+-    const option = document.createElement('option');
+-    option.value = String(model?.id || '');
+-    option.textContent = String(model?.name || model?.model || model?.id || '未命名模型');
+-    modelSelect.append(option);
+-  }
++  fillModelSelect(modelSelect, data?.models || [], settings.model_id);
+   if (!modelSelect.options.length) {
+     const option = document.createElement('option');
+     option.value = String(settings.model_id || '');
+@@ -799,12 +795,10 @@ function openPreviewMessageMenu(bubble) {
+   document.querySelector('#preview-message-actions')?.remove();
+   const menu = document.createElement('dialog');
+   menu.id = 'preview-message-actions'; menu.className = 'preview-message-actions'; menu.setAttribute('aria-label', '消息操作');
+-  const actions = [['copy','复制','M8 8h12v12H8z M16 8V4H4v12h4'],['edit','改写','m4 16 12-12 4 4L8 20H4v-4 M14 6l4 4'],['rollback','回溯','M9 4 4 9l5 5 M4 9h9a7 7 0 0 1 7 7v4'],['delete','删除','M3 6h18 M9 6V3h6v3 M6 6l1 15h10l1-15 M10 10v7 M14 10v7'],['hide',bubble.dataset.hidden === 'true' ? '取消隐藏' : '隐藏','M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12 M9 12a3 3 0 1 0 6 0 3 3 0 1 0-6 0'],['select','多选','M10 6h11 M10 12h11 M10 18h11 M3 5l2 2 3-3 M3 11l2 2 3-3 M3 17l2 2 3-3'],['collapse',bubble.dataset.collapsed === 'true' ? '展开' : '折叠',bubble.dataset.collapsed === 'true' ? 'm5 5 7 7 7-7 M5 19h14' : 'm5 13 7-7 7 7 M5 19h14']];
+-  for (const [action,label,icon] of actions) {
++  const actions = [['copy','复制'],['edit','改写'],['rollback','回溯'],['delete','删除'],['hide',bubble.dataset.hidden === 'true' ? '取消隐藏' : '隐藏'],['select','多选'],['collapse',bubble.dataset.collapsed === 'true' ? '展开' : '折叠']];
++  for (const [action,label] of actions) {
+     const button = document.createElement('button'); button.type = 'button';
+-    const mark = document.createElementNS('http://www.w3.org/2000/svg','svg');
+-    for (const [key,value] of Object.entries({viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':'1.7','stroke-linecap':'round','stroke-linejoin':'round','aria-hidden':'true'})) mark.setAttribute(key,value);
+-    const path = document.createElementNS('http://www.w3.org/2000/svg','path'); path.setAttribute('d',icon); mark.append(path);
++    const mark = messageActionIcon(action);
+     const text = document.createElement('span'); text.textContent = label; button.append(mark,text);
+     button.addEventListener('click', async () => {
+       menu.close();
+@@ -817,14 +811,12 @@ function openPreviewMessageMenu(bubble) {
+       }
+     }); menu.append(button);
+   }
+-  menu.addEventListener('close',()=>menu.remove(),{once:true});
+-  menu.addEventListener('click',event=>{if(event.target === menu)menu.close();});
++  const reposition=()=>positionChatMenu(menu,bubble,{header:document.querySelector('.preview-header'),composer:previewComposer,isUser:bubble.classList.contains('is-user'),pressY:previewPressOrigin?.y});
++  menu.addEventListener('close',()=>{window.removeEventListener('resize',reposition);window.visualViewport?.removeEventListener('resize',reposition);previewMessages.removeEventListener('scroll',closeMenu);menu.remove();},{once:true});
++  const closeMenu=()=>menu.close();
++  menu.addEventListener('click',event=>{if(event.target !== menu)return;const r=menu.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)menu.close();});
+   document.body.append(menu); menu.showModal();
+-  const box=bubble.getBoundingClientRect();
+-  const left=bubble.classList.contains('is-user')?box.right-menu.offsetWidth:box.left;
+-  const above=box.top-menu.offsetHeight-8;
+-  menu.style.left=Math.max(10,Math.min(left,innerWidth-menu.offsetWidth-10))+'px';
+-  menu.style.top=Math.max(10,Math.min(above>=10?above:box.bottom+8,innerHeight-menu.offsetHeight-10))+'px';
++  reposition();window.addEventListener('resize',reposition);window.visualViewport?.addEventListener('resize',reposition);previewMessages.addEventListener('scroll',closeMenu,{once:true});
+ }
+ previewMessages.addEventListener('contextmenu',event=>{
+   const bubble=event.target.closest('.preview-message'); if(!bubble)return;
+@@ -833,9 +825,9 @@ previewMessages.addEventListener('contextmenu',event=>{
+ previewMessages.addEventListener('pointerdown',event=>{
+   if(event.button>0)return;const bubble=event.target.closest('.preview-message');if(!bubble)return;
+   previewPressOrigin={x:event.clientX,y:event.clientY};
+-  clearTimeout(previewPressTimer);previewPressTimer=setTimeout(()=>openPreviewMessageMenu(bubble),520);
++  clearTimeout(previewPressTimer);previewPressTimer=setTimeout(()=>openPreviewMessageMenu(bubble),500);
+ },{passive:true});
+ previewMessages.addEventListener('pointermove',event=>{
+-  if(previewPressOrigin && Math.hypot(event.clientX-previewPressOrigin.x,event.clientY-previewPressOrigin.y)>12)clearTimeout(previewPressTimer);
++  if(previewPressOrigin && Math.hypot(event.clientX-previewPressOrigin.x,event.clientY-previewPressOrigin.y)>10)clearTimeout(previewPressTimer);
+ },{passive:true});
+ for(const name of ['pointerup','pointercancel'])previewMessages.addEventListener(name,()=>{clearTimeout(previewPressTimer);previewPressOrigin=null;});
+diff --git a/frontend/app/assets/js/community-controls.js b/frontend/app/assets/js/community-controls.js
+index a9440d8b357ac042fae9e8e9c99f0eb44c058201..74fc1562c1fcf0deb6871fcb3e6568877879dac9 100644
+--- a/frontend/app/assets/js/community-controls.js
++++ b/frontend/app/assets/js/community-controls.js
+@@ -206,18 +206,18 @@ export async function installCommunityExtensions(active) {
+     const settings=document.querySelector('.profile-settings__body');
+     if(settings && !settings.querySelector('[data-community-settings]')){
+     const section=element('section','',{'data-community-settings':'',class:'community-inline'});
+-      section.append(element('h3','社区'),element('a','我的社区动态',{href:'/app/community-activity.html',class:'community-reference'}),element('a','社区消息',{href:'/app/community-messages.html',class:'community-reference'}),button('社区设置与行为规范',async()=>{if(await authorizeCommunity())await communitySettings();}),button('账号状态与申诉',accountStatus));
++      section.hidden=new URLSearchParams(location.search).get('panel')!=='settings';
++      section.append(element('h3','社区设置'),button('社区设置与行为规范',async()=>{if(await authorizeCommunity())await communitySettings();}),button('账号状态与申诉',accountStatus));
+       if(localAdmin)section.append(element('a','本机交互验收（仅此设备）',{href:'/app/community.html?acceptance=local',class:'community-reference'}));
+       settings.append(section);
+     }
+   }
+   const path=location.pathname;
+-  if(!['/app/favorites.html','/app/my-apps.html'].includes(path))return;
++  // Activity and drafts are already in My; character management stays focused.
++  if(path!=='/app/favorites.html')return;
+   if(document.querySelector('[data-community-personal]'))return;
+   const main=document.querySelector('main');if(!main)return;
+   const section=element('nav','',{class:'community-inline','data-community-personal':'','aria-label':'内容分类'});
+-  const isSaved=path.endsWith('favorites.html');
+-  if(isSaved)section.append(element('a','角色卡',{href:'/app/favorites.html','aria-current':'page'}),element('a','社区帖子',{href:'/app/favorites.html?tab=community'}));
+-  else section.append(element('a','我的社区动态与草稿',{href:'/app/community-activity.html',class:'community-reference'}));
++  section.append(element('a','角色卡',{href:'/app/favorites.html','aria-current':'page'}),element('a','社区帖子',{href:'/app/favorites.html?tab=community'}));
+   const header=main.querySelector('header');if(header)header.after(section);else main.prepend(section);
+ }
+diff --git a/frontend/app/assets/js/community-templates.js b/frontend/app/assets/js/community-templates.js
+index 46752575009ca37dccc382228e2a91b30220b628..ff8630cdde01f14bec5516cd9a5402cc1647ede7 100644
+--- a/frontend/app/assets/js/community-templates.js
++++ b/frontend/app/assets/js/community-templates.js
+@@ -2,7 +2,8 @@
+ const paths={back:'m14 6-6 6 6 6',search:'M21 21l-5-5M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0',mail:'M3 5h18v14H3z m0 0 9 7 9-7',plus:'M12 5v14M5 12h14',more:'M5 12h.01M12 12h.01M19 12h.01',comment:'M4 4h16v13H9l-5 4z',like:'M7 10v11H3V10z M7 10l5-8c3 0 2 5 2 7h5a2 2 0 0 1 2 2l-2 8a2 2 0 0 1-2 2H7',save:'M6 3h12v18l-6-4-6 4z',image:'M3 3h18v18H3z M3 17l6-7 5 6 3-3 4 4M16 7h.01',write:'m4 16 12-12 4 4L8 20H4z M14 6l4 4',close:'m6 6 12 12M6 18 18 6',chevron:'m9 5 7 7-7 7',tag:'M3 3h8l10 10-8 8L3 11z M7 7h.01',users:'M8 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8M1 22v-3a7 7 0 0 1 14 0v3M17 4a4 4 0 0 1 0 8M18 15a6 6 0 0 1 5 6',arrow:'M12 19V5M5 12l7-7 7 7'};
+ export const icon=name=>`<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="${paths[name]||paths.tag}"/></svg>`;
+ const tool=(label,name,click)=>`<button type="button" class="c-icon" aria-label="${label}" @click="${click}">${icon(name)}</button>`;
+-const header=page=>page==='home'?`<header class="c-header"><nav class="c-home-tabs" aria-label="社区范围"><button @click="setScope('following')" :class="{'is-active':scope==='following'}">关注</button><button @click="setScope('public')" :class="{'is-active':scope==='public'}">推荐</button></nav><div class="c-actions">${tool('搜索社区','search',"go('/app/community-search.html')")}${tool('社区消息','mail',"go('/app/community-messages.html')")}</div></header>`:`<header class="c-header">${tool('返回','back','back()')}<h1 x-text="title"></h1><div class="c-actions">${page==='compose'?'<button class="c-primary" @click="publish()" :disabled="publishing||uploading||muted||!draft.content.trim()" x-text="publishing?\'发布中\':\'发布\'"></button>':page==='post'?tool('帖子操作','more','detail && openActions(detail)'):page==='activity'?tool('写帖子','write','openEditor()'):'<span class="c-header-spacer"></span>'}</div></header>`;
++const searchForm=`<form class="c-search-form" @submit.prevent="searchAll()">${icon('search')}<input type="search" x-model="query" placeholder="搜索帖子、用户或话题" maxlength="100" aria-label="搜索关键词" enterkeyhint="search"><button type="submit">搜索</button></form>`;
++const header=page=>page==='home'?`<header class="c-header"><nav class="c-home-tabs" aria-label="社区范围"><button @click="setScope('following')" :class="{'is-active':scope==='following'}">关注</button><button @click="setScope('public')" :class="{'is-active':scope==='public'}">推荐</button></nav><div class="c-actions">${tool('搜索社区','search',"go('/app/community-search.html')")}${tool('社区消息','mail',"go('/app/community-messages.html')")}</div></header>`:page==='search'?`<header class="c-header c-search-header">${tool('返回','back','back()')}${searchForm}</header>`:`<header class="c-header">${tool('返回','back','back()')}<h1 x-text="title"></h1><div class="c-actions">${page==='compose'?'<button class="c-primary" @click="publish()" :disabled="publishing||uploading||muted||!draft.content.trim()" x-text="publishing?\'发布中\':\'发布\'"></button>':page==='post'?tool('帖子操作','more','detail && openActions(detail)'):page==='activity'?tool('写帖子','write','openEditor()'):'<span class="c-header-spacer"></span>'}</div></header>`;
+ const feed=`<section class="c-feed" aria-label="社区帖子"><template x-for="post in posts" :key="post.id"><article class="c-post">
+   <header><button class="c-author" @click="openUser(post.user_id)"><span class="c-avatar" x-text="post.author.slice(0,1)"></span><span><strong x-text="post.author"></strong><small x-text="formatTime(post.created_at)"></small></span></button>${tool('更多操作','more','openActions(post)')}</header>
+   <div class="c-post-copy" @click="if(!$event.target.closest('a,button'))openPost(post)"><a :href="postURL(post.id)" @click.prevent="openPost(post)"><h2 x-text="post.title||'查看帖子'"></h2></a><p x-effect="rich($el,post.content)"></p></div>
+@@ -14,11 +15,11 @@ const feedback=`<div class="c-feedback" x-show="loading&&(!posts.length||(page==
+ const more=`<div class="c-more" x-show="posts.length"><button x-show="hasMore" @click="load(false)" :disabled="loading" x-text="loading?'读取中…':'加载更多'"></button><span x-show="!hasMore">没有更多内容了</span></div>`;
+ const empty=text=>`<div class="c-empty" x-show="!loading&&!error&&!posts.length">${icon('comment')}<h2>${text}</h2><p>你的分享和交流，会从这里开始。</p><button class="c-primary" @click="openEditor()">写一篇帖子</button></div>`;
+ const activityList=`<section class="c-list"><template x-for="item in activityItems" :key="item.id||item.user_id"><article><button class="c-list-link" @click="item.post_id?go(postURL(item.post_id)):openUser(item.user_id)"><strong x-text="item.name||item.author||'我的评论'"></strong><p x-text="item.content||''"></p><small x-text="formatTime(item.created_at)"></small>${icon('chevron')}</button></article></template><p class="c-feedback" x-show="!loading&&!activityItems.length">暂无内容</p></section>`;
+-const home=`<nav class="c-topics" aria-label="社区话题"><button @click="setTopic('')" :aria-pressed="!topic">全部</button><template x-for="item in topics" :key="item"><button @click="setTopic(item)" :aria-pressed="topic===item" x-text="item"></button></template></nav>
++const home=`<nav class="c-topics c-channel-strip" aria-label="社区话题"><button @click="setTopic('')" :aria-pressed="!topic"><span class="c-channel-icon">${icon('users')}</span><span>全部</span></button><template x-for="item in topics" :key="item"><button @click="setTopic(item)" :aria-pressed="topic===item"><span class="c-channel-icon">${icon('tag')}</span><span x-text="item"></span></button></template></nav>
+ <div class="c-home-tools"><nav><button @click="setSort('latest')" :aria-pressed="sort==='latest'">最新</button><button @click="setSort('hot')" :aria-pressed="sort==='hot'">热门</button><button @click="setSort('featured')" :aria-pressed="sort==='featured'">精华</button></nav><button class="c-text" @click="go('/app/community-activity.html')">我的动态 ${icon('chevron')}</button></div>
+ <template x-for="notice in announcements" :key="notice.id"><details class="c-announcement"><summary x-text="notice.title"></summary><p x-text="notice.content"></p></details></template>
+ <a class="c-contest" href="/app/community-contest.html" x-show="!localMode">本期创作者比赛 ${icon('chevron')}</a>${feedback}${feed}${empty('还没有相关动态')}${more}<button class="c-compose-fab" @click="openEditor()" :disabled="muted" aria-label="发布帖子">${icon('write')}<span>发帖</span></button>`;
+-const search=`<form class="c-search-form" @submit.prevent="searchAll()">${icon('search')}<input type="search" x-model="query" placeholder="搜索帖子、用户或话题" maxlength="100" aria-label="搜索关键词" enterkeyhint="search"><button type="submit">搜索</button></form>
++const search=`
+ <nav class="c-tabs" aria-label="搜索类型"><button @click="searchTypeTo('posts')" :aria-pressed="searchType==='posts'">帖子</button><button @click="searchTypeTo('users')" :aria-pressed="searchType==='users'">用户</button><button @click="searchTypeTo('topics')" :aria-pressed="searchType==='topics'">话题</button></nav>
+ <section class="c-search-discovery" x-show="!searched"><header><h2>最近搜索</h2><button @click="clearRecent()" x-show="recent.length">清空</button></header><p x-show="!recent.length">还没有搜索记录</p><div class="c-chips"><template x-for="term in recent" :key="term"><button @click="query=term;searchAll()" x-text="term"></button></template></div><h2>发现话题</h2><div class="c-chips"><template x-for="item in topics" :key="item"><button @click="query=item;searchType='topics';searchAll()" x-text="'# '+item"></button></template></div></section>
+ <div x-show="searched">${feedback}<div x-show="searchType==='posts'">${feed}${more}</div><section class="c-list" x-show="searchType!=='posts'"><template x-for="result in searchResults" :key="result.user_id||result.name"><button class="c-list-link" @click="searchType==='users'?openUser(result.user_id):(query=result.name,searchType='posts',searchAll())"><span class="c-avatar" x-text="result.name.slice(0,1)"></span><strong x-text="result.name"></strong>${icon('chevron')}</button></template></section><div class="c-empty" x-show="!loading&&!error&&(searchType==='posts'?!posts.length:!searchResults.length)">${icon('search')}<h2>没有找到相关内容</h2><p>换个关键词，或者试试其他分类。</p></div></div>`;
+diff --git a/frontend/app/assets/js/create.js b/frontend/app/assets/js/create.js
+index 94f063969acb27a27a088ea00f75cc293351b8a4..32c168323983335bcfa925bb56ee9e9141f629ae 100644
+--- a/frontend/app/assets/js/create.js
++++ b/frontend/app/assets/js/create.js
+@@ -184,7 +184,9 @@ function createPage() {
+     pendingCardPackImport: null,
+     siteSettings: null,
+     previewOpen: false,
+-    activeSection: 'creator-basic',
++    activeSection: 'creator-core',
++    creatorToolsOpen: false,
++    coreAdvanced: false,
+     platformWorldbookApplied: true,
+     advancedCreationAccess: { allowed: false, source: 'none', farm_unlocked: false, admin_override: false, streak_days: 0, unlocked_plots: 0, required_days: 49 },
+     tavernHelperScriptsLoaded: false,
+@@ -354,10 +356,9 @@ function createPage() {
+     },
+ 
+     scrollToSection(id) {
+-      const target = document.getElementById(id);
+-      if (!target) return;
++      if (!['creator-core','creator-basic','creator-media','creator-prompts','creator-extensions','creator-settings'].includes(id)) return;
+       this.activeSection = id;
+-      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
++      this.$nextTick(() => document.querySelector('.creator-editor__content')?.scrollIntoView({ behavior: 'instant', block: 'start' }));
+     },
+ 
+     async loadExisting() {
+diff --git a/frontend/app/assets/js/me.js b/frontend/app/assets/js/me.js
+index 1a878a68418a8b22382ba90f6db50c1dec0edfa6..bd79bb7db38bc4e90062dc651dda7a96d08df29c 100644
+--- a/frontend/app/assets/js/me.js
++++ b/frontend/app/assets/js/me.js
+@@ -6,6 +6,7 @@ const ME_CACHE_SCOPE = 'me';
+ 
+ function mePage() {
+   return {
++    panel: ['settings','profile','persona'].includes(new URLSearchParams(location.search).get('panel')) ? new URLSearchParams(location.search).get('panel') : '',
+     user: null,
+     points: 0,
+     sidebarOpen: false,
+diff --git a/frontend/app/assets/js/my-apps.js b/frontend/app/assets/js/my-apps.js
+index 669c12857fb6e96a5336b1fc5992c45c734f97f4..673fed6215144e20be319ff1d3f82e0f29734ab3 100644
+--- a/frontend/app/assets/js/my-apps.js
++++ b/frontend/app/assets/js/my-apps.js
+@@ -11,11 +11,26 @@ function myAppsPage() {
+     loading: false,
+     saving: false,
+     apps: [],
++    query: '',
++    visibility: 'all',
++    loadError: '',
++    actionApp: null,
+     toast: null,
+     toastTimer: null,
+     editing: null,
+     siteSettings: null,
+ 
++    get filteredApps() {
++      const query=this.query.trim().toLocaleLowerCase();
++      return this.apps.filter(app => (this.visibility==='all' || (app.is_public===false ? 'private':'public')===this.visibility)
++        && (!query || [app.name,app.summary,app.id,...(Array.isArray(app.tags)?app.tags:[])].join(' ').toLocaleLowerCase().includes(query)));
++    },
++
++    openActions(app) {
++      this.actionApp=app;
++      this.$refs.actions.showModal();
++    },
++
+     async init() {
+       injectLayout('workshop');
+       if (!requireAuth()) return;
+@@ -64,6 +79,7 @@ function myAppsPage() {
+     async loadApps() {
+       const owner = getCachedUser();
+       this.loading = true;
++      this.loadError = '';
+       try {
+         const r = await api.myApps({ page: 1, page_size: 100 });
+         if (String(owner?.id || owner?.user_id || '') !== String(getCachedUser()?.id || getCachedUser()?.user_id || '')) return;
+@@ -71,7 +87,7 @@ function myAppsPage() {
+         this.apps = data.list || data.apps || [];
+         writePageCache('my-apps', owner, { list: this.apps });
+       } catch (err) {
+-        this.showToast(err.message || this.myText('load_failed_text', '获取角色失败'), 'error');
++        this.loadError=err.message || this.myText('load_failed_text', '获取角色失败');
+       } finally {
+         this.loading = false;
+       }
+diff --git a/frontend/app/create.html b/frontend/app/create.html
+index e00600399bd8722dd9a3821c1b433bed1c32789d..df7778f9685b678851dc95c5e7436d7a534cbbe1 100644
+--- a/frontend/app/create.html
++++ b/frontend/app/create.html
+@@ -14,6 +14,7 @@
+   <script type="module" src="/app/assets/js/create.js?v=20260917-r8"></script>
+   <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
+   <link rel="stylesheet" href="/assets/css/app-design.css?v=20260917-r8">
++  <link rel="stylesheet" href="/assets/css/tavo-reference.css?v=20260918-r12">
+   <script defer src="/assets/js/option-picker.js?v=20260917-r8"></script>
+ </head>
+ <body class="min-h-screen creator-editor-page">
+@@ -22,7 +23,7 @@
+   <div class="app-shell creator-editor" x-data="createPage()" x-cloak>
+     <aside class="app-sidebar" data-app-sidebar></aside>
+ 
+-    <main class="app-main creator-editor__main">
++    <main class="app-main creator-editor__main ref-creator" :class="{'is-core-editor':activeSection==='creator-core'}">
+       <!-- 顶部工具栏 -->
+       <header class="editor-toolbar">
+         <a href="/app/my-apps.html" class="editor-toolbar__btn" :title="creatorText('back_title', '返回管理')">
+@@ -32,10 +33,12 @@
+         <div class="editor-toolbar__identity">
+           <span class="editor-toolbar__brand-mark" aria-hidden="true"></span>
+           <div>
+-            <strong x-text="editingId ? creatorText('edit_page_title', '编辑角色卡') : creatorText('create_page_title', '创作角色卡')"></strong>
++            <strong x-text="editingId ? '编辑角色' : '新建角色'"></strong>
+             <small x-text="creatorText('page_subtitle', 'Character Card Editor')"></small>
+           </div>
+         </div>
++        <button type="button" class="editor-more-trigger" aria-label="角色卡操作" @click="creatorToolsOpen=!creatorToolsOpen" :aria-expanded="creatorToolsOpen">•••</button>
++        <div class="editor-toolbar__tools" role="group" aria-label="角色卡操作" x-show="creatorToolsOpen">
+         <button class="editor-toolbar__btn is-danger" x-show="editingId" @click="remove" :title="creatorText('delete_title', '删除角色')">
+           <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m-9 0v14a2 2 0 002 2h6a2 2 0 002-2V6"/></svg>
+           <span x-text="creatorText('delete_text', '删除')"></span>
+@@ -71,6 +74,7 @@
+           </template>
+           <span x-text="form.is_public ? creatorText('public_text', '公开') : creatorText('private_text', '私密')"></span>
+         </button>
++        </div>
+         <button class="editor-toolbar__primary" @click="submit" :disabled="loading || uploading || uploadingBg || uploadingMedia">
+           <template x-if="!loading">
+             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 21v-8H7v8M7 3v5h8M5 21h14a2 2 0 002-2V7l-5-5H5a2 2 0 00-2 2v15a2 2 0 002 2z"/></svg>
+@@ -80,7 +84,8 @@
+         </button>
+       </header>
+ 
+-      <nav class="creator-editor__tabs" aria-label="角色卡编辑分区">
++      <nav class="creator-editor__tabs" aria-label="角色卡编辑分区" x-show="activeSection !== 'creator-core'">
++        <button type="button" @click="scrollToSection('creator-core')" :class="{ 'is-active': activeSection === 'creator-core' }">核心内容</button>
+         <button type="button" @click="scrollToSection('creator-basic')" :class="{ 'is-active': activeSection === 'creator-basic' }">基础设置</button>
+         <button type="button" @click="scrollToSection('creator-media')" :class="{ 'is-active': activeSection === 'creator-media' }">视觉素材</button>
+         <button type="button" @click="scrollToSection('creator-prompts')" :class="{ 'is-active': activeSection === 'creator-prompts' }">角色设定</button>
+@@ -93,13 +98,35 @@
+       </template>
+ 
+       <div class="creator-editor__content">
+-        <div class="editor-tip">
++        <div class="editor-tip" x-show="activeSection !== 'creator-core'">
+           <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke-width="2"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01"/></svg>
+           <div x-text="creatorText('tip_text', '填好标题、描述、封面就可以保存。模型由平台统一接入。')"></div>
+         </div>
+ 
+         <div class="creator-editor__layout">
+           <div class="editor-form">
++        <section class="creator-core" x-show="activeSection === 'creator-core'" aria-label="角色核心内容">
++          <label class="creator-core__portrait">
++            <input type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/avif" @change="onCoverChange" :disabled="uploading" aria-label="上传角色封面">
++            <img x-show="form.cover_url" :src="form.cover_url" alt="角色封面">
++            <svg x-show="!form.cover_url" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 22v-3a8 8 0 0 1 16 0v3M18 3h5M20.5.5v5"/></svg>
++            <span class="creator-core__portrait-add" x-text="uploading ? '…' : '+'"></span>
++          </label>
++          <label class="creator-core__name"><span>名字 <b aria-hidden="true">*</b></span><input class="xy-input" x-model="form.name" maxlength="48" placeholder="为你的角色命名" aria-label="角色名字" aria-required="true"></label>
++          <div class="creator-core__writing"><div class="creator-core__field-head"><label for="creator-core-description">角色设定 <b aria-hidden="true">*</b></label><span>Description</span><button type="button" aria-label="角色设定帮助" @click="showToast('描述角色的身份、性格、背景和互动方式。内容会作为角色设定发送给模型。')">?</button></div><textarea id="creator-core-description" class="xy-input" x-model="form.description" rows="5" placeholder="角色基本设定，名字、性别、年龄、职业、爱好等" aria-label="角色核心设定" aria-required="true"></textarea></div>
++          <div class="creator-core__writing"><div class="creator-core__field-head"><label for="creator-core-opening">开场白</label><span>Greetings</span><button type="button" aria-label="开场白帮助" @click="showToast('角色进入对话后显示的第一条消息。多条候选开场白可在高级定义中设置。')">?</button></div><textarea id="creator-core-opening" class="xy-input" x-model="form.opening_statement" rows="5" placeholder="角色向你发送的第一条消息（开场白）" aria-label="角色开场白"></textarea></div>
++          <button type="button" class="creator-core__expand" @click="coreAdvanced=!coreAdvanced" :aria-expanded="coreAdvanced"><span>高级定义</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" :style="coreAdvanced?'transform:rotate(180deg)':''" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
++          <section class="creator-core__extra" x-show="coreAdvanced" aria-label="高级定义">
++            <label class="creator-core__writing"><div class="creator-core__field-head"><strong>性格特点</strong><span>Personality</span></div><textarea class="xy-input" x-model="form.personality" rows="4" aria-label="性格特点" placeholder="角色的性格特点"></textarea></label>
++            <label class="creator-core__writing"><div class="creator-core__field-head"><strong>场景</strong><span>Scenario</span></div><textarea class="xy-input" x-model="form.scenario" rows="4" aria-label="角色场景" placeholder="故事发生的场景与背景"></textarea></label>
++            <label class="creator-core__writing"><div class="creator-core__field-head"><strong>对话示例</strong></div><textarea class="xy-input" x-model="form.mes_example" rows="4" aria-label="对话示例" placeholder="示范角色的语气和说话方式"></textarea></label>
++            <button type="button" class="creator-core__advanced" @click="scrollToSection('creator-prompts')"><span><strong>完整角色设定</strong><small>候选开场白、角色提示词</small></span><span aria-hidden="true">›</span></button>
++            <button type="button" class="creator-core__advanced" @click="scrollToSection('creator-extensions')"><span><strong>世界与扩展</strong><small>世界书、正则、脚本与互动界面</small></span><span aria-hidden="true">›</span></button>
++            <button type="button" class="creator-core__advanced" @click="scrollToSection('creator-basic')"><span><strong>展示与发布</strong><small>简介、标签、公开范围</small></span><span aria-hidden="true">›</span></button>
++            <button type="button" class="creator-core__advanced" @click="scrollToSection('creator-settings')"><span><strong>模型与语音</strong><small>默认模型、采样参数与音色</small></span><span aria-hidden="true">›</span></button>
++          </section>
++        </section>
++        <section x-show="activeSection === 'creator-basic'" aria-label="角色展示设置">
+         <!-- 基础字段 -->
+         <div class="editor-section-title" id="creator-basic" x-text="creatorText('basic_section_title', '基础设置')"></div>
+         <div class="editor-field">
+@@ -159,6 +186,8 @@
+           <div class="editor-checkbox__text"><div class="editor-checkbox__title">参加当前赛事</div><div class="editor-checkbox__desc">公开发布时将当前版本报名正在进行的赛事；赛事结束或转为私密时不会接受投票。</div></div>
+         </label>
+ 
++        </section>
++        <section x-show="activeSection === 'creator-media'" aria-label="角色视觉素材">
+         <!-- 视觉素材 -->
+         <div class="editor-section-title" id="creator-media" x-text="creatorText('media_section_title', '视觉素材')"></div>
+         <div class="editor-row-2">
+@@ -214,6 +243,8 @@
+           </div>
+         </div>
+ 
++        </section>
++        <section x-show="activeSection === 'creator-prompts'" aria-label="角色详细设定">
+         <!-- 提示词 -->
+         <div class="editor-section-title" id="creator-prompts" x-text="creatorText('prompt_section_title', '角色提示词')"></div>
+ 
+@@ -255,6 +286,8 @@
+         </div>
+ 
+         <!-- Prompt Manager（折叠） -->
++        </section>
++        <section x-show="activeSection === 'creator-extensions'" aria-label="角色世界与扩展">
+         <div class="editor-section-title" id="creator-extensions" x-text="creatorText('extensions_section_title', '世界与扩展')"></div>
+         <div class="editor-group" :class="{ 'is-open': expand.promptManager }">
+           <div class="editor-group__head" @click="expand.promptManager = !expand.promptManager">
+@@ -761,6 +794,8 @@
+           </div>
+         </div>
+ 
++        </section>
++        <section x-show="activeSection === 'creator-settings'" aria-label="角色模型与语音">
+         <div class="editor-section-title" id="creator-settings" x-text="creatorText('settings_section_title', '模型与发布设置')"></div>
+         <div class="editor-group" :class="{ 'is-open': expand.sampling }">
+           <div class="editor-group__head" @click="expand.sampling = !expand.sampling">
+@@ -894,6 +929,7 @@
+           <svg class="w-4 h-4 flex-shrink-0 mt-0.5 text-cyan-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke-width="2"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01"/></svg>
+           <div x-text="creatorText('bottom_note', '角色默认使用站点模型，API Key 由后台统一管理。保存后可以随时在「我的角色」里编辑或删除。')"></div>
+         </div>
++        </section>
+           </div>
+ 
+           <aside class="creator-preview" :class="{ 'is-open': previewOpen }" aria-label="角色卡实时预览">
+diff --git a/frontend/app/login.html b/frontend/app/login.html
+index cc3ef35a4aaa9726171254fb1814b22298732e6e..6544bdc175f7b83cbf31885236a4bd31257e9199 100644
+--- a/frontend/app/login.html
++++ b/frontend/app/login.html
+@@ -14,7 +14,7 @@
+   <link rel="stylesheet" href="/assets/css/app-design.css?v=20260917-r8">
+   <script defer src="/assets/js/option-picker.js?v=20260917-r8"></script>
+ </head>
+-<body class="min-h-screen bg-[#0a0420]">
++<body class="min-h-screen auth-page">
+   <div class="xy-stars-bg"></div>
+ 
+   <div class="min-h-screen flex items-center justify-center px-6 py-12 relative" x-data="loginPage()" x-cloak>
+@@ -22,9 +22,6 @@
+       <div class="xy-toast" :class="`xy-toast-${toast.type}`" x-text="toast.message"></div>
+     </template>
+ 
+-    <div class="absolute -top-20 -right-20 w-96 h-96 rounded-full bg-violet-600/20 blur-3xl pointer-events-none"></div>
+-    <div class="absolute -bottom-20 -left-20 w-96 h-96 rounded-full bg-fuchsia-600/15 blur-3xl pointer-events-none"></div>
+-
+     <div class="w-full max-w-md relative">
+       <!-- LOGO + 标题 -->
+       <div class="text-center mb-10">
+@@ -33,11 +30,11 @@
+         <p class="text-slate-400 text-sm" x-text="authText('brand_subtitle', '让想象 · 照进二次元')">让想象 · 照进二次元</p>
+       </div>
+ 
+-      <div class="xy-glass p-2 mb-6 flex">
+-        <button @click="view='login'" class="flex-1 py-2.5 rounded-xl text-sm font-medium transition" :class="view==='login' ? 'bg-violet-500/30 text-white' : 'text-slate-400 hover:text-white'" x-text="authText('login_tab_label', '登录')">登录</button>
+-        <button @click="view='register'" class="flex-1 py-2.5 rounded-xl text-sm font-medium transition" :class="view==='register' ? 'bg-violet-500/30 text-white' : 'text-slate-400 hover:text-white'" x-text="authText('register_tab_label', '注册')">注册</button>
+-        <button @click="openReset()" class="flex-1 py-2.5 rounded-xl text-sm font-medium transition" :class="view==='reset' ? 'bg-violet-500/30 text-white' : 'text-slate-400 hover:text-white'" x-text="authText('reset_tab_label', '重置密码')">重置密码</button>
+-      </div>
++      <nav class="auth-tabs" aria-label="账户操作">
++        <button @click="view='login'" :aria-pressed="view==='login'" x-text="authText('login_tab_label', '登录')">登录</button>
++        <button @click="view='register'" :aria-pressed="view==='register'" x-text="authText('register_tab_label', '注册')">注册</button>
++        <button @click="openReset()" :aria-pressed="view==='reset'" x-text="authText('reset_tab_label', '重置密码')">重置密码</button>
++      </nav>
+ 
+       <!-- 登录 -->
+       <div x-show="view==='login'" class="xy-glass p-7">
+diff --git a/frontend/app/me.html b/frontend/app/me.html
+index 2007e513d9ae6868fab2464618ef557ac5592b96..a4378b98c79c617a0e2055e394a2ae5c19a330d4 100644
+--- a/frontend/app/me.html
++++ b/frontend/app/me.html
+@@ -18,11 +18,11 @@
+   <div class="app-shell" x-data="mePage()" x-cloak>
+     <aside class="app-sidebar" data-app-sidebar></aside>
+     <main class="app-main">
+-      <header class="app-topbar"><h1>我的</h1><div class="grow"></div><button type="button" class="theme-switch-button" data-shell-action="theme" title="切换明暗模式" aria-label="切换明暗模式"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.4 15.2A8 8 0 118.8 3.6a6.5 6.5 0 0011.6 11.6z"/></svg></button><button @click="doLogout" class="profile-logout">退出登录</button></header>
++      <header class="app-topbar profile-topbar"><a x-show="panel" href="/app/me.html" class="profile-topbar__back" aria-label="返回我的">‹</a><h1 x-text="panel==='profile'?'编辑资料':panel==='persona'?'我的人设':panel==='settings'?'设置':'我的'">我的</h1><div class="grow"></div><a x-show="!panel" href="/app/community-messages.html" class="profile-header-tool" aria-label="社区消息"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 5h16v12H9l-5 4z"/></svg></a><a x-show="!panel" href="/app/me.html?panel=settings" class="profile-header-tool" aria-label="设置"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="8" cy="6" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="10" cy="18" r="2"/></svg></a></header>
+       <template x-if="toast"><div class="xy-toast" :class="`xy-toast-${toast.type}`" x-text="toast.message"></div></template>
+ 
+-      <div class="profile-center">
+-        <section class="profile-identity-card">
++      <div class="profile-center" :class="{'is-settings':panel}">
++        <section class="profile-identity-card" x-show="!panel">
+           <label class="profile-avatar" :class="uploadingAvatar ? 'is-loading' : ''" title="更换头像">
+             <img :src="profileAvatar()" @error="onAvatarError" alt="头像">
+             <input type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/avif" @change="onAvatarChange">
+@@ -33,44 +33,52 @@
+             <p x-text="user?.email || '惑梦（Homer）用户'"></p>
+             <small>ID：<span x-text="profileDisplayId() || user?.id?.slice(0, 12) || '-' "></span></small>
+           </div>
+-          <a href="#profile-settings" class="profile-edit-link" @click.prevent="$refs.settingsPanel.open=true; $nextTick(() => $refs.settingsPanel.scrollIntoView({behavior:'smooth',block:'start'}))">编辑资料</a>
++          <a href="/app/me.html?panel=profile" class="profile-edit-link">编辑资料 ›</a>
+         </section>
+ 
+-        <a class="profile-wallet-card" href="/app/rewards.html">
++        <nav class="profile-community-nav" aria-label="我的社区内容" x-show="!panel">
++          <a href="/app/community-activity.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 3h14v18H5zM8 8h8M8 12h8M8 16h5"/></svg><span>动态</span></a>
++          <a href="/app/community-activity.html?tab=comments"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 4h16v13H9l-5 4z"/></svg><span>评论</span></a>
++          <a href="/app/favorites.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="m12 3 3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z"/></svg><span>收藏</span></a>
++          <a href="/app/community-compose.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="m4 16 12-12 4 4L8 20H4zM14 6l4 4"/></svg><span>草稿箱</span></a>
++        </nav>
++        <a class="profile-wallet-card" href="/app/rewards.html" x-show="!panel">
+           <div><span>积分余额</span><strong x-text="Number(points || 0).toLocaleString('zh-CN')"></strong></div>
+           <div class="profile-wallet-breakdown"><span>免费 <b x-text="balance.free_points.toLocaleString('zh-CN')"></b></span><span>充值 <b x-text="balance.paid_points.toLocaleString('zh-CN')"></b></span><span>奖励 <b x-text="balance.reward_points.toLocaleString('zh-CN')"></b></span></div>
+           <em>在线充值 <b>›</b></em>
+         </a>
+ 
+-        <nav class="profile-shortcuts" aria-label="个人中心快捷入口">
++        <nav class="profile-shortcuts" aria-label="个人中心快捷入口" x-show="!panel">
+           <a href="/app/my-apps.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5"/></svg><span>我的投稿</span><small>角色与草稿</small></a>
+           <a href="/app/rewards.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 19V9m5 10V5m5 14v-7m5 7V3"/></svg><span>收益</span><small>奖励与积分</small></a>
+           <a href="/app/workshop.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v14m7-7H5"/></svg><span>创作</span><small>创作工坊</small></a>
+         </nav>
+ 
+-        <details class="profile-settings" id="profile-settings" x-ref="settingsPanel">
++        <details class="profile-settings" id="profile-settings" x-ref="settingsPanel" x-show="panel" :open="!!panel">
+           <summary><span><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15.5A3.5 3.5 0 1112 8a3.5 3.5 0 010 7.5zM19 12a7 7 0 01-.1 1.2l2 1.6-2 3.4-2.5-1a7 7 0 01-2.1 1.2L14 21h-4l-.4-2.6a7 7 0 01-2.1-1.2l-2.5 1-2-3.4 2-1.6A7 7 0 015 12c0-.4 0-.8.1-1.2l-2-1.6 2-3.4 2.5 1a7 7 0 012.1-1.2L10 3h4l.4 2.6a7 7 0 012.1 1.2l2.5-1 2 3.4-2 1.6c.1.4.1.8.1 1.2z"/></svg>设置</span><b>›</b></summary>
+           <div class="profile-settings__body">
+-            <section class="profile-setting-section">
++            <section class="profile-setting-section" x-show="panel==='profile'">
+               <h3>个人资料</h3>
+               <div class="profile-form-grid"><label>展示 ID<input class="xy-input" x-model="profileForm.display_id" maxlength="32" placeholder="xy_user_001"></label><label>更换头像<input type="file" accept="image/*" @change="onAvatarChange" :disabled="uploadingAvatar"></label></div>
+-              <div class="profile-setting-actions"><button class="xy-btn xy-btn-primary" @click="saveProfile" :disabled="savingProfile || uploadingAvatar">保存资料</button><button class="xy-btn xy-btn-ghost" @click="clearAvatar">恢复默认头像</button><a x-show="adminVerified" class="xy-btn xy-btn-ghost" href="/admin.html">管理后台</a></div>
++              <div class="profile-setting-actions"><button class="xy-btn xy-btn-primary" @click="saveProfile" :disabled="savingProfile || uploadingAvatar">保存资料</button><button class="xy-btn xy-btn-ghost" @click="clearAvatar">恢复默认头像</button></div>
+             </section>
+-            <section class="profile-setting-section">
++            <section class="profile-setting-section" x-show="panel==='persona'">
+               <h3>我的人设</h3><p>聊天时角色会用这份信息认识你。</p>
+               <label>人设名称<input class="xy-input" x-model="persona.name" maxlength="60" placeholder="例如：旅人、小明"></label>
+               <label>人设描述<textarea class="xy-input" x-model="persona.description" maxlength="4000" placeholder="简单介绍你的身份与偏好"></textarea></label>
+               <button class="xy-btn xy-btn-primary" @click="savePersona" :disabled="savingPersona">保存人设</button>
+             </section>
+-            <section class="profile-setting-section profile-account-info"><h3>账户信息</h3><p>注册时间：<span x-text="formatDate(user?.created_at)"></span></p><p>内部 ID：<code x-text="user?.id || '-'"></code></p><p>网页端与 APP 使用同一账号、积分和角色库。</p></section>
++            <nav class="profile-settings-routes" x-show="panel==='settings'"><a href="/app/me.html?panel=profile">个人资料 <span>›</span></a><a href="/app/me.html?panel=persona">我的人设 <span>›</span></a><button type="button" data-shell-action="theme">切换明暗模式 <span>◐</span></button><button type="button" @click="doLogout" class="profile-signout">退出登录</button></nav>
++            <section class="profile-setting-section profile-account-info" x-show="panel==='settings'"><h3>账户信息</h3><p>注册时间：<span x-text="formatDate(user?.created_at)"></span></p><p>内部 ID：<code x-text="user?.id || '-'"></code></p><p>网页端与 APP 使用同一账号、积分和角色库。</p></section>
+           </div>
+         </details>
+ 
+-        <section class="profile-secondary-grid">
++        <section class="profile-secondary-grid" x-show="!panel">
+           <a href="/app/farm.html"><span>惑梦农场</span><small>种植收获 · 每日奖励</small><b>›</b></a>
+-          <a href="/app/favorites.html"><span>我的收藏</span><small>查看收藏角色</small><b>›</b></a>
++          <a href="/app/me.html?panel=persona"><span>我的人设</span><small>在故事中的身份</small><b>›</b></a>
++          <a href="/admin.html" x-show="adminVerified" aria-label="管理后台"><span>管理后台</span><small>仅管理员可见</small><b>›</b></a>
+         </section>
+-        <section class="profile-setting-section" data-homer-update-section hidden>
++        <section class="profile-setting-section" data-homer-update-section x-show="!panel || panel==='settings'" hidden>
+           <h3>应用更新</h3>
+           <p>当前版本 <span data-homer-app-version></span></p>
+           <button type="button" class="xy-btn xy-btn-ghost" data-homer-check-update hidden>检查更新</button>
+diff --git a/frontend/app/my-apps.html b/frontend/app/my-apps.html
+index 85e142549795e2cc21a4d99cc5d0c979fbe84067..4c8c7482ec1df3c06fc4c95f70ef7faab6ea7063 100644
+--- a/frontend/app/my-apps.html
++++ b/frontend/app/my-apps.html
+@@ -11,9 +11,10 @@
+   <script type="module" src="/app/assets/js/my-apps.js?v=20260917-r8"></script>
+   <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
+   <link rel="stylesheet" href="/assets/css/app-design.css?v=20260917-r8">
++  <link rel="stylesheet" href="/assets/css/tavo-reference.css?v=20260918-r12">
+   <script defer src="/assets/js/option-picker.js?v=20260917-r8"></script>
+ </head>
+-<body class="min-h-screen">
++<body class="min-h-screen ref-role-library">
+   <div class="xy-stars-bg"></div>
+ 
+   <div class="app-shell" x-data="myAppsPage()" x-cloak>
+@@ -21,9 +22,10 @@
+ 
+     <main class="app-main">
+       <header class="app-topbar">
++        <a class="ref-library-back" href="/app/workshop.html" aria-label="返回创作工坊"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><path d="m15 4-8 8 8 8"/></svg></a>
+         <h1 x-text="myText('topbar_title', '我的角色')">我的角色</h1>
+         <div class="grow"></div>
+-        <a href="/app/create.html" class="xy-btn xy-btn-primary text-sm" x-text="myText('new_role_text', '＋ 新建角色')">＋ 新建角色</a>
++        <a href="/app/create.html" class="xy-btn xy-btn-primary text-sm" x-text="myText('new_role_text', '＋ 新建')">＋ 新建</a>
+       </header>
+ 
+       <template x-if="toast">
+@@ -31,49 +33,61 @@
+       </template>
+ 
+       <div class="max-w-6xl mx-auto app-page-pad">
++        <div class="ref-library-search">
++          <label><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10" cy="10" r="6.5"/><path d="m15 15 6 6"/></svg><input type="search" x-model="query" placeholder="搜索角色" aria-label="搜索我的角色"></label>
++          <select x-model="visibility" aria-label="角色公开状态"><option value="all">全部</option><option value="public">公开</option><option value="private">私密</option></select>
++        </div>
++        <p class="ref-library-error" role="alert" x-show="loadError"><span x-text="loadError"></span> <button type="button" @click="loadApps" :disabled="loading">重试</button></p>
+         <div x-show="loading && !apps.length" class="flex justify-center py-24"><div class="xy-loading"></div></div>
+-        <div x-show="!loading && apps.length === 0" class="xy-glass p-10 text-center text-violet-200/70">
++        <div x-show="!loading && !loadError && apps.length === 0" class="xy-glass p-10 text-center text-violet-200/70">
+           <img src="/assets/img/apk/empty_view.webp?v=20260901-persistent-pages" class="w-28 mx-auto opacity-60 mb-4">
+           <p class="text-sm mb-4" x-text="emptyText('my_apps_empty_title', '还没有自己创建的角色')">还没有自己创建的角色</p>
+           <a href="/app/create.html" class="xy-btn xy-btn-primary text-sm" x-text="emptyText('my_apps_cta_text', '马上去创建')">马上去创建</a>
+         </div>
+ 
+-        <div class="grid md:grid-cols-2 xl:grid-cols-3 gap-5" x-show="apps.length">
+-          <template x-for="app in apps" :key="app.id">
+-            <article class="xy-glass overflow-hidden">
+-              <div class="aspect-[16/9] bg-black/30">
++        <p class="ref-library-empty" role="status" x-show="apps.length && !filteredApps.length">没有匹配的角色，试试其他名字或标签。</p>
++        <div class="ref-library-list" x-show="filteredApps.length">
++          <template x-for="app in filteredApps" :key="app.id">
++            <article class="ref-library-row">
++              <a class="ref-library-cover" :href="`/app/create.html?id=${encodeURIComponent(app.id)}`" :aria-label="`编辑${app.name || '未命名角色'}`">
+                 <img :src="app.cover || app.icon || '/assets/img/apk/avatar.webp?v=20260901-persistent-pages'" class="w-full h-full object-cover" alt="" onerror="this.src='/assets/img/apk/avatar.webp?v=20260901-persistent-pages'">
+-              </div>
+-              <div class="p-5">
++              </a>
++              <div class="ref-library-copy">
+                 <div class="flex items-start gap-3">
+                   <div class="flex-1 min-w-0">
+-                    <h2 class="font-bold text-lg truncate" x-text="app.name || myText('unnamed_role', '未命名角色')"></h2>
++                    <h2><a :href="`/app/create.html?id=${encodeURIComponent(app.id)}`" x-text="app.name || myText('unnamed_role', '未命名角色')"></a></h2>
+                     <p class="text-sm text-slate-400 line-clamp-2 mt-1" x-text="app.description || app.summary || myText('summary_fallback', '暂无简介')"></p>
+                   </div>
+                 </div>
+-                <div class="flex flex-wrap gap-2 mt-4">
++                <div class="ref-library-meta">
++                  <span x-text="app.is_public === false ? '私密' : '公开'"></span>
+                   <template x-for="tag in (app.tags || []).slice(0, 4)" :key="tag">
+-                    <span class="chip text-xs" x-text="tag"></span>
++                    <span x-text="tag"></span>
+                   </template>
+                 </div>
+-                <div class="flex gap-2 mt-5">
+-                  <a class="xy-btn xy-btn-primary text-sm flex-1 text-center" :href="`/app/character.html?id=${encodeURIComponent(app.id)}`" x-text="myText('detail_text', '详情')">详情</a>
+-                  <button class="xy-btn xy-btn-ghost text-sm" @click="edit(app)" x-text="myText('edit_text', '编辑')">编辑</button>
+-                  <button class="xy-btn xy-btn-ghost text-sm" @click="remove(app)" x-text="myText('delete_text', '删除')">删除</button>
+-                </div>
+               </div>
++              <button type="button" class="ref-library-more" @click="openActions(app)" :aria-label="`${app.name || '未命名角色'}的操作`"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg></button>
+             </article>
+           </template>
+         </div>
+       </div>
+     </main>
+ 
++    <dialog class="ref-library-actions" x-ref="actions" aria-labelledby="library-actions-title" @click="if ($event.target === $el) $el.close()">
++      <h2 id="library-actions-title" x-text="actionApp?.name || '角色操作'"></h2>
++      <a :href="`/app/create.html?id=${encodeURIComponent(actionApp?.id || '')}`">编辑角色</a>
++      <a :href="`/app/character.html?id=${encodeURIComponent(actionApp?.id || '')}`">查看详情</a>
++      <button type="button" @click="$refs.actions.close();edit(actionApp)">发布新版本</button>
++      <button type="button" class="is-danger" @click="$refs.actions.close();remove(actionApp)">删除角色</button>
++      <button type="button" @click="$refs.actions.close()">取消</button>
++    </dialog>
++
+     <template x-if="editing">
+-      <div class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+-        <div class="xy-glass w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto">
++      <div class="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" @keydown.escape.window="if (!saving) editing = null">
++        <div class="xy-glass ref-version-editor w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto" role="dialog" aria-modal="true" aria-label="发布角色新版本">
+           <div class="flex items-center justify-between mb-5">
+-            <h2 class="text-xl font-bold" x-text="myText('edit_modal_title', '编辑角色')">编辑角色</h2>
+-            <button class="xy-btn xy-btn-ghost text-sm" @click="editing = null" x-text="myText('close_text', '关闭')">关闭</button>
++            <h2 class="text-xl font-bold">发布角色新版本</h2>
++            <button class="xy-btn xy-btn-ghost text-sm" @click="editing = null" :disabled="saving" aria-label="关闭">关闭</button>
+           </div>
+           <div class="space-y-4">
+             <div>
+diff --git a/frontend/app/workshop.html b/frontend/app/workshop.html
+index 2fa45ab514074ba7686e005904860cd6ecbb9029..4c9adbbe6157d6dbc1958a8cb0e9bcba713a6d79 100644
+--- a/frontend/app/workshop.html
++++ b/frontend/app/workshop.html
+@@ -27,9 +27,10 @@
+     @media (max-width: 560px) { .ws-create-grid { grid-template-columns: 1fr; } .ws-create-option { min-height: 76px; } }
+   </style>
+   <link rel="stylesheet" href="/assets/css/app-design.css?v=20260917-r8">
++  <link rel="stylesheet" href="/assets/css/tavo-reference.css?v=20260918-r12">
+   <script defer src="/assets/js/option-picker.js?v=20260917-r8"></script>
+ </head>
+-<body class="min-h-screen hub-page hub-page--workshop">
++<body class="min-h-screen hub-page hub-page--workshop ref-workshop">
+   <div class="xy-stars-bg"></div>
+   <div class="xy-meteor"></div>
+ 
+@@ -44,14 +45,14 @@
+           <div class="ws-create-mask" x-show="createMenuOpen" x-transition.opacity @click.self="createMenuOpen = false" role="presentation">
+             <section class="ws-create-dialog" role="dialog" aria-modal="true" aria-labelledby="ws-create-title">
+               <div class="ws-create-head">
+-                <div><h2 id="ws-create-title">新建作品</h2><p>选择你要发布到惑梦的内容类型。</p></div>
++                <div><h2 id="ws-create-title">新建作品</h2></div>
+                 <button type="button" class="ws-create-close" @click="createMenuOpen = false" aria-label="关闭">×</button>
+               </div>
+               <div class="ws-create-grid">
+-                <a class="ws-create-option" href="/app/create.html"><span class="ws-create-option__icon">◉</span><span><strong>新建角色</strong><small>创建完整角色卡，可选择报名当前赛事。</small></span></a>
+-                <a class="ws-create-option" href="/app/community-library.html?tab=mod&new=1"><span class="ws-create-option__icon">◇</span><span><strong>新建 Mod</strong><small>发布对话扩展作品</small></span></a>
+-                <a class="ws-create-option" href="/app/community-library.html?tab=ui_template&new=1"><span class="ws-create-option__icon">▧</span><span><strong>新建界面模板</strong><small>发布界面与交互作品</small></span></a>
+-                <a class="ws-create-option" href="/app/community-library.html?tab=preset&new=1"><span class="ws-create-option__icon">☷</span><span><strong>新建预设</strong><small>发布自己的预设作品</small></span></a>
++                <a class="ws-create-option" href="/app/create.html"><span class="ws-create-option__icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="7" r="4"/><path d="M4 22v-3a8 8 0 0 1 16 0v3"/></svg></span><span><strong>新建角色</strong><small>创建角色卡或导入已有卡包</small></span></a>
++                <a class="ws-create-option" href="/app/community-library.html?tab=mod&new=1"><span class="ws-create-option__icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m8 4-6 8 6 8 M16 4l6 8-6 8 M14 3l-4 18"/></svg></span><span><strong>新建 Mod</strong><small>发布对话扩展作品</small></span></a>
++                <a class="ws-create-option" href="/app/community-library.html?tab=ui_template&new=1"><span class="ws-create-option__icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18 M9 9v12"/></svg></span><span><strong>新建界面模板</strong><small>发布界面与交互作品</small></span></a>
++                <a class="ws-create-option" href="/app/community-library.html?tab=preset&new=1"><span class="ws-create-option__icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 5h18 M3 12h18 M3 19h18"/><path d="M8 2v6 M16 9v6 M10 16v6"/></svg></span><span><strong>新建预设</strong><small>发布自己的预设作品</small></span></a>
+               </div>
+             </section>
+           </div>
+@@ -67,12 +68,10 @@
+       <section class="app-page-pad max-w-6xl mx-auto ws-page" x-show="ready" x-transition.opacity>
+ 
+         <nav class="ws-quicknav ws-quicknav--focused" aria-label="创作入口">
+-          <a class="ws-navitem ws-navitem--primary" href="/app/create.html"><span class="ws-navitem__ico" aria-hidden="true">＋</span><span class="ws-navitem__text"><strong>新建角色</strong><em>创建或导入角色卡</em></span></a>
+-          <a class="ws-navitem" href="/app/my-apps.html"><span class="ws-navitem__ico" aria-hidden="true">◉</span><span class="ws-navitem__text"><strong>我的角色</strong><em>继续编辑与管理发布</em></span></a>
+-          <a class="ws-navitem" href="/app/community-library.html?tab=mod"><span class="ws-navitem__ico" aria-hidden="true">◇</span><span class="ws-navitem__text"><strong>Mod</strong><em>浏览与创作扩展</em></span></a>
+-          <a class="ws-navitem" href="/app/community-library.html?tab=ui_template"><span class="ws-navitem__ico" aria-hidden="true">▧</span><span class="ws-navitem__text"><strong>界面模板</strong><em>浏览与创作界面</em></span></a>
+-          <a class="ws-navitem" href="/app/community-library.html?tab=preset"><span class="ws-navitem__ico" aria-hidden="true">☷</span><span class="ws-navitem__text"><strong>预设</strong><em>浏览与创作预设</em></span></a>
+-          <a class="ws-navitem" href="/app/data-merge.html"><span class="ws-navitem__ico" aria-hidden="true">⇄</span><span class="ws-navitem__text"><strong>数据合并</strong><em>合并世界书 / 正则并导出</em></span></a>
++          <a class="ws-navitem" href="/app/community-library.html?tab=mod"><span class="ws-navitem__ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m8 4-6 8 6 8 M16 4l6 8-6 8 M14 3l-4 18"/></svg></span><span class="ws-navitem__text"><strong>Mod</strong></span></a>
++          <a class="ws-navitem" href="/app/community-library.html?tab=ui_template"><span class="ws-navitem__ico" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18 M9 9v12"/></svg></span><span class="ws-navitem__text"><strong>界面模板</strong></span></a>
++          <a class="ws-navitem" href="/app/community-library.html?tab=preset"><span class="ws-navitem__ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 5h18 M3 12h18 M3 19h18 M8 2v6 M16 9v6 M10 16v6"/></svg></span><span class="ws-navitem__text"><strong>预设</strong></span></a>
++          <a class="ws-navitem" href="/app/data-merge.html"><span class="ws-navitem__ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 3v5c0 6 16 2 16 8v5 M20 3v5c0 6-16 2-16 8v5 M1 18l3 3 3-3 M17 18l3 3 3-3"/></svg></span><span class="ws-navitem__text"><strong>数据合并</strong></span></a>
+         </nav>
+ 
+ 
+diff --git a/frontend/assets/css/app-design.css b/frontend/assets/css/app-design.css
+index fce1b85d555690976a46c44d42c806e0681549a5..592356084e1cb256affe4e5f9b6d63fdd90988b6 100644
+--- a/frontend/assets/css/app-design.css
++++ b/frontend/assets/css/app-design.css
+@@ -1,3 +1,4 @@
++@import url('/assets/css/product-design.css?v=20260918-r12');
+ /* Android bundled UI · shared surfaces, states and touch targets. */
+ /* R6: creation destinations are direct links, not nested under another menu. */
+ .ws-quicknav.ws-quicknav--focused{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+@@ -141,6 +142,10 @@ dialog::backdrop{background:#1c142660!important;backdrop-filter:blur(3px)}
+ .ui-model-toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:12px 0}.ui-model-toolbar .xy-input{flex:1;min-width:160px}.ui-model-toolbar span{font-size:12px;color:var(--ui-muted)}
+ .ui-field-hint{display:block;color:var(--ui-muted);font-size:12px;line-height:1.6;margin-top:6px}.ui-node-credentials label{min-width:0}.ui-node-credentials input{display:block;width:100%;margin-top:6px}.ui-model-workspace{display:grid;gap:18px}.ui-model-workspace>.xy-glass{min-width:0}.ui-model-status{display:none}.ui-batch-models{border:1px solid var(--ui-line);border-radius:12px;padding:12px}.ui-batch-models summary{min-height:32px;font-size:14px;color:var(--ui-muted);cursor:pointer}.ui-batch-models>div{padding-top:12px}
+ .ui-model-list{max-height:400px;overflow:auto;overscroll-behavior:contain;border:1px solid var(--ui-line);border-radius:14px}
++.ui-model-selection{display:grid;gap:8px;padding:12px;background:var(--ui-panel);border:1px solid var(--ui-line);border-radius:12px}
++.ui-model-selection>div{display:flex;align-items:center;gap:8px;justify-content:space-between;flex-wrap:wrap}.ui-model-selection strong{font-size:14px}.ui-model-selection button:not(.xy-btn){min-height:40px;padding:8px;border:0;background:var(--ui-panel-soft);border-radius:8px;color:var(--ui-text);font-size:12px}
++.ui-model-row:has(.ui-model-check){padding:0 8px;gap:0}.ui-model-row.is-selected{background:var(--ui-accent-soft)}.ui-model-check{display:grid;place-items:center;width:48px;min-height:64px;flex:none}.ui-model-check input{width:18px;height:18px}.ui-model-edit{display:flex;align-items:center;justify-content:space-between;gap:12px;flex:1;min-width:0;border:0;background:none;color:inherit;text-align:left;padding:12px 4px;min-height:64px}.ui-model-edit>span:first-child{min-width:0}.ui-model-edit>span:last-child{font-size:24px;color:var(--ui-muted)}
++.ui-bulk-field{display:grid;gap:8px;margin:16px 0}.ui-bulk-field>label{display:flex;align-items:center;gap:10px;min-height:32px;font-size:14px}.ui-model-dialog footer{gap:12px}.ui-edit-error{color:var(--ui-danger);font-size:13px;line-height:1.5}.ui-edit-error:empty{display:none}
+ .ui-model-row{display:flex;align-items:center;justify-content:space-between;gap:16px;width:100%;min-height:68px;border:0;border-bottom:1px solid var(--ui-line);background:var(--ui-panel);padding:13px 16px;color:var(--ui-text);text-align:left}
+ .ui-model-row:hover{background:var(--ui-panel-soft)}.ui-model-row strong,.ui-model-row small{display:block}.ui-model-row strong{font-size:14px;overflow-wrap:anywhere}.ui-model-row small{font-size:12px;color:var(--ui-muted);margin-top:3px}.ui-model-row>span:last-child{color:var(--ui-accent);font-size:13px;flex:none}
+ .ui-admin-dialog{position:fixed;inset:0;z-index:100;display:grid;place-items:center;padding:20px;background:#1c142660;backdrop-filter:blur(3px)}
+diff --git a/frontend/assets/css/chat-design.css b/frontend/assets/css/chat-design.css
+index 0a9f94c9011151ab7a4c43a1aff138d0206a45f3..8c46819994505d37ac9eb9e54d0bf9821d53018d 100644
+--- a/frontend/assets/css/chat-design.css
++++ b/frontend/assets/css/chat-design.css
+@@ -19,25 +19,25 @@ body.has-preview .preview-heading h2,body.homer-runtime .homer-chat-header__titl
+ body.has-preview .preview-heading p,body.has-preview .preview-avatar{display:none!important}
+ body.has-preview .preview-messages{padding:16px 10px!important;scroll-padding-bottom:20px;gap:0}
+ body.has-preview .preview-message,body.homer-runtime:not(.homer-card-stage-active) #chat .mes:not(:has(.homer-card-component,.homer-roleplayhub-documents,iframe)) {
+-  border:0!important;border-radius:14px!important;
++  border:0!important;border-radius:16px!important;
+   background:var(--tavo-assistant-bubble)!important;color:#fff!important;
+-  padding:10px 12px!important;margin:0 auto 14px 0!important;max-width:min(92%,760px)!important;
+-  font-size:14px!important;line-height:1.6!important;text-shadow:none!important;box-shadow:0 3px 10px #30223504!important;
++  padding:8px 12px!important;margin:0 auto 14px 0!important;max-width:min(calc(100% - 49px),760px)!important;
++  font-size:16px!important;line-height:1.6!important;text-shadow:none!important;box-shadow:none!important;
+ }
+-body.has-preview .preview-message.is-user,body.homer-runtime:not(.homer-card-stage-active) #chat .mes[is_user="true"]{margin:0 0 14px auto!important;background:var(--tavo-user-bubble)!important;color:#fff!important;border-color:transparent!important;border-radius:14px!important}
+-body.homer-runtime:not(.homer-card-stage-active) #chat .mes_text{font-size:14px!important;line-height:1.6!important;color:inherit!important;text-shadow:none!important}
++body.has-preview .preview-message.is-user,body.homer-runtime:not(.homer-card-stage-active) #chat .mes[is_user="true"]{margin:0 0 14px auto!important;background:var(--tavo-user-bubble)!important;color:#fff!important;border-color:transparent!important;border-radius:16px!important}
++body.homer-runtime:not(.homer-card-stage-active) #chat .mes:not(:has(.homer-card-component,.homer-roleplayhub-documents,iframe)) .mes_text{font-size:16px!important;line-height:1.6!important;color:inherit!important;text-shadow:none!important}
+ body.has-preview .preview-empty{align-self:center;color:var(--chat-muted)!important;font-size:14px;line-height:1.8}
+ body.homer-runtime:not(.homer-card-stage-active) #chat{padding:calc(62px + env(safe-area-inset-top)) 10px 80px!important;scroll-padding-top:62px;scrollbar-color:var(--chat-line) transparent}
+ body.homer-runtime.homer-left-drawer-open:not(.homer-card-stage-active) #sheld{left:0!important;width:100vw!important}
+-body.has-preview .preview-composer{grid-template-columns:30px minmax(0,1fr) 38px!important;align-items:center;margin:8px 10px max(12px,env(safe-area-inset-bottom))!important;border:0!important;border-radius:28px!important;background:var(--tavo-composer-bg)!important;padding:4px 7px 4px 10px!important;box-shadow:none!important;gap:6px!important;min-height:54px}
++body.has-preview .preview-composer{grid-template-columns:30px minmax(0,1fr) 38px!important;align-items:center;margin:8px 10px max(12px,env(safe-area-inset-bottom))!important;border:0!important;border-radius:14px!important;background:var(--tavo-composer-bg)!important;padding:4px 7px 4px 10px!important;box-shadow:none!important;gap:6px!important;min-height:54px}
+ body.has-preview .preview-composer::before{display:none!important}
+-body.has-preview .preview-composer textarea{width:100%;min-width:0;font-size:16px!important;line-height:1.6!important;padding:10px 0!important;color:#fff!important;background:transparent!important;border:0!important;caret-color:var(--chat-accent);min-height:44px;max-height:150px}
++body.has-preview .preview-composer textarea{width:100%;min-width:0;font-size:16px!important;line-height:1.3!important;letter-spacing:.15px;padding:10px 0!important;color:#fff!important;background:transparent!important;border:0!important;caret-color:#fff;min-height:44px;max-height:150px}
+ body.has-preview .preview-composer textarea::placeholder,body.homer-runtime #send_textarea::placeholder{color:#c4c4c4!important}
+ body.has-preview .preview-composer button{width:32px!important;min-width:32px!important;height:32px!important;border-radius:50%!important;background:#fff!important;color:#656668!important;border:0!important;font-size:0!important}
+ body.has-preview .preview-composer button::before{content:'↑';font-size:25px;line-height:1}
+ body.homer-runtime:not(.homer-card-stage-active) #form_sheld{padding:8px 10px max(12px,env(safe-area-inset-bottom))!important;background:var(--chat-bg)!important}
+-body.homer-runtime:not(.homer-card-stage-active) #send_form{min-height:54px!important;border:0!important;border-radius:28px!important;background:var(--tavo-composer-bg)!important;color:#fff!important;box-shadow:none!important;padding:5px 7px!important}
+-body.homer-runtime:not(.homer-card-stage-active) #send_textarea{min-height:44px!important;padding:10px!important;font-size:14px!important;color:#fff!important;caret-color:#fff!important;background:transparent!important;text-shadow:none!important}
++body.homer-runtime:not(.homer-card-stage-active) #send_form{min-height:54px!important;border:0!important;border-radius:14px!important;background:var(--tavo-composer-bg)!important;color:#fff!important;box-shadow:none!important;padding:5px 7px!important}
++body.homer-runtime:not(.homer-card-stage-active) #send_textarea{min-height:44px!important;padding:10px!important;font-size:16px!important;line-height:1.3!important;letter-spacing:.15px;color:#fff!important;caret-color:#fff!important;background:transparent!important;text-shadow:none!important}
+ body.homer-runtime #send_but,body.homer-runtime #mes_stop{width:32px!important;height:32px!important;min-height:32px;border-radius:50%!important;background:#fff!important;color:#656668!important;text-shadow:none!important;-webkit-tap-highlight-color:transparent}
+ body.homer-runtime #options_button,body.homer-runtime #leftSendForm,body.homer-runtime .homer-composer-button{color:var(--chat-muted)!important;text-shadow:none!important;-webkit-tap-highlight-color:transparent;user-select:none}
+ body.has-preview .preview-sidebar,body.has-preview .preview-settings-drawer,body.homer-runtime .homer-drawer{width:min(304px,90vw)!important;background:var(--chat-panel)!important;color:var(--chat-text)!important;border-color:var(--chat-line)!important;box-shadow:0 0 40px #1e14251a!important;padding-top:max(12px,env(safe-area-inset-top))!important;overflow-y:auto}
+@@ -101,11 +101,11 @@ body.homer-runtime #chat .mes.homer-message-collapsed:not(.homer-message-editing
+ body.homer-runtime #homer-message-menu-dialog{position:fixed!important;inset:auto;bottom:auto!important;margin:0!important;padding:0!important;width:224px!important;max-width:calc(100vw - 20px)!important;border:0!important;border-radius:11px!important;background:#fff!important;box-shadow:0 4px 22px #0002!important;overflow:hidden!important}
+ body.homer-runtime #homer-message-menu-dialog::backdrop{background:transparent!important;backdrop-filter:none!important}
+ body.homer-runtime #homer-message-menu-dialog .homer-message-menu__shell{padding:8px 12px!important;border:0!important;border-radius:11px!important;background:#fff!important}
+-body.homer-runtime .homer-message-menu__actions{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:0!important}
+-body.homer-runtime .homer-message-menu__action{display:flex!important;flex-direction:column!important;justify-content:center;align-items:center;gap:8px!important;padding:10px 0!important;min-height:70px!important;background:#fff!important;color:#505050!important;border:0!important;border-radius:0!important;font-size:11px!important}
+-body.homer-runtime .homer-message-menu__action:nth-child(n+5){border-top:1px solid #eee!important}
+-body.homer-runtime .homer-message-menu__icon{font-size:20px!important;color:inherit!important;background:none!important;width:auto!important;height:auto!important}
+-body.homer-runtime .homer-message-menu__label{font-size:11px!important;color:inherit!important}
++body.homer-runtime .homer-message-menu__actions{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:11px 8px!important;position:relative}
++body.homer-runtime .homer-message-menu__actions::after{content:'';position:absolute;top:calc(50% - .5px);left:7px;right:7px;height:1px;background:#eee;pointer-events:none}
++body.homer-runtime .homer-message-menu__action{display:flex!important;flex-direction:column!important;justify-content:center;align-items:center;gap:3px!important;padding:8px 2px!important;height:auto!important;min-height:61px!important;background:#fff!important;color:#606060!important;border:0!important;border-radius:5px!important;font-size:11.3px!important}
++body.homer-runtime .homer-message-menu__icon{display:block;font-size:28px!important;color:inherit!important;background:none!important;width:28px!important;height:28px!important;flex:none}
++body.homer-runtime .homer-message-menu__label{font-size:11.3px!important;font-weight:500;line-height:1.2;color:inherit!important;overflow-wrap:anywhere}
+ .homer-message-selection{position:fixed;inset:0;height:100dvh;z-index:2147482990;pointer-events:none}
+ .homer-selection-head,.homer-selection-footer{position:absolute;left:0;right:0;pointer-events:auto;display:flex;align-items:center;justify-content:space-between;background:#eee;color:#444}
+ .homer-selection-head{top:0;min-height:56px;padding:env(safe-area-inset-top) 12px 0;font-size:16px}
+@@ -135,10 +135,11 @@ body.homer-runtime .homer-attachment-grid{display:grid;grid-template-columns:rep
+ body.homer-runtime .homer-attachment-grid button{border:0!important;background:transparent!important;min-height:84px!important;color:#444!important}
+ body.homer-runtime .homer-ai-help{width:100%;min-height:44px;border:0!important;border-radius:24px!important;background:#eee!important;color:#444!important;margin-top:18px}
+ .preview-message-actions{position:fixed;inset:auto;margin:0;padding:8px 12px;width:224px;border:0;border-radius:11px;background:#fff;color:#505050;box-sizing:border-box;box-shadow:0 4px 22px #0002}
+-.preview-message-actions[open]{display:grid;grid-template-columns:repeat(4,1fr)}
++.preview-message-actions[open]{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:11px 8px;overflow-y:auto}
++.preview-message-actions::after{content:'';position:absolute;top:calc(50% - .5px);left:19px;right:19px;height:1px;background:#eee;pointer-events:none}
+ .preview-message-actions::backdrop{background:transparent}
+-.preview-message-actions button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:70px;border:0;border-radius:0;background:white;color:#505050;font-size:11px;padding:10px 0}
+-.preview-message-actions button>svg{width:20px;height:20px;flex:none}.preview-message-actions button:nth-child(n+5){border-top:1px solid #eee}
++.preview-message-actions button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-height:61px;border:0;border-radius:5px;background:white;color:#606060;font:500 11.3px/1.2 system-ui;padding:8px 2px;overflow-wrap:anywhere}
++.preview-message-actions button>svg{width:28px;height:28px;flex:none}
+ /* Range controls must not inherit the runtime's full-size text-input skin. */
+ body.homer-runtime :is(.homer-sheet-dialog,.homer-site-dialog,.homer-preset-dialog) :is(h2,h3,label,button,input,select,textarea,p,small){font-family:system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif!important;text-shadow:none!important}
+ body.homer-runtime .homer-sheet-dialog input[type=range],body.has-preview .preview-model-form input[type=range]{appearance:none!important;-webkit-appearance:none!important;width:100%;height:28px!important;min-height:28px!important;margin:4px 0!important;padding:0!important;border:0!important;box-shadow:none!important;background:transparent!important;cursor:pointer}
+@@ -239,8 +240,6 @@ body.homer-runtime #chat .mes_text,body.homer-runtime #chat .mes_text *{
+ }
+ body.homer-runtime #chat :is(textarea,input,[contenteditable=true],[contenteditable=true] *){-webkit-user-select:text!important;user-select:text!important}
+ body.homer-runtime #homer-message-menu-dialog{max-height:calc(100dvh - 120px)!important;overflow-y:auto!important}
+-body.homer-runtime .homer-message-menu__action{font-size:12px!important;min-height:64px!important}
+-body.homer-runtime .homer-message-menu__label{font-size:12px!important}
+ body.homer-runtime .homer-message-menu__action.is-danger{color:#ad2440!important}
+ body.homer-runtime .homer-header-button .fa-gear{font-family:"Font Awesome 6 Free"!important;font-weight:900;font-size:22px}
+ 
+diff --git a/frontend/assets/css/community-reference.css b/frontend/assets/css/community-reference.css
+new file mode 100644
+index 0000000000000000000000000000000000000000..c6c98302982a0ccf7b83e0d60d6f9916ac1e17d1
+--- /dev/null
++++ b/frontend/assets/css/community-reference.css
+@@ -0,0 +1,34 @@
++/* Original components. Dimensions traced to the supplied native layout resources;
++   larger touch targets are retained independently of the native icon size. */
++html body.community-app{--c-text:#14191e;--c-muted:#646a73;--c-line:#eceef0;--c-soft:#f3f4f5;--c-accent:#276bb0;color:var(--c-text);background:#f3f4f5}
++html body.community-app .c-header{background:#fff;border:0;backdrop-filter:none;padding:0 12px;min-height:52px}
++html body.community-app .c-home-tabs{gap:14px}.community-app .c-home-tabs button{position:relative}
++html body.community-app .c-home-tabs button{font-size:18px;padding:10px 4px;min-height:52px;font-weight:500}
++html body.community-app .c-home-tabs .is-active{font-size:20px;font-weight:700}
++.community-app .c-home-tabs .is-active::after{content:'';position:absolute;bottom:4px;left:calc(50% - 9px);width:18px;height:3px;border-radius:3px;background:#20252a}
++html body.community-app .c-channel-strip{padding:14px 12px 10px;gap:0;border:0}
++html body.community-app .c-channel-strip>button,html body.community-app .c-channel-strip>template+button{display:flex;flex-direction:column;align-items:center;gap:7px;width:70px;min-width:70px;min-height:76px;padding:0 3px;background:transparent;border-radius:0;font-size:11px;color:var(--c-text);font-weight:400}
++.c-channel-icon{display:grid;place-items:center;width:46px;height:46px;background:#f0f3f6;border-radius:12px;color:#435769;border:1px solid transparent}
++.c-channel-icon svg{width:22px;height:22px}
++.c-channel-strip [aria-pressed=true] .c-channel-icon{border-color:#467daa;background:#eaf3fa;color:#24699b}
++html body.community-app .c-home-tools{border-bottom:4px solid var(--c-soft);min-height:44px;padding-inline:12px}
++html body.community-app .c-post{padding:14px 12px 12px;border-bottom:4px solid var(--c-soft);border-radius:0;box-shadow:none}
++html body.community-app .c-author{gap:8px}.community-app .c-post .c-avatar{width:28px;height:28px;background:#edf0f3;color:#616b78;font-size:12px}
++html body.community-app .c-post .c-author strong{font-size:12px;font-weight:500}.community-app .c-post .c-author small{font-size:10px}
++html body.community-app .c-post h2{font-size:17px;font-weight:650;line-height:1.5;margin:8px 0 4px}
++html body.community-app .c-post-copy p{font-size:14px;line-height:1.65;color:#333b43;-webkit-line-clamp:3}
++html body.community-app .c-post footer{gap:8px;min-height:44px;margin-top:4px}.community-app .c-post footer .c-actions{gap:0}.community-app .c-post footer .c-actions button{min-width:44px;padding:8px 6px;font-size:12px}.community-app .c-post footer svg{width:17px;height:17px}
++html body.community-app .c-media-grid{gap:4px;margin-top:10px}.community-app .c-media-grid img{border-radius:3px}
++html body.community-app .c-compose-fab{width:54px;height:54px;min-height:54px;padding:15px;border-radius:50%;justify-content:center;background:#22282e;color:#fff;box-shadow:0 3px 12px #17202a25}.community-app .c-compose-fab span{display:none}.community-app .c-compose-fab svg{width:24px;height:24px}
++html body.community-app .c-search-header{gap:0;padding:0 8px 0 4px}.community-app .c-search-header .c-search-form{flex:1;min-width:0;padding:6px 0;gap:4px}.community-app .c-search-header input{border:0;border-radius:6px;height:36px;font-size:13px}.community-app .c-search-header .c-search-form button{font-size:13px;padding:8px;min-width:44px}
++html body.community-app .c-tabs{gap:26px;border-color:var(--c-line)}.community-app .c-tabs [aria-pressed=true],.community-app .c-tabs [aria-current=page]{border-bottom-color:#242a31}
++html body.community-app .c-detail{padding:16px 16px 20px}.community-app .c-detail h2{font-size:23px;line-height:1.5;margin:18px 0}.community-app .c-detail-text{font-size:16px;line-height:1.8}.community-app .c-detail .c-follow{border:1px solid #dce2e8;border-radius:4px;background:white;color:#306798;min-height:36px}
++html body.community-app .c-comments{border-top:6px solid var(--c-soft)}.community-app .c-comments>header{border-bottom:1px solid var(--c-line);margin-bottom:8px}.community-app .c-comments>header h2{font-size:17px}
++html body.community-app .c-reply-dock{box-shadow:none;padding-top:8px}.community-app .c-reply-dock textarea{border-radius:6px;background:var(--c-soft)}
++html body.community-app .c-detail-actions{border-block:1px solid var(--c-line);margin-top:20px}.community-app .c-detail-actions button{background:transparent;border-radius:0;min-height:48px}
++html body.community-screen-compose .c-editor{padding-bottom:calc(100px + env(safe-area-inset-bottom))}
++html body.community-screen-compose .c-editor-tools{position:fixed;bottom:var(--community-keyboard,0px);left:50%;transform:translateX(-50%);width:min(100%,720px);margin:0;padding:8px 16px max(8px,env(safe-area-inset-bottom));background:white;z-index:30;justify-content:space-around;gap:4px;border-top:1px solid var(--c-line)}
++html body.community-screen-compose .c-body-input{min-height:300px}.community-app .c-editor-tools button{white-space:nowrap}
++html body.community-screen-compose .c-emoji{position:fixed;bottom:calc(64px + var(--community-keyboard,0px));left:50%;transform:translateX(-50%);width:min(100%,720px);padding:12px;background:#f3f4f5;z-index:31;border-top:1px solid var(--c-line)}
++html body.community-app .c-sheet{border-radius:12px 12px 0 0;width:min(100%,540px);margin:auto auto 0;border:0}.community-app .c-sheet>div>button{min-height:52px;font-size:15px}.community-app .c-sheet>div>button:last-child{border-top:6px solid var(--c-soft);margin-top:8px}
++html body.community-app .c-primary{border-radius:6px;background:#272e35;color:#fff}
+diff --git a/frontend/assets/css/community-screens.css b/frontend/assets/css/community-screens.css
+index 530bd26f497ed553aecbbaaa02d9c3d53d0051cd..e86e178197cea5afaccdae787eb174408d83c552 100644
+--- a/frontend/assets/css/community-screens.css
++++ b/frontend/assets/css/community-screens.css
+@@ -1,4 +1,5 @@
+ /* Community page system. Scoped to avoid inheriting chat/admin dialog geometry. */
++@import url('/assets/css/community-reference.css?v=20260918-r12');
+ .community-app [hidden]{display:none!important}
+ .community-app .c-messages .community-tabs{margin:0 -16px;padding:0 16px;gap:16px;border-bottom:1px solid #e9ebef}
+ .community-app .c-messages .community-tabs button{background:none;border:0;border-radius:0;margin:0;padding:10px 2px;color:#656b76;font-size:14px;border-bottom:2px solid transparent}
+diff --git a/frontend/assets/css/option-picker.css b/frontend/assets/css/option-picker.css
+index 407bb4e95eed91b30a6cd9e9ae08d246c5c9f50e..4992c30390996bfd407a4d64cf0f21ea8c0c61ad 100644
+--- a/frontend/assets/css/option-picker.css
++++ b/frontend/assets/css/option-picker.css
+@@ -1,22 +1,25 @@
+-.homer-option-picker{--op-bg:#fff;--op-text:#29272f;--op-muted:#77717e;--op-line:#eae6ed;--op-accent:#7655a4;--op-soft:#f2ecfa;box-sizing:border-box;width:min(480px,calc(100vw - 32px));max-height:min(680px,calc(100dvh - 40px));padding:0;border:0;border-radius:22px;background:var(--op-bg);color:var(--op-text);box-shadow:0 20px 80px #10072040;font:14px/1.5 system-ui,sans-serif;overscroll-behavior:contain}
++.homer-option-picker{--op-bg:#ededed;--op-text:#474747;--op-muted:#6c6c6c;--op-line:#dbdbdb;--op-accent:#824cff;--op-soft:#d5d5d5;box-sizing:border-box;width:min(480px,calc(100vw - 32px));max-height:min(680px,calc(100dvh - 40px));padding:0 0 max(14px,env(safe-area-inset-bottom));border:0;border-radius:32px;background:var(--op-bg);color:var(--op-text);box-shadow:none;font:16px/1.5 system-ui,sans-serif;overscroll-behavior:contain}
+ .homer-option-picker[open]{display:flex;flex-direction:column}
+-.homer-option-picker::backdrop{background:#15102066;backdrop-filter:blur(2px)}
++.homer-option-picker::backdrop{background:#0008;backdrop-filter:none}
+ .homer-option-picker *{box-sizing:border-box}
+ .homer-option-picker button{-webkit-tap-highlight-color:transparent;touch-action:manipulation;font:inherit;cursor:pointer;box-shadow:none}
+-.homer-option-picker__head{display:flex;align-items:center;gap:16px;padding:14px 14px 8px 22px}
+-.homer-option-picker__head h2{flex:1;font-size:18px;font-weight:650;line-height:1.4;margin:0;overflow-wrap:anywhere}
+-.homer-option-picker__close{width:44px;height:44px;flex:none;border:0;border-radius:50%;background:transparent;color:var(--op-muted);font-size:27px!important}
+-.homer-option-picker__search{flex:none;width:calc(100% - 40px);min-height:46px;margin:4px 20px 14px;padding:11px 14px;border:1px solid var(--op-line);border-radius:12px;background:var(--op-bg);color:var(--op-text);font:inherit}
+-.homer-option-picker__list{overflow:auto;min-height:56px;padding:0 12px;overscroll-behavior:contain}
+-.homer-option-picker__group{font-size:12px;color:var(--op-muted);margin:12px 12px 4px}
+-.homer-option-picker__option{display:flex;align-items:center;justify-content:space-between;gap:16px;width:100%;min-height:52px;text-align:left;padding:13px 14px;margin:3px 0;border:0;border-radius:12px;background:transparent;color:var(--op-text);overflow-wrap:anywhere}
+-.homer-option-picker__option[aria-checked=true]{background:var(--op-soft);color:var(--op-accent);font-weight:600}
++.homer-option-picker__head{position:relative;display:flex;align-items:center;justify-content:center;flex:none;min-height:66px;padding:18px 52px}
++.homer-option-picker__head h2{font-size:18px;font-weight:750;text-align:center;line-height:1.4;margin:0;overflow-wrap:anywhere}
++.homer-option-picker__close{position:absolute;right:8px;top:11px;width:44px;height:44px;border:0;border-radius:50%;background:transparent;color:var(--op-muted);font-size:27px!important}
++.homer-option-picker__search{flex:none;width:calc(100% - 40px);min-height:44px;margin:0 20px 12px;padding:9px 14px;border:1px solid var(--op-line);border-radius:12px;background:transparent;color:var(--op-text);font:inherit}
++.homer-option-picker__list{overflow:auto;min-height:0;padding:0 20px;overscroll-behavior:contain;scroll-padding:4px}
++.homer-option-picker__group{font-size:12px;font-weight:500;color:var(--op-muted);margin:12px 14px 4px}
++.homer-option-picker__groups{display:flex;flex:none;gap:6px;overflow:auto;padding:0 20px 12px;scrollbar-width:none}.homer-option-picker__groups[hidden]{display:none}.homer-option-picker__groups button{flex:none;min-height:40px;padding:8px 12px;border:0;border-radius:10px;background:var(--op-bg);color:var(--op-muted);font-size:13px}.homer-option-picker__groups button[aria-pressed=true]{background:var(--op-soft);color:var(--op-accent);font-weight:650}
++.homer-option-picker__option{display:flex;align-items:center;justify-content:space-between;gap:16px;width:100%;min-height:51px;text-align:left;padding:12px 14px;margin:2px 0;border:0;border-radius:13px;background:transparent;color:var(--op-text);overflow-wrap:anywhere}
++.homer-option-picker__option[aria-checked=true]{background:var(--op-soft);color:var(--op-text);font-weight:650}
+ .homer-option-picker__option:disabled{opacity:.4;cursor:not-allowed}
+ .homer-option-picker__check{width:22px;flex:none;text-align:center}
+-.homer-option-picker__status{font-size:12px;color:var(--op-muted);padding:8px 24px;margin:0}
++.homer-option-picker__status{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);margin:0}
++.homer-option-picker__status.is-empty{position:static;width:auto;height:auto;clip-path:none;padding:28px 20px;text-align:center;font-size:14px;color:var(--op-muted)}
++.homer-option-picker [hidden]{display:none!important}
+ .homer-option-picker__footer{display:flex;justify-content:flex-end;gap:10px;padding:12px 20px max(16px,env(safe-area-inset-bottom));border-top:1px solid var(--op-line)}
+ .homer-option-picker__footer button{min-height:44px;min-width:88px;padding:10px 20px;border:0;border-radius:24px;background:#f1eef4;color:var(--op-text)}
+ .homer-option-picker__footer .is-primary{background:var(--op-accent);color:#fff}
+ .homer-option-picker :focus-visible{outline:2px solid var(--op-accent);outline-offset:-2px}
+-@media(max-width:600px){.homer-option-picker{margin:auto auto 0;width:100%;max-height:82dvh;border-radius:24px 24px 0 0}.homer-option-picker__head{padding-top:18px}}
++@media(max-width:600px){.homer-option-picker{margin:auto auto 0;width:100%;max-height:83dvh;border-radius:32px 32px 0 0}}
+ @media(prefers-reduced-motion:no-preference){.homer-option-picker[open]{animation:homer-options-in .16s ease-out}@keyframes homer-options-in{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}}
+diff --git a/frontend/assets/css/product-design.css b/frontend/assets/css/product-design.css
+new file mode 100644
+index 0000000000000000000000000000000000000000..fa3d4ff1b533397b18206cadda1601a9ea5f4198
+--- /dev/null
++++ b/frontend/assets/css/product-design.css
+@@ -0,0 +1,169 @@
++/* Original app components, informed by the measured reference spec.
++   Card overlays, card-owned HTML and user-saved dialogue colors are excluded. */
++html body:not(.homer-runtime):not(.has-preview) {
++  --ui-bg:#f7f7f8;--ui-panel:#fff;--ui-panel-soft:#f1f1f4;--ui-text:#202124;
++  --ui-muted:#61636b;--ui-line:#e7e7eb;--ui-accent:#6750a4;--ui-accent-soft:#eee8f8;
++  --ui-radius:16px;--ui-control:12px;--ui-shadow:none;--ui-float:0 12px 36px #16121e24;
++  --fy-accent:var(--ui-accent);--fy-accent-2:var(--ui-accent);--fy-accent-soft:var(--ui-accent-soft);
++  --fy-bg:var(--ui-bg);--fy-panel:var(--ui-panel);--fy-panel-2:var(--ui-panel-soft);--fy-text:var(--ui-text);--fy-text-soft:var(--ui-muted);--fy-text-mute:var(--ui-muted);--fy-border:var(--ui-line);
++  --dm-bg:var(--ui-bg);--dm-panel:var(--ui-panel);--dm-panel-2:var(--ui-panel-soft);--dm-text:var(--ui-text);--dm-muted:var(--ui-muted);--dm-border:var(--ui-line);--dm-accent:var(--ui-accent);--dm-accent-2:var(--ui-accent);
++  font-size:15px;line-height:1.6;letter-spacing:0;background:var(--ui-bg)!important;color:var(--ui-text)!important;
++}
++html[data-theme=dark] body:not(.homer-runtime):not(.has-preview),html body[data-theme=dark]:not(.homer-runtime):not(.has-preview),html body.theme-dark:not(.homer-runtime):not(.has-preview){--ui-bg:#141416;--ui-panel:#202024;--ui-panel-soft:#2b2b31;--ui-text:#f3f2f5;--ui-muted:#b8b6c0;--ui-line:#39383f;--ui-accent:#d0bcff;--ui-accent-soft:#3d3057;color-scheme:dark}
++html body .app-topbar{min-height:64px!important;padding:8px 16px!important;gap:12px;align-items:center;flex-wrap:wrap}
++html body .app-topbar h1{font-size:22px!important;line-height:1.3!important;font-weight:700;letter-spacing:0}
++html body .app-topbar .xy-btn{min-height:40px;padding:8px 14px!important}
++html body .app-topbar>.flex{flex-wrap:wrap;gap:6px}
++html body .app-main{background:var(--ui-bg)!important}
++html body :is(.xy-glass,.form-panel,.list-panel,.profile-settings,.editor-section,.ws-panel,.dm-card){box-shadow:none!important;border-color:var(--ui-line)!important;background:var(--ui-panel)!important;color:var(--ui-text)!important}
++html body :is(.xy-input,.dm-input,.dm-select){font-size:15px!important;min-height:48px!important;border-radius:12px!important;background:var(--ui-panel-soft)!important;border:1px solid transparent!important;color:var(--ui-text)!important}
++html body :is(.xy-input,.dm-input,.dm-select):focus{border-color:var(--ui-accent)!important;outline:2px solid var(--ui-accent);outline-offset:1px}
++html body .xy-label,html body .editor-field__label{font-size:14px!important;color:var(--ui-text)!important;font-weight:600;line-height:1.5}
++html body .xy-btn{min-height:44px;font-size:14px!important;border-radius:12px!important}
++html body .xy-btn-primary{background:var(--ui-accent)!important;color:#fff!important}
++html[data-theme=dark] body .xy-btn-primary{color:#291e3f!important}
++html body .xy-btn-ghost{border:0!important;background:var(--ui-panel-soft)!important;color:var(--ui-text)!important}
++html body .app-bottom-nav{box-shadow:none!important;border-top:1px solid var(--ui-line)!important;background:var(--ui-panel)!important;gap:0!important}
++html body .app-bottom-nav a{color:var(--ui-muted)!important;font-size:11px!important;font-weight:500!important;gap:3px!important;min-height:56px}
++html body .app-bottom-nav a.is-active{color:var(--ui-accent)!important;font-weight:650!important}
++html body .app-bottom-nav svg{width:23px!important;height:23px!important;stroke-width:1.7}
++html body :is(.segmented,.chip-row){scrollbar-width:none}
++html body :is(.ui-state,.ws-empty,.social-empty){min-height:180px;background:transparent!important;border:0!important;gap:12px;line-height:1.6}
++html body :is(.ws-empty__ico,.ws-create-option__icon){background:var(--ui-panel-soft)!important;color:var(--ui-accent)!important}
++/* Creator workspace: one primary creation action, then readable utility rows. */
++html body.hub-page--workshop .ws-quicknav--focused{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:0!important;background:var(--ui-panel);border:1px solid var(--ui-line);border-radius:16px;overflow:hidden}
++html body.hub-page--workshop .ws-navitem{border:0!important;border-radius:0!important;min-height:82px!important;padding:16px!important;box-shadow:none!important;align-items:center!important;background:transparent!important;border-bottom:1px solid var(--ui-line)!important;gap:12px!important}
++html body.hub-page--workshop .ws-navitem:nth-child(odd){border-right:1px solid var(--ui-line)!important}
++html body.hub-page--workshop .ws-navitem__ico{width:28px!important;height:28px!important;min-width:28px;background:none!important;border-radius:0!important;color:var(--ui-accent)!important;display:grid;place-items:center}
++html body.hub-page--workshop .ws-navitem__ico svg{width:24px;height:24px;stroke-width:1.8}
++html body.hub-page--workshop .ws-navitem__text strong{font-size:15px!important;color:var(--ui-text)!important;font-weight:600}
++html body.hub-page--workshop .ws-navitem__text em{font-size:12px!important;color:var(--ui-muted)!important;margin-top:3px}
++html body.hub-page--workshop .ws-section-head{margin-top:24px;margin-bottom:12px}
++html body.hub-page--workshop .ws-section-head h3{font-size:17px;font-weight:650;color:var(--ui-text)}
++html body.hub-page--workshop .ws-cards{display:flex;flex-direction:column;gap:0;border-radius:16px;overflow:hidden;background:var(--ui-panel)}
++html body.hub-page--workshop .ws-card:not(.ws-card--add){display:grid;grid-template-columns:64px minmax(0,1fr);gap:14px;padding:14px;border:0;border-bottom:1px solid var(--ui-line);border-radius:0;min-height:92px;background:var(--ui-panel)}
++html body.hub-page--workshop .ws-card__cover{height:80px!important;border-radius:8px;overflow:hidden}.hub-page--workshop .ws-card__body{padding:0!important;align-self:center}.hub-page--workshop .ws-card__name{font-size:15px!important}.hub-page--workshop .ws-card__desc{font-size:13px!important;color:var(--ui-muted)!important}
++html body.hub-page--workshop .ws-card--add{min-height:56px;flex-direction:row;border:0;border-radius:0;background:var(--ui-panel-soft);font-size:14px}
++/* Personal/account pages stay in the original navigation rather than a second hub. */
++html body .profile-center{gap:16px!important}.profile-center .profile-identity-main h2{font-size:22px!important;line-height:1.4}.profile-center .profile-identity-main p{font-size:13px!important}
++html body .profile-wallet-card{padding:20px!important;border:0!important;border-radius:16px!important;background:var(--ui-panel)!important}
++html body .profile-wallet-card strong{font-size:32px!important;font-weight:700;letter-spacing:0;color:var(--ui-text)!important}
++html body .profile-wallet-card em{font-size:13px;color:var(--ui-accent)!important}
++html body .profile-shortcuts{border:0!important;border-radius:16px!important}.profile-shortcuts a{padding:14px 6px!important}.profile-shortcuts svg{width:24px;height:24px}.profile-shortcuts small{font-size:11px!important}
++html body .profile-secondary-grid{display:flex;flex-direction:column;gap:0;background:var(--ui-panel);border-radius:16px;overflow:hidden}
++html body .profile-secondary-grid a{display:grid;grid-template-columns:1fr auto;min-height:68px!important;padding:12px 16px!important;border:0!important;border-bottom:1px solid var(--ui-line)!important;border-radius:0!important;box-shadow:none!important}
++html body .profile-secondary-grid a>span{font-size:15px}.profile-secondary-grid a>small{grid-column:1;font-size:12px;color:var(--ui-muted)}.profile-secondary-grid a>b{grid-column:2;grid-row:1 / 3;align-self:center;color:var(--ui-muted)}
++html body .profile-settings>summary{padding:14px 16px!important;font-size:15px!important;min-height:58px}
++html body .profile-settings .profile-setting-section{padding:16px!important;border-top:1px solid var(--ui-line)!important;border-radius:0!important}.profile-setting-section h3{font-size:15px!important}.profile-setting-section p{font-size:13px!important}
++/* Editor hierarchy: compact navigation, distinct section headings, calm fields. */
++html body.creator-editor-page .editor-toolbar{display:grid!important;grid-template-columns:44px minmax(0,1fr) 84px!important;gap:6px 10px!important;padding:8px 12px!important;background:var(--ui-panel)!important;border:0!important;box-shadow:none!important}
++html body.creator-editor-page .editor-toolbar>a{grid-column:1!important;grid-row:1;order:0!important;width:44px!important;padding:0!important;border:0!important;background:transparent!important}
++html body.creator-editor-page .editor-toolbar>a span{display:none!important}
++html body.creator-editor-page .editor-toolbar__identity{grid-column:2!important;grid-row:1;order:0!important;min-width:0!important;width:auto!important}
++html body.creator-editor-page .editor-toolbar__identity strong{font-size:18px!important;white-space:normal!important;line-height:1.3}
++html body.creator-editor-page .editor-toolbar__identity :is(small,.editor-toolbar__brand-mark){display:none!important}
++html body.creator-editor-page .editor-toolbar__primary{grid-column:3!important;grid-row:1;order:0!important;min-height:44px!important;min-width:0!important;width:100%!important;border-radius:12px!important}
++html body.creator-editor-page .editor-toolbar__tools{grid-column:1/-1;grid-row:2;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:4px 0}
++html body.creator-editor-page .editor-toolbar__tools :is(.editor-toolbar__btn,.editor-pill){flex:none;width:auto!important;min-width:68px!important;min-height:40px!important;max-width:none!important;padding:8px 12px!important;border:0!important;border-radius:10px!important;background:var(--ui-panel-soft)!important;color:var(--ui-text)!important;font-size:12px!important}
++html body.creator-editor-page .editor-toolbar__tools .grow{display:none}
++html body.creator-editor-page .editor-toolbar__tools .is-danger{color:var(--ui-danger)!important}
++html body.creator-editor-page .creator-editor__content{padding:16px!important}
++html body.creator-editor-page .editor-tip{margin:0 0 16px!important;padding:10px 12px!important;border:0!important;background:var(--ui-panel-soft)!important;color:var(--ui-muted)!important;font-size:12px!important;border-radius:10px!important}
++html body.creator-editor-page .editor-tip svg{color:var(--ui-muted)!important}
++html body.creator-editor-page .editor-section-title{justify-content:flex-start!important;text-align:left!important;margin:12px 0 16px!important;padding:0!important;gap:0!important}
++html body.creator-editor-page .editor-section-title::before,html body.creator-editor-page .editor-section-title::after{display:none!important}
++html body.creator-editor-page .app-bottom-nav{display:none!important}
++html body.creator-editor-page .app-main{padding-bottom:max(24px,env(safe-area-inset-bottom))!important}
++html body.creator-editor-page .creator-editor__tabs{background:var(--ui-panel)!important;gap:4px;overflow:auto;padding:8px 12px!important;border-bottom:1px solid var(--ui-line);border-radius:0;scrollbar-width:none}
++html body.creator-editor-page .creator-editor__tabs button{flex:none;min-height:40px;padding:8px 12px!important;font-size:13px;border:0;border-radius:10px;background:transparent;color:var(--ui-muted)}
++html body.creator-editor-page .creator-editor__tabs button.is-active{background:var(--ui-accent-soft)!important;color:var(--ui-accent)!important}
++html body.creator-editor-page .editor-section-title{font-size:18px!important;font-weight:650;padding:20px 0 10px!important;margin-top:8px!important;border:0;background:transparent;color:var(--ui-text)!important}
++html body.creator-editor-page .editor-field{margin-bottom:20px!important}.creator-editor-page .editor-field__hint{font-size:12px!important;color:var(--ui-muted)!important;line-height:1.6}
++/* Lists and administration use separators, not nested decorative cards. */
++html body.xy-admin .xy-btn-primary{background:var(--ui-accent)!important;color:var(--ui-panel)!important}
++html body.xy-admin .xy-btn-ghost{background:var(--ui-panel-soft)!important;border:0!important;color:var(--ui-text)!important}
++html body.xy-admin .xy-input{background:var(--ui-panel-soft)!important;color:var(--ui-text)!important;border-color:transparent!important}
++html body input[type=file]::file-selector-button{border:0;border-radius:8px;padding:10px 12px;margin-right:10px;background:var(--ui-accent-soft)!important;color:var(--ui-accent)!important;font:inherit;font-weight:600}
++html body input:is([type=checkbox],[type=radio]){accent-color:var(--ui-accent)}
++html body .history-row{padding:14px 16px!important}.history-row__main img{width:48px!important;height:60px!important;border-radius:10px!important}
++html body.xy-admin .xy-glass{border-radius:16px!important;padding:18px!important}.xy-admin .ui-node-list{gap:6px}.xy-admin .ui-node-tab{border-radius:12px!important;box-shadow:none!important}.xy-admin .ui-node-tab.is-active{background:var(--ui-accent-soft)!important;color:var(--ui-accent)!important;border-color:transparent!important}
++html body.xy-admin .ui-node-panel{background:var(--ui-panel)!important;border:0!important;padding:12px!important}.xy-admin .ui-save-bar{gap:8px;flex-wrap:wrap}.xy-admin .ui-save-bar>div{flex-wrap:wrap;gap:8px}
++html body.xy-admin .ui-model-list{border-radius:12px;max-height:52dvh}.xy-admin .ui-model-row{min-height:64px;box-shadow:none!important}
++html body.xy-admin :is(.ui-node-credentials,.ui-bulk-field){gap:10px}.xy-admin .ui-model-selection{background:var(--ui-panel-soft);border:0}.xy-admin .ui-model-selection button:not(.xy-btn){background:var(--ui-panel)}
++/* Community pages retain independent routes and the established content structure. */
++html body.community-app{--c-bg:var(--ui-bg);--c-text:var(--ui-text);--c-muted:var(--ui-muted);--c-line:var(--ui-line);--c-soft:var(--ui-panel-soft);--c-accent:var(--ui-accent)}
++html body.community-app :is(.c-page,.c-header,.c-post,.c-reply-dock,.c-title-input,.c-body-input,.c-form-row input,.c-form-row select,.c-sheet){background:var(--ui-panel)!important;color:var(--ui-text)!important}
++html body.community-app .c-header{min-height:56px;padding-inline:12px;border-bottom:1px solid var(--ui-line)}.community-app .c-header h1{font-size:19px!important;font-weight:650!important}
++html body.community-app .c-post{padding:16px!important;border-bottom:6px solid var(--ui-bg)!important}.community-app .c-post h2{font-size:17px!important;line-height:1.5}.community-app .c-post-copy p{font-size:14px!important;line-height:1.75;color:var(--ui-muted)}
++html body.community-app .c-topic-icon{background:var(--ui-accent-soft)!important;color:var(--ui-accent)!important;box-shadow:none!important}
++html body.community-app .c-tabs button[aria-pressed=true]{color:var(--ui-accent)!important}.community-app .c-compose-fab{border-radius:16px!important;background:var(--ui-accent)!important;color:#fff!important;box-shadow:0 5px 14px #27203322!important}
++html body.community-app .c-reply-dock{border-top:1px solid var(--ui-line);box-shadow:none!important}.community-app .c-reply-dock textarea{border-radius:12px!important;background:var(--ui-panel-soft)!important;color:var(--ui-text)!important}
++html body.community-app .c-empty{padding:56px 20px!important}.community-app .c-empty h2{font-size:17px!important}.community-app .c-empty p{font-size:13px!important;line-height:1.6}
++/* Secondary pages share the same surface system without reskinning farm artwork. */
++html body :is(.rw-balance,.rw-redeem,.rw-page .ws-panel,.cm-card,.cm-contest){border-radius:16px!important;box-shadow:none!important;background:var(--ui-panel)!important;color:var(--ui-text)!important;border-color:var(--ui-line)!important}
++html body .rw-top{gap:16px!important}.rw-page .ws-stats{background:var(--ui-panel-soft)!important;border:0!important}.rw-page .rw-balance__num{font-size:32px!important;color:var(--ui-text)!important}.rw-page .ws-headline__copy{font-size:13px!important;color:var(--ui-muted)!important}
++html body .cm-card__body{padding:14px!important}.cm-card__name{font-size:16px!important;color:var(--ui-text)!important}.cm-card__summary{font-size:13px!important;color:var(--ui-muted)!important}.cm-card__meta{color:var(--ui-muted)!important}
++html body .farm-welcome{padding:12px 0!important}.farm-welcome h2{font-size:20px!important;line-height:1.5}.farm-kicker{font-size:12px!important;color:var(--ui-muted)!important}.farm-stats{gap:8px!important}.farm-stats strong{font-size:22px!important}
++/* All app dialogs share surfaces, typography and action hierarchy. */
++html body :is(.cm-mask,.ws-create-mask,.xy-modal-mask,.character-version-backdrop,.farm-modal-backdrop){backdrop-filter:none!important;background:#0006!important}
++html body :is(.cm-modal,.ws-create-dialog,.xy-modal,.character-version-dialog,.farm-seed-modal,.ui-model-dialog){border:0!important;border-radius:20px!important;background:var(--ui-panel)!important;color:var(--ui-text)!important;box-shadow:var(--ui-float)!important}
++html body :is(.cm-modal,.ws-create-dialog,.xy-modal,.character-version-dialog,.farm-seed-modal,.ui-model-dialog) :is(h2,h3){font-size:18px!important;line-height:1.4;font-weight:650!important}
++html body :is(.cm-modal__head,.ws-create-head,.character-version-dialog__head){padding:16px!important;border-bottom:1px solid var(--ui-line)!important}
++html body .ui-admin-dialog__sheet{padding:20px!important;border-radius:20px}.ui-admin-dialog__sheet footer{position:sticky;bottom:-20px;background:var(--ui-panel);padding:12px 0;gap:8px}.ui-admin-dialog__sheet footer button{flex:1;min-width:0}
++/* Picker geometry is owned by option-picker.css; do not re-skin it here. */
++html body .homer-action-dialog{border-radius:20px!important;background:var(--ui-panel,#fff)!important;color:var(--ui-text,#202124)!important}.homer-action-dialog :is(h2,p){color:inherit!important}.homer-action-dialog footer button{border-radius:12px!important}
++@media(max-width:600px){
++ html body .app-page-pad{padding:8px 16px 24px!important}
++ html body.hub-page--workshop .ws-navitem{padding:12px!important;gap:8px!important}.hub-page--workshop .ws-navitem__text em{font-size:11px!important}
++ html body.xy-admin .ui-save-bar{position:static}.xy-admin .ui-model-selection>div{align-items:flex-start}.xy-admin .ui-node-list{max-width:100%;scrollbar-width:none}
++ html body .ui-model-dialog{margin:auto auto 0;width:100%!important;max-height:90dvh;border-radius:22px 22px 0 0!important}.ui-model-dialog .ui-admin-dialog__sheet{border-radius:22px 22px 0 0;padding-bottom:max(20px,env(safe-area-inset-bottom))!important}
++}
++/* Authentication uses the same controls; no glowing hero or low-contrast tabs. */
++.creator-core{max-width:640px;margin:0 auto;display:grid;gap:18px;padding:8px 0 32px}
++.creator-core__portrait{position:relative;display:grid;place-items:center;width:88px;height:104px;justify-self:center;overflow:hidden;border-radius:16px;background:var(--ui-panel-soft);color:var(--ui-muted);cursor:pointer}
++.creator-core__portrait input{position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer;z-index:2}.creator-core__portrait img{width:100%;height:100%;object-fit:cover}.creator-core__portrait svg{width:36px;height:36px}.creator-core__portrait span{position:absolute;bottom:0;inset-inline:0;padding:4px;background:#202124b3;color:white;text-align:center;font-size:11px}
++.creator-core__name{display:flex;align-items:center;gap:20px;background:var(--ui-panel);padding:10px 16px;border-radius:12px}.creator-core__name span{flex:none;font-size:15px;font-weight:600}.creator-core__name input{min-width:0}
++.creator-core__writing{display:grid;gap:8px;background:var(--ui-panel);padding:16px;border-radius:12px}.creator-core__writing strong{font-size:16px}.creator-core__writing>span{font-size:12px;color:var(--ui-muted)}
++html body.creator-editor-page .creator-core__writing textarea{min-height:140px!important;background:transparent!important;padding:8px 0!important;border:0!important;resize:vertical;line-height:1.7;font-size:15px}
++.creator-core__advanced,.ui-connection-entry{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;text-align:left;border:0;border-radius:12px;background:var(--ui-panel);color:var(--ui-text);padding:16px;min-height:64px}
++.creator-core__advanced strong,.ui-connection-entry strong{display:block;font-size:15px;font-weight:600}.creator-core__advanced small,.ui-connection-entry small{display:block;font-size:12px;color:var(--ui-muted);margin-top:4px}.creator-core__advanced>span:last-child,.ui-connection-entry>span:last-child{font-size:24px;color:var(--ui-muted)}
++.ui-connection-settings{display:grid;gap:16px;padding:16px;background:var(--ui-panel-soft);border-radius:12px}
++.ui-model-workspace .ui-model-list{max-height:none!important}
++html body.xy-admin .xy-btn-primary:hover{background:var(--ui-accent)!important;color:#fff!important}
++html body.xy-admin .ui-model-page>.flex{margin-bottom:12px!important}.ui-model-page>.flex p{font-size:12px!important}
++html body.xy-admin .ui-model-workspace>form{padding:12px!important;border:0!important;border-radius:0!important}
++html body.xy-admin .ui-model-workspace .ui-node-panel{padding:0!important}
++html body.xy-admin .ui-model-workspace .ui-save-bar{padding:0 0 10px!important}
++.ui-model-catalog{padding:0;background:none;border:0}.ui-model-catalog>div:first-child>div>div:last-child{display:none}
++.ui-model-catalog .ui-model-toolbar{flex-wrap:nowrap}.ui-model-catalog .ui-model-toolbar span{white-space:nowrap}
++html body.xy-admin .ui-connection-entry{min-height:48px;padding:8px 12px;background:var(--ui-panel-soft)}.ui-connection-entry small{font-size:11px}
++html body.xy-admin .ui-batch-models{padding:6px 12px;border:0;background:var(--ui-panel-soft);margin-top:6px}
++@media(max-width:600px){html body.xy-admin .ui-node-layout{gap:12px}.xy-admin .ui-node-list{display:flex;gap:4px!important;position:static!important}.xy-admin .ui-node-tab{min-width:100px!important;min-height:54px!important;padding:8px 10px!important;gap:0!important;flex:1;white-space:nowrap}.xy-admin .ui-node-tab strong{font-size:13px}.xy-admin .ui-node-tab small{font-size:10px}.xy-admin .ui-model-page .space-y-5>:not([hidden])~:not([hidden]){margin-top:12px!important}}
++html body.auth-page .xy-cinema-title{font-size:28px;line-height:1.4;background:none!important;-webkit-text-fill-color:var(--ui-text)!important;text-shadow:none!important;color:var(--ui-text)!important}
++html body.auth-page img[alt="惑梦（Homer）"]{width:64px;height:64px;filter:none}
++html body.auth-page .xy-glass{border:0!important;padding:24px!important;border-radius:16px!important}
++html body.auth-page :is(.text-slate-400,.text-slate-500){color:var(--ui-muted)!important}
++.auth-tabs{display:flex;gap:4px;background:var(--ui-panel-soft);border-radius:12px;padding:4px;margin-bottom:20px}
++.auth-tabs button{flex:1;min-height:44px;border:0;border-radius:9px;background:transparent;color:var(--ui-muted);font-size:14px}
++.auth-tabs button[aria-pressed=true]{background:var(--ui-panel);color:var(--ui-accent);font-weight:650}
++/* Existing personal centre: identity, personal activity, tools, separate settings. */
++html body.profile-center-page:not(.homer-runtime){--ui-accent:#25282e;--ui-accent-soft:#eeeff1;--ui-bg:#f3f4f5;--ui-panel:#fff;--ui-text:#202227;--ui-muted:#656972}
++html body.profile-center-page .profile-center{padding:0 0 24px!important;gap:6px!important;max-width:760px;margin:auto}
++html body.profile-center-page .app-topbar{background:var(--ui-panel)!important;min-height:56px!important;border:0!important}
++html body.profile-center-page .profile-topbar h1{font-size:18px!important;font-weight:650}
++.profile-header-tool,.profile-topbar__back{display:grid;place-items:center;width:44px;height:44px;color:var(--ui-text);font-size:30px;text-decoration:none}.profile-header-tool svg{width:22px;height:22px}
++html body.profile-center-page .profile-identity-card{padding:20px 20px 16px!important;background:var(--ui-panel)!important;gap:16px!important;border:0!important;border-radius:0!important;box-shadow:none!important}
++html body.profile-center-page .profile-avatar{width:84px!important;height:84px!important;flex:none}
++html body.profile-center-page .profile-identity-main h2{font-size:20px!important}.profile-center-page .profile-identity-main p{display:none}.profile-center-page .profile-edit-link{align-self:center;font-size:12px;border:0;background:none;padding:8px 0;white-space:nowrap;color:var(--ui-muted)}
++.profile-community-nav{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--ui-panel);padding:0 12px 14px;margin-top:-6px}
++.profile-community-nav a{display:flex;align-items:center;justify-content:center;flex-direction:column;gap:7px;min-height:70px;color:var(--ui-text);text-decoration:none;font-size:12px}.profile-community-nav svg{width:22px;height:22px}
++html body.profile-center-page .profile-wallet-card{position:relative;display:flex!important;align-items:center;justify-content:space-between;padding:16px 20px!important;border-radius:0!important;min-height:76px!important;gap:10px}
++html body.profile-center-page .profile-wallet-card>div:first-child{display:flex;align-items:baseline;gap:12px}.profile-center-page .profile-wallet-card strong{font-size:25px!important}.profile-center-page .profile-wallet-breakdown{display:none!important}
++html body.profile-center-page .profile-wallet-card em{position:static!important;white-space:nowrap;font-size:12px;color:var(--ui-muted)!important}
++html body.profile-center-page .profile-shortcuts{padding:4px 12px!important;border-radius:0!important;background:var(--ui-panel)!important}.profile-center-page .profile-shortcuts a{border:0!important}.profile-center-page .profile-shortcuts small{display:none}.profile-center-page .profile-shortcuts span{font-size:12px}.profile-center-page .profile-shortcuts svg{color:var(--ui-text)}
++html body.profile-center-page .profile-secondary-grid{border-radius:0!important}.profile-center-page .profile-secondary-grid a{padding-inline:20px!important;min-height:62px!important}.profile-center-page .profile-secondary-grid small{font-size:11px}
++html body.profile-center-page .profile-settings{border:0!important;border-radius:0!important;background:var(--ui-panel)!important}.profile-center-page .profile-settings>summary{display:none!important}.profile-center-page .profile-settings__body{padding:0!important}.profile-center-page .profile-setting-section{border:0!important;border-radius:0!important}
++.profile-settings-routes{display:flex;flex-direction:column}.profile-settings-routes>a,.profile-settings-routes>button{min-height:56px;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;text-decoration:none;color:var(--ui-text);border:0;border-bottom:1px solid var(--ui-line);background:var(--ui-panel);font:inherit;text-align:left}.profile-settings-routes .profile-signout{color:#a52a3e}.profile-settings-routes span{color:var(--ui-muted)}
++.profile-center.is-settings .community-inline{border:0;border-radius:0;padding:20px;display:grid;gap:4px}.profile-center.is-settings .community-inline button,.profile-center.is-settings .community-inline a{min-height:48px;text-align:left;border-bottom:1px solid var(--ui-line);color:var(--ui-text)}
++.profile-center-page [hidden]{display:none!important}
++html[data-theme=dark] body.profile-center-page:not(.homer-runtime){--ui-accent:#e6e8ec;--ui-accent-soft:#34373c;--ui-bg:#141518;--ui-panel:#202227;--ui-text:#f3f4f6;--ui-muted:#b2b6c0}
+diff --git a/frontend/assets/css/tavo-reference.css b/frontend/assets/css/tavo-reference.css
+new file mode 100644
+index 0000000000000000000000000000000000000000..0797a034798edc620e43a6af888afd471c763001
+--- /dev/null
++++ b/frontend/assets/css/tavo-reference.css
+@@ -0,0 +1,87 @@
++/* Reference geometry measured from Tavo 1.5.0 at density 440.
++ * Extra Homer controls are confined to the tools disclosure / advanced definitions.
++ * This file contains independent CSS, not the extracted Flutter bundle. */
++html body.creator-editor-page{--ref-canvas:#f0f0f0;--ref-field:#ebebeb;--ref-line:#dbdbdb;--ref-text:#474747;--ref-muted:#999;--ref-accent:#824cff;background:var(--ref-canvas)!important}
++html body.creator-editor-page .ref-creator{background:var(--ref-canvas)!important;color:var(--ref-text)!important;padding-bottom:100px!important}
++html body.creator-editor-page .ref-creator .editor-toolbar{grid-template-columns:40px minmax(0,1fr) 40px!important;min-height:44px;padding:0!important;gap:0!important;background:var(--ref-canvas)!important;position:sticky!important;top:0;z-index:45}
++html body.creator-editor-page .ref-creator .editor-toolbar>a{width:40px!important;height:44px!important;min-height:44px!important;border-radius:0!important;background:none!important;color:#111!important}
++html body.creator-editor-page .ref-creator .editor-toolbar>a svg{width:26px;height:26px;stroke-width:2.5}
++html body.creator-editor-page .ref-creator .editor-toolbar__identity{justify-content:center;text-align:center;margin:0!important;padding:0!important}
++html body.creator-editor-page .ref-creator .editor-toolbar__identity strong{font-size:16px!important;font-weight:750;line-height:24px;color:var(--ref-text)}
++.ref-creator .editor-more-trigger{grid-column:3;grid-row:1;border:0;border-radius:0;width:40px;height:44px;background:none;color:var(--ref-text);font-size:14px;letter-spacing:2px;padding:0;cursor:pointer}
++html body.creator-editor-page .ref-creator .editor-toolbar__primary{position:fixed!important;bottom:max(15px,env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);width:58%!important;max-width:380px;height:47px;min-height:47px!important;padding:0!important;border:0!important;border-radius:28px!important;background:linear-gradient(105deg,#824cff,#f08035)!important;color:#fff!important;font-size:16px!important;font-weight:700;z-index:60;box-shadow:none!important}
++.ref-creator .editor-toolbar__primary svg{display:none!important}
++html body.creator-editor-page .ref-creator .editor-toolbar{backdrop-filter:none!important;-webkit-backdrop-filter:none!important;filter:none!important;transform:none!important}
++html body.creator-editor-page .ref-creator .editor-toolbar__primary{grid-area:auto!important;transform:translateX(-50%)!important}
++.ref-creator::after{content:'';position:fixed;bottom:0;left:0;right:0;height:84px;background:var(--ref-canvas);pointer-events:none;z-index:44}
++html body.creator-editor-page .ref-creator .editor-toolbar__tools{grid-row:2;grid-column:1/-1;flex-wrap:wrap;overflow:visible;background:var(--ref-canvas);padding:8px 16px;border-bottom:1px solid var(--ref-line)}
++html body.creator-editor-page .ref-creator .creator-editor__content{width:100%;max-width:1160px;padding:0 19px!important}
++html body.creator-editor-page .ref-creator .editor-form{padding:0!important;margin:0;width:100%;max-width:none;gap:0}
++html body.creator-editor-page .ref-creator .creator-core{display:flex;flex-direction:column;align-items:stretch;gap:13px;padding:6px 0 20px;max-width:none;width:100%;margin:0}
++html body.creator-editor-page .ref-creator .creator-core__portrait{align-self:center;flex:none;width:76px;height:76px;border-radius:50%;margin:0 0 7px;background:#e5e5e5;overflow:visible;color:#b7b7b7}
++.ref-creator .creator-core__portrait img{border-radius:50%}.ref-creator .creator-core__portrait>svg{width:46px;height:46px}
++html body.creator-editor-page .ref-creator .creator-core__portrait-add{left:auto;right:0;bottom:0;width:25px;height:25px;padding:0;border:2px solid var(--ref-canvas);border-radius:50%;background:var(--ref-accent);color:white;display:grid;place-items:center;font-size:24px;line-height:21px;font-weight:600}
++html body.creator-editor-page .ref-creator .creator-core__name{height:66px;min-height:66px;gap:14px;padding:14px 21px;border:1.4px solid var(--ref-line);border-radius:14px;background:var(--ref-field);margin:0}
++html body.creator-editor-page .ref-creator .creator-core__name>span{font-size:16px;font-weight:700;color:var(--ref-text);white-space:nowrap}
++html body.creator-editor-page .ref-creator .creator-core__name>input{background:transparent!important;border:0!important;border-radius:0!important;min-height:32px!important;padding:0!important;font-size:16px!important;line-height:1.5;flex:1;color:var(--ref-text)!important;outline-offset:4px}
++.ref-creator .creator-core b{font-size:16px;color:#b81111;font-weight:650}
++html body.creator-editor-page .ref-creator .creator-core :is(input,textarea):focus{outline:none!important;box-shadow:none!important}
++html body.creator-editor-page .ref-creator :is(.creator-core__name,.creator-core__writing):focus-within{border-color:#824cff}
++html body.creator-editor-page .ref-creator .creator-core__writing{display:flex;flex-direction:column;gap:0;background:var(--ref-field);border:1.4px solid var(--ref-line);border-radius:14px;padding:14px 21px 15px;margin:0;min-height:175px;height:175px}
++.ref-creator .creator-core__field-head{display:flex;align-items:center;gap:6px;min-height:24px;position:relative}
++.ref-creator .creator-core__field-head>label,.ref-creator .creator-core__field-head>strong{font-size:16px;font-weight:700;line-height:24px;color:var(--ref-text);white-space:nowrap}
++.ref-creator .creator-core__field-head>span{font-size:12px;color:var(--ref-muted)}
++.ref-creator .creator-core__field-head>button{display:grid;place-items:center;align-self:center;width:40px;min-height:32px;height:32px;margin:-4px -20px -4px auto;border:0;background:none;color:#6c6c6c;font-size:14px;font-weight:700;cursor:pointer}
++html body.creator-editor-page .ref-creator .creator-core__writing textarea{font-size:16px!important;line-height:1.5!important;padding:6px 0 0!important;min-height:0!important;flex:1;width:100%;resize:none;color:var(--ref-text)!important;background:none!important;border:0!important;border-radius:0!important;box-shadow:none!important}
++html body.creator-editor-page .ref-creator .creator-core input::placeholder,html body.creator-editor-page .ref-creator .creator-core textarea::placeholder{color:#aaa!important;opacity:1}
++.ref-creator .creator-core__expand{display:flex;align-items:center;justify-content:center;gap:12px;min-height:52px;padding:0;margin:0;border:0;background:none;color:var(--ref-text);font-size:16px}
++.ref-creator .creator-core__expand svg{width:16px;height:16px}
++.ref-creator .creator-core__extra{display:grid;gap:13px}.ref-creator .creator-core__advanced{background:var(--ref-field);border:1px solid var(--ref-line);border-radius:14px;color:var(--ref-text)}
++html body.creator-editor-page .ref-creator .creator-editor__tabs{background:var(--ref-canvas)!important}
++@media(max-width:980px){.ref-creator.is-core-editor .creator-preview{display:none}.ref-creator.is-core-editor .creator-preview.is-open{display:block}}
++@media(min-width:981px){.ref-creator .creator-editor__layout{padding-top:16px}.ref-creator .creator-core{max-width:620px!important;margin:auto!important}.ref-creator .editor-toolbar__primary{width:300px!important}}
++
++/* Character library: measured native header + search + horizontal character rows. */
++html body.ref-role-library,html body.ref-role-library .app-main{background:#f0f0f0!important;color:#474747!important}
++html body.ref-role-library .app-topbar{display:grid!important;grid-template-columns:44px minmax(0,1fr) auto;gap:8px!important;min-height:44px!important;height:44px;padding:0 16px 0 0!important;background:#f0f0f0!important;border:0!important;box-shadow:none!important}
++html body.ref-role-library .app-topbar h1{font-size:16px!important;text-align:center!important;font-weight:750!important;position:absolute;left:50%;transform:translateX(-50%);max-width:calc(100% - 176px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
++.ref-role-library .app-topbar>.xy-btn{grid-column:3}
++.ref-role-library .app-topbar>.grow{display:none}.ref-library-back{display:grid;place-items:center;width:44px;height:44px;color:#111}.ref-library-back svg{width:26px;height:26px}
++html body.ref-role-library .app-topbar>.xy-btn{border-radius:24px!important;min-height:28px!important;font-size:14px!important;padding:5px 11px!important;background:linear-gradient(105deg,#824cff,#f08035)!important;color:white!important;box-shadow:none!important;border:0!important}
++html body.ref-role-library .app-page-pad{padding:7px 19px 24px!important}
++.ref-library-search{display:flex;gap:8px;margin:0 0 22px}.ref-library-search label{display:flex;align-items:center;gap:10px;background:#ebebeb;border-radius:14px;padding:0 12px;min-width:0;flex:1}.ref-library-search svg{width:22px;height:22px;flex:none;color:#7a7a7a}
++html body.ref-role-library .ref-library-search input{min-height:40px;height:40px;font-size:16px;min-width:0;width:100%;padding:0;background:none;border:0;box-shadow:none;color:#474747;outline-offset:3px}
++html body.ref-role-library .ref-library-search select{height:42px;width:64px;min-height:42px;padding:0 8px;border:0!important;border-radius:14px!important;background:#e5e5e5!important;color:#5f5f5f!important;font-size:13px!important}
++.ref-library-list{display:flex;flex-direction:column}.ref-library-row{display:flex;align-items:center;gap:12px;min-height:89px;position:relative;padding:10px 0;color:#474747}
++.ref-library-cover{width:54px;height:54px;flex:none;border-radius:50%;overflow:hidden}.ref-library-cover img{width:100%;height:100%;object-fit:cover}
++.ref-library-copy{display:flex;flex-direction:column;min-width:0;flex:1;gap:3px}.ref-library-copy h2{font-size:15px;font-weight:700;line-height:1.4;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ref-library-copy h2 a{color:inherit;text-decoration:none}.ref-library-copy p{font-size:13px;line-height:1.4;margin:0;color:#717171;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;display:block!important}.ref-library-meta{display:flex;gap:7px;color:#737373;font-size:12px;white-space:nowrap;overflow:hidden;order:-1}.ref-library-copy>div:first-child{display:contents}.ref-library-copy>div:first-child>div{display:contents}.ref-library-copy h2{order:-2}
++.ref-library-more{display:grid;place-items:center;width:40px;height:48px;flex:none;border:0;background:none;color:#85858d;padding:0}.ref-library-more svg{width:22px;height:22px}
++.ref-library-empty,.ref-library-error{padding:24px 8px;text-align:center;font-size:14px;color:#646464;line-height:1.7}.ref-library-error button{border:0;background:none;color:#7142ce;padding:8px}
++.ref-role-library [data-app-bottom-nav]{display:none!important}
++.ref-library-actions{width:min(440px,100%);padding:20px 20px max(16px,env(safe-area-inset-bottom));border:0;border-radius:28px 28px 0 0;background:#ededed;color:#474747;margin:auto auto 0;max-height:85dvh;overflow:auto}.ref-library-actions::backdrop{background:#0008}.ref-library-actions h2{text-align:center;font-size:17px;margin:0 0 14px;overflow-wrap:anywhere}.ref-library-actions :is(a,button){display:block;min-height:48px;width:100%;border:0;background:none;color:inherit;text-align:center;padding:12px;font:15px/1.5 system-ui;text-decoration:none;border-radius:12px}.ref-library-actions .is-danger{color:#b02a3f}.ref-library-actions :is(a,button):active{background:#ddd}
++html body.ref-role-library .ref-version-editor{background:#f0f0f0!important;color:#474747!important;box-shadow:none!important;border:0!important;border-radius:20px!important}.ref-version-editor label{color:#606060!important}
++
++/* Workshop maps Homer-only resource destinations onto the same list hierarchy. */
++html body.ref-workshop .app-main{background:#f0f0f0!important;color:#474747!important}
++html body.ref-workshop .app-topbar{height:44px;min-height:44px!important;background:#f0f0f0!important;padding:0 19px!important;border:0!important;box-shadow:none!important}
++html body.ref-workshop .app-topbar h1{font-size:18px!important;font-weight:750!important}
++html body.ref-workshop .app-topbar>.xy-btn{min-height:30px!important;padding:5px 12px!important;background:linear-gradient(105deg,#824cff,#f08035)!important;border:0!important;border-radius:24px!important;color:#fff!important}
++html body.ref-workshop .ws-quicknav{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:4px!important;margin:8px 0 26px!important;padding:0!important}
++html body.ref-workshop .ws-navitem{display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center;gap:8px!important;min-height:86px!important;padding:8px 2px!important;border:0!important;background:none!important;box-shadow:none!important}
++html body.ref-workshop .ws-navitem__ico{width:44px;height:44px;border-radius:14px!important;color:#5f5f5f!important;background:#e6e6e6!important;display:grid;place-items:center}
++html body.ref-workshop .ws-navitem__text strong{font-size:13px!important;color:#474747!important;font-weight:500!important;white-space:nowrap}
++.ref-workshop :is(.ws-navitem__ico,.ws-create-option__icon) svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
++html body.ref-workshop .ws-main{padding:0!important;background:none!important;border:0!important;box-shadow:none!important}.ref-workshop .ws-section-head{margin-bottom:10px}
++html body.ref-workshop .ws-section-head h3{font-size:17px!important;color:#474747!important}.ref-workshop .ws-section-head a{font-size:12px!important;color:#6f6f6f!important}
++html body.ref-workshop .ws-cards{display:flex!important;flex-direction:column;gap:0!important}
++html body.ref-workshop .ws-card{display:flex!important;align-items:center;gap:12px;min-height:88px!important;background:none!important;border:0!important;box-shadow:none!important;padding:10px 0!important;border-radius:0!important}
++html body.ref-workshop .ws-card__cover{width:54px!important;height:54px!important;aspect-ratio:1;border-radius:50%!important;flex:none;overflow:hidden}.ref-workshop .ws-card__badge{display:none!important}
++html body.ref-workshop .ws-card__body{padding:0!important;flex:1;min-width:0}.ref-workshop .ws-card__name{font-size:15px!important;color:#474747!important}.ref-workshop .ws-card__desc{font-size:13px!important;line-height:1.5;color:#717171!important;-webkit-line-clamp:1!important}
++html body.ref-workshop .ws-card--add{display:none!important}
++html body.ref-workshop .ws-create-mask{align-items:end!important;padding:0!important;background:#0008!important;backdrop-filter:none!important}
++html body.ref-workshop .ws-create-dialog{width:min(480px,100%);margin:0 auto;background:#ededed!important;border:0!important;border-radius:28px 28px 0 0!important;box-shadow:none!important;color:#474747!important}
++html body.ref-workshop .ws-create-head{position:relative;justify-content:center;min-height:66px;align-items:center;padding:16px 48px!important;border:0!important}.ref-workshop .ws-create-close{position:absolute;right:10px;top:11px;width:44px;height:44px;background:none!important;color:#666!important;font-size:26px}
++html body.ref-workshop .ws-create-head h2{font-size:18px!important;color:#474747!important}
++html body.ref-workshop .ws-create-grid{grid-template-columns:1fr!important;gap:0!important;padding:0 20px max(20px,env(safe-area-inset-bottom))!important}
++html body.ref-workshop .ws-create-option{min-height:68px!important;padding:10px 12px!important;gap:16px!important;border:0!important;background:none!important;border-radius:12px!important;color:#474747!important;transform:none!important}
++html body.ref-workshop .ws-create-option__icon{width:32px;height:32px;color:#727272!important;background:none!important}.ref-workshop .ws-create-option small{font-size:12px!important;color:#727272!important}.ref-workshop .ws-create-option strong{font-size:15px!important;color:#474747!important}
+diff --git a/frontend/assets/js/admin-app.js b/frontend/assets/js/admin-app.js
+index 386a8357b290c9763e1f05bca60480c72842c50c..b2d0355db2d1ac221b006325e26b4b54c975870b 100644
+--- a/frontend/assets/js/admin-app.js
++++ b/frontend/assets/js/admin-app.js
+@@ -606,6 +606,11 @@ function adminPanel() {
+     uiNodeId: '',
+     uiModelSearch: '',
+     uiModelEditor: null,
++    uiModelEditorTarget: null,
++    uiModelSelected: [],
++    uiModelSelecting: false,
++    uiModelBulk: null,
++    uiModelEditError: '',
+     uiPresetSearch: '',
+     llmSettings: null,
+     globalPresets: null,
+@@ -1718,7 +1723,56 @@ function adminPanel() {
+       const query = this.uiModelSearch.trim().toLocaleLowerCase();
+       return (preset.modelConfigs || []).filter(item => !query || (item.model + ' ' + item.display_name).toLocaleLowerCase().includes(query));
+     },
+-    openModelEditor(config) { this.uiModelEditor = config; this.$nextTick(() => document.querySelector('.ui-model-dialog input:not(:disabled)')?.focus()); },
++    openModelEditor(config) {
++      this.uiModelEditorTarget = config; this.uiModelEditor = structuredClone(JSON.parse(JSON.stringify(config)));
++      this.uiModelEditError = ''; this.$nextTick(() => document.querySelector('.ui-model-dialog input:not(:disabled)')?.focus());
++    },
++    validModelPrices(value) {
++      return ['input_price','output_price'].every(key => value[key] !== '' && value[key] != null && Number.isFinite(Number(value[key])) && Number(value[key]) >= 0);
++    },
++    applyModelEditor() {
++      if (!this.validModelPrices(this.uiModelEditor.pricing)) { this.uiModelEditError='单价必须是大于或等于 0 的数字'; return; }
++      Object.assign(this.uiModelEditorTarget, this.uiModelEditor);
++      this.uiModelEditor = null; this.uiModelEditorTarget = null;
++    },
++    modelSelectionKey(node, config) { return JSON.stringify([node.id, config.model]); },
++    allModelRows() { return this.llmForm.presets.flatMap(node => (node.modelConfigs || []).map(config => ({node,config,key:this.modelSelectionKey(node,config)}))); },
++    selectedModelRows() { const keys=new Set(this.uiModelSelected);return this.allModelRows().filter(row=>keys.has(row.key)); },
++    toggleModelSelection(node,config) {
++      const key=this.modelSelectionKey(node,config);
++      this.uiModelSelected=this.uiModelSelected.includes(key)?this.uiModelSelected.filter(k=>k!==key):[...this.uiModelSelected,key];
++    },
++    selectFilteredModels(node) {
++      this.uiModelSelected=[...new Set([...this.uiModelSelected,...this.filteredModelConfigs(node).map(config=>this.modelSelectionKey(node,config))])];
++    },
++    selectAllModels() { this.uiModelSelected=this.allModelRows().map(row=>row.key); },
++    openModelBulk() {
++      const rows=this.selectedModelRows();if(!rows.length)return;
++      const common=read=>{const values=rows.map(read);return values.every(v=>v===values[0])?values[0]:'';};
++      this.uiModelEditError='';
++      this.uiModelBulk={keys:rows.map(r=>r.key),groups:[...new Set(rows.map(r=>r.node.name))],applyPreset:false,applyMode:false,applyInput:false,applyOutput:false,
++        preset_id:common(r=>r.config.preset_id),mode:common(r=>r.config.pricing.mode),input_price:common(r=>r.config.pricing.input_price),output_price:common(r=>r.config.pricing.output_price)};
++    },
++    applyModelBulk() {
++      const draft=this.uiModelBulk;if(!draft)return;
++      const rows=this.allModelRows().filter(r=>draft.keys.includes(r.key));
++      const fail=message=>{this.uiModelEditError=message;};
++      if(rows.length!==draft.keys.length)return fail('部分选中模型已改变，请取消后重新选择');
++      if(!draft.applyPreset&&!draft.applyMode&&!draft.applyInput&&!draft.applyOutput)return fail('请勾选需要修改的字段，其余字段保持原值');
++      if(draft.applyPreset&&!this.globalPromptPresetOptions().some(p=>p.id===draft.preset_id))return fail('请选择有效的绑定预设');
++      if(draft.applyMode&&!['per_token','per_request'].includes(draft.mode))return fail('请选择计价方式');
++      if(draft.applyMode&&rows.some(r=>r.config.pricing.mode!==draft.mode)&&(!draft.applyInput||!draft.applyOutput))return fail('改变计价单位时，请同时明确输入和输出单价，避免按次与按量价格混用');
++      for(const [flag,key] of [['applyInput','input_price'],['applyOutput','output_price']]){
++        if(draft[flag]&&(draft[key]===''||draft[key]==null||!Number.isFinite(Number(draft[key]))||Number(draft[key])<0))return fail('单价必须是大于或等于 0 的数字');
++      }
++      for(const {config} of rows){
++        if(draft.applyPreset)config.preset_id=draft.preset_id;
++        if(draft.applyMode)config.pricing.mode=draft.mode;
++        if(draft.applyInput)config.pricing.input_price=Number(draft.input_price);
++        if(draft.applyOutput)config.pricing.output_price=Number(draft.output_price);
++      }
++      this.uiModelBulk=null;this.showToast(`已在本页更新 ${rows.length} 个模型，点击“保存全部节点”后生效`,'success');
++    },
+     async confirmRemoveModelNode(preset) {
+       if (!await confirmAction('删除节点“' + preset.name + '”？保存全部节点后生效。')) return;
+       this.removeModelPreset(this.llmForm.presets.findIndex(p => p.id === preset.id));
+@@ -1768,6 +1822,7 @@ function adminPanel() {
+         const r = await api.admin.llmSettings();
+         const data = r.data || r;
+         this.llmSettings = data;
++        this.uiModelSelected=[];
+         const presets = (data.presets && data.presets.length ? data.presets : [{
+           id: 'default',
+           name: '默认模型',
+diff --git a/frontend/assets/js/chat-menu.js b/frontend/assets/js/chat-menu.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..b6acb1e576100bca81fe8ecc29b3032418cd8574
+--- /dev/null
++++ b/frontend/assets/js/chat-menu.js
+@@ -0,0 +1,32 @@
++// Original vector drawings shared by cached chat and the live runtime.
++const paths = {
++  copy: 'M8 8h12v12H8z M16 8V4H4v12h4',
++  edit: 'm4 16 12-12 4 4L8 20H4v-4 M14 6l4 4 M3 22h18',
++  rollback: 'M3 4h18 M3 11h7 M3 18h7 M17 9l-4 4 4 4 M13 13h5a4 4 0 0 1 0 8',
++  delete: 'M3 6h18 M9 6V3h6v3 M6 6l1 15h10l1-15 M10 11l4 5 M14 11l-4 5',
++  hide: 'M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12 M9 12a3 3 0 1 0 6 0 3 3 0 1 0-6 0',
++  select: 'M3 5h18 M3 12h7 M3 19h7 M13 15l3 3 6-7',
++  collapse: 'm7 9 5-5 5 5 M7 15l5 5 5-5',
++};
++export function messageActionIcon(action) {
++  const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
++  for(const [name,value] of Object.entries({viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':'1.7','stroke-linecap':'square','stroke-linejoin':'miter','aria-hidden':'true'}))svg.setAttribute(name,value);
++  const path=document.createElementNS(svg.namespaceURI,'path');path.setAttribute('d',paths[action]||paths.copy);svg.append(path);
++  return svg;
++}
++
++export function positionChatMenu(menu, anchor, {header, composer, isUser=false, pressY}={}) {
++  if(!menu.open||!anchor)return;
++  const v=window.visualViewport,edge=10,gap=10;
++  const leftEdge=(v?.offsetLeft||0)+edge;
++  const rightEdge=(v?.offsetLeft||0)+(v?.width||innerWidth)-edge;
++  const topEdge=Math.max((v?.offsetTop||0)+edge,(header?.getBoundingClientRect().bottom||0)+gap);
++  const bottomEdge=Math.min((v?.offsetTop||0)+(v?.height||innerHeight)-edge,(composer?.getBoundingClientRect().top||innerHeight)-gap);
++  menu.style.setProperty('max-height',`${Math.max(48,bottomEdge-topEdge)}px`,'important');
++  const rect=anchor.getBoundingClientRect(),width=menu.offsetWidth,height=menu.offsetHeight;
++  let top=rect.top-height-gap;
++  if(top<topEdge)top=rect.bottom+gap;
++  if(top+height>bottomEdge)top=Number.isFinite(pressY)?pressY-height-gap:topEdge;
++  menu.style.left=`${Math.max(leftEdge,Math.min(isUser?rect.right-width:rect.left,rightEdge-width))}px`;
++  menu.style.top=`${Math.max(topEdge,Math.min(top,bottomEdge-height))}px`;
++}
+diff --git a/frontend/assets/js/model-catalog.js b/frontend/assets/js/model-catalog.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..ed2de5297ed870a9cf648849c60ebd5b69b0db22
+--- /dev/null
++++ b/frontend/assets/js/model-catalog.js
+@@ -0,0 +1,30 @@
++// Public metadata only; never pass a provider's secret settings to the chat UI.
++export function publicModel(model) {
++    return {
++        id: String(model?.id || ''), name: String(model?.name || model?.model || model?.id || '未命名模型'),
++        model: String(model?.model || ''), price_label: String(model?.price_label || ''),
++        group_id: String(model?.group_id || model?.preset_id || 'site'),
++        group_name: String(model?.group_name || model?.preset_name || ''),
++        enabled: model?.enabled !== false,
++    };
++}
++
++export function fillModelSelect(select, models, selectedId = '') {
++    select.replaceChildren();
++    select.dataset.pickerTitle = '选择模型';
++    const groups = new Map();
++    for (const raw of models || []) {
++        const model = publicModel(raw);
++        if (!model.enabled || !model.id) continue;
++        if (!groups.has(model.group_id)) {
++            const group = document.createElement('optgroup');
++            group.label = model.group_name || (model.group_id === 'site' ? '站点模型' : `模型分组 ${groups.size + 1}`);
++            groups.set(model.group_id, group); select.append(group);
++        }
++        const option = document.createElement('option');
++        option.value = model.id;
++        option.textContent = model.name + (model.model && model.model !== model.name ? ` · ${model.model}` : '') + (model.price_label ? ` · ${model.price_label}` : '');
++        groups.get(model.group_id).append(option);
++    }
++    if (Array.from(select.options).some(option => option.value === selectedId)) select.value = selectedId;
++}
+diff --git a/frontend/assets/js/option-picker.js b/frontend/assets/js/option-picker.js
+index 318447ffd0e61cc5a2b41ee1be0b7f3f8e518ad8..9b591328c63a0274561f09b14f0f642568424fef 100644
+--- a/frontend/assets/js/option-picker.js
++++ b/frontend/assets/js/option-picker.js
+@@ -29,16 +29,21 @@
+     const title = el('h2', '', labelFor(select));
+     title.id = 'homer-option-picker-title';
+     const close = el('button', 'homer-option-picker__close', '×');
+-    close.type = 'button'; close.setAttribute('aria-label', '关闭选项');
++    close.type = 'button'; close.setAttribute('aria-label', '取消');
+     head.append(title, close);
+     const search = el('input', 'homer-option-picker__search');
+     search.type = 'search'; search.placeholder = '搜索选项';
+     search.setAttribute('aria-label', '搜索选项');
+     const list = el('div', 'homer-option-picker__list');
++    const groupsBar = el('nav', 'homer-option-picker__groups');
++    groupsBar.setAttribute('aria-label', '选项分组');
++    let selectedGroup = null;
+     list.setAttribute('role', 'group'); list.setAttribute('aria-label', '可选项');
+     const status = el('p', 'homer-option-picker__status');
+     status.setAttribute('role', 'status');
+     const footer = el('footer', 'homer-option-picker__footer');
++    footer.hidden = !select.multiple;
++    dialog.classList.toggle('is-multiple', select.multiple);
+     const cancel = el('button', '', '取消'); cancel.type = 'button';
+     footer.append(cancel);
+     const pending = new Set(Array.from(select.selectedOptions));
+@@ -56,10 +61,22 @@
+     function render() {
+       list.replaceChildren();
+       const query = search.value.trim().toLocaleLowerCase();
++      const groups = Array.from(select.querySelectorAll('optgroup'));
++      search.hidden = select.options.length <= 8 && groups.length < 2;
++      if (selectedGroup && !groups.includes(selectedGroup)) selectedGroup = null;
++      groupsBar.replaceChildren(); groupsBar.hidden = groups.length < 2;
++      if (groups.length > 1) {
++        for (const group of [null, ...groups]) {
++          const count = group ? group.querySelectorAll('option:not([hidden])').length : Array.from(select.options).filter(o=>!o.hidden).length;
++          const tab = el('button', '', `${group?.label || '全部'} ${count}`);tab.type='button';
++          tab.setAttribute('aria-pressed', String(selectedGroup === group));
++          tab.addEventListener('click', () => {selectedGroup=group;render();list.scrollTop=0;groupsBar.querySelector('[aria-pressed="true"]')?.focus({preventScroll:true});});groupsBar.append(tab);
++        }
++      }
+       let count = 0; let lastGroup = null;
+       Array.from(select.options).forEach(option => {
+-        if (option.hidden || !option.text.toLocaleLowerCase().includes(query)) return;
+         const group = option.parentElement?.tagName === 'OPTGROUP' ? option.parentElement : null;
++        if (option.hidden || (selectedGroup && group!==selectedGroup) || !`${group?.label || ''} ${option.text}`.toLocaleLowerCase().includes(query)) return;
+         if (group && group !== lastGroup) list.append(el('h3', 'homer-option-picker__group', group.label));
+         lastGroup = group;
+         const button = el('button', 'homer-option-picker__option'); button.type = 'button';
+@@ -78,8 +95,9 @@
+         list.append(button); count++;
+       });
+       status.textContent = count ? `${count} 个选项` : (select.options.length ? '没有匹配的选项，试试其他关键词' : '暂无可选项');
++      status.classList.toggle('is-empty', count === 0);
+     }
+-    dialog.append(head, search, list, status, footer);
++    dialog.append(head, search, groupsBar, list, status, footer);
+     document.body.append(dialog); active = { dialog, select };
+     const observer = new MutationObserver(render);
+     observer.observe(select, { childList: true, subtree: true, characterData: true, attributes: true });
+@@ -110,6 +128,7 @@
+     render(); dialog.showModal();
+     // Focus the current item without summoning the Android keyboard on every open.
+     (list.querySelector('[aria-checked="true"]:not(:disabled)') || close).focus({ preventScroll: true });
++    list.querySelector('[aria-checked="true"]')?.scrollIntoView({ block: 'nearest' });
+     return dialog;
+   }
+   function selectTarget(event) {
+diff --git a/sillytavern-runtime/public/scripts/extensions/homer-bridge/index.js b/sillytavern-runtime/public/scripts/extensions/homer-bridge/index.js
+index 8f984fc20444aa248def56ba49b3dbbf0c15acbb..b9243f7d4bc38aea8d0edb67005dfdbc349892b0 100644
+--- a/sillytavern-runtime/public/scripts/extensions/homer-bridge/index.js
++++ b/sillytavern-runtime/public/scripts/extensions/homer-bridge/index.js
+@@ -9,6 +9,8 @@ import {
+ } from '../../../script.js';
+ import { oai_settings } from '../../openai.js';
+ import { messagePreview } from '/assets/js/message-preview.js';
++import { publicModel, fillModelSelect } from '/assets/js/model-catalog.js';
++import { messageActionIcon, positionChatMenu } from '/assets/js/chat-menu.js';
+ import { allowScopedScripts } from '../regex/engine.js';
+ import { extension_settings } from '../../extensions.js';
+ import { getContext } from '../../st-context.js';
+@@ -74,8 +76,8 @@ let messagePressStart = null;
+ let messagePressTarget = null;
+ let suppressMessageClickUntil = 0;
+ let presentationModeBridgeInstalled = false;
+-const MESSAGE_LONG_PRESS_DELAY = 520;
+-const MESSAGE_LONG_PRESS_MOVE_TOLERANCE = 12;
++const MESSAGE_LONG_PRESS_DELAY = 500;
++const MESSAGE_LONG_PRESS_MOVE_TOLERANCE = 10;
+ let extensionSettingsBridgeInstalled = false;
+ let embeddedDocumentLookupBridgeInstalled = false;
+ let extensionSettingsBaseline = null;
+@@ -753,12 +755,7 @@ function notifyHostState(reason = 'update') {
+                 .filter(message => !message?.is_system || message?.extra?.homer_hidden)
+                 .slice(-120)
+                 .map(hostMessageSnapshot),
+-            models: runtimeUiData.models.slice(0, 100).map(model => ({
+-                id: String(model?.id || '').slice(0, 160),
+-                name: String(model?.name || model?.model || model?.id || '未命名模型').slice(0, 160),
+-                model: String(model?.model || '').slice(0, 160),
+-                price_label: String(model?.price_label || '').slice(0, 120),
+-            })),
++            models: runtimeUiData.models.map(publicModel),
+             model_default_id: String(runtimeUiData.modelDefaultId || '').slice(0, 160),
+             model_settings: { ...conversationModelSettings() },
+             generating: Boolean(generationBusy || rollbackBusy),
+@@ -2688,33 +2685,12 @@ function positionMessageMenuDialog(dialog, resolved) {
+         dialog.classList.remove('is-positioning');
+         return;
+     }
+-    const gap = 10;
+-    const edge = 12;
+-    const viewport = window.visualViewport;
+-    const viewportTop = viewport?.offsetTop || 0;
+-    const viewportLeft = viewport?.offsetLeft || 0;
+-    const viewportBottom = viewportTop + (viewport?.height || window.innerHeight);
+-    const viewportRight = viewportLeft + (viewport?.width || window.innerWidth);
+-    const chatRect = document.querySelector('#chat')?.getBoundingClientRect();
+-    const headerBottom = document.querySelector('.homer-chat-header')?.getBoundingClientRect().bottom || 0;
+-    const minimumTop = Math.max(viewportTop + edge, headerBottom + gap, chatRect?.top || 0);
+-    const composerTop = document.querySelector('#form_sheld')?.getBoundingClientRect().top || viewportBottom;
+-    const maximumBottom = Math.min(viewportBottom - edge, composerTop - gap);
+-    const width = dialog.offsetWidth;
+-    const height = dialog.offsetHeight;
+-    let left = resolved?.isUser ? rect.right - width : rect.left;
+-    let top = rect.top - height - gap;
+-    if (top < minimumTop) top = rect.bottom + gap;
+-    // A multi-screen message has neither edge in view. Anchor near the actual
+-    // press rather than jumping to the distant end of the whole message.
+-    if (top + height > maximumBottom) {
+-        const pressY = resolved?.anchorY;
+-        top = Number.isFinite(pressY) ? pressY - height - gap : minimumTop;
+-    }
+-    left = Math.max(viewportLeft + edge, Math.min(left, viewportRight - width - edge));
+-    top = Math.max(minimumTop, Math.min(top, maximumBottom - height));
+-    dialog.style.left = `${Math.round(left)}px`;
+-    dialog.style.top = `${Math.round(top)}px`;
++    positionChatMenu(dialog, anchorElement, {
++        header: document.querySelector('.homer-chat-header'),
++        composer: document.querySelector('#form_sheld'),
++        isUser: resolved?.isUser,
++        pressY: resolved?.anchorY,
++    });
+     dialog.classList.remove('is-positioning');
+ }
+ 
+@@ -2755,8 +2731,8 @@ function renderMessageMenuDialog() {
+         if (action.cloud && !cloudReady) {
+             button.title = '这条消息同步到云端后可用';
+         }
+-        const icon = createElement('span', `homer-message-menu__icon ${action.icon}`);
+-        icon.setAttribute('aria-hidden', 'true');
++        const icon = messageActionIcon(action.id);
++        icon.classList.add('homer-message-menu__icon');
+         button.append(
+             icon,
+             createElement('span', 'homer-message-menu__label', action.label),
+@@ -3650,14 +3626,7 @@ function buildModelDialog() {
+     const select = document.createElement('select');
+     select.id = 'homer-model-select';
+     select.className = 'homer-model-select';
+-    for (const model of runtimeUiData.models) {
+-        const option = document.createElement('option');
+-        option.value = String(model?.id || '');
+-        option.textContent = `${String(model?.name || model?.model || model?.id || '未命名模型')}${model?.price_label ? ` · ${model.price_label}` : ''}`
+-            + `${model?.model && model.model !== model.name ? ` · ${model.model}` : ''}`;
+-        option.selected = option.value === settings.model_id;
+-        select.append(option);
+-    }
++    fillModelSelect(select, runtimeUiData.models, settings.model_id);
+     if (!select.options.length) {
+         const option = document.createElement('option');
+         option.value = '';
