@@ -56,7 +56,7 @@ public final class PersistentPageNavigationTest {
         assertFalse(HomerActivity.canSwitchConversationInPlace(null, second));
         assertFalse(HomerActivity.canSwitchConversationInPlace(first,
                 "https://other.test/app/chat.html?app_id=card-1&conversation_id=conv-2"));
-        assertFalse(HomerActivity.canSwitchConversationInPlace(first,
+        assertTrue(HomerActivity.canSwitchConversationInPlace(first,
                 "https://example.test/app/chat.html?app_id=card-new"));
         assertFalse(HomerActivity.canSwitchConversationInPlace(first,
                 "https://example.test/app/chat.html?app_id=&conversation_id=conv-2"));

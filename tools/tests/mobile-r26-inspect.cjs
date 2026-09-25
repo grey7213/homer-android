@@ -1,0 +1,20 @@
+const fs=require('node:fs'),path=require('node:path');
+const {wait,connect,visible,navigate,delay}=require('./webview-cdp.cjs');
+const out=path.resolve('output/mobile-r26/before');fs.mkdirSync(out,{recursive:true});
+(async()=>{let clients=[];try{
+ let c=await connect(await visible());clients.push(c);const base=await c.evaluate('location.origin');
+ const encoded=fs.readFileSync('D:/网站/案例1/Image_1790181493425_437.png').toString('base64');
+ const app=await c.evaluate(`(async()=>{const {api}=await import('/app/assets/js/app-core.js?v=20260917-r8');return (await api.importCard({card_file:'data:image/png;base64,'+${JSON.stringify(encoded)},filename:'case1.png'})).data})()`);
+ c=await navigate(c,base+'/app/chat.html?app_id='+encodeURIComponent(app.id));clients.push(c);
+ await wait(()=>c.evaluate(`document.body.classList.contains('is-ready')&&new URL(location.href).searchParams.get('app_id')===${JSON.stringify(app.id)}`),60000);await delay(1600);
+ const run=expression=>c.evaluate(`(()=>{const w=window.document.querySelector('#dialogue-frame').contentWindow;const document=w.document;return (${expression});})()`);
+ const shot=async name=>{const s=await c.call('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(out,name+'.png'),Buffer.from(s.data,'base64'));};
+ const result=await run(`({pre:[...document.querySelectorAll('#chat pre')].map(e=>({class:e.className,visible:!!e.getClientRects().length,display:w.getComputedStyle(e).display,text:e.textContent.slice(0,80)})),frames:[...document.querySelectorAll('#chat iframe')].map(e=>({id:e.id,height:e.clientHeight})),css:[...document.styleSheets].map(s=>s.href).filter(x=>x?.includes('Slash')||x?.includes('slash'))})`);
+ await shot('case1');
+ await run(`document.querySelector('#homer-right-drawer').classList.add('is-open')`);
+ console.log(JSON.stringify(result));
+ console.log(await run(`[...document.querySelectorAll('#homer-right-drawer button')].map(b=>({id:b.id,text:b.textContent.trim(),control:b.dataset.control}))`));
+ await shot('settings');
+ fs.writeFileSync(path.join(out,'case1-result.json'),JSON.stringify(result,null,2));
+ fs.writeFileSync(path.join(out,'chat-url.txt'),await c.evaluate('location.href'));
+ }finally{for(const c of clients)c.close();}})().catch(e=>{console.error(e.message);process.exitCode=1;});

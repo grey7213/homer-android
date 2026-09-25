@@ -30,6 +30,7 @@ if hasattr(sys.stdout, "reconfigure"):
 ROOT = Path(__file__).resolve().parent.parent
 TREE = ROOT / ".web-cache" / "tree"
 OUT_DIR = ROOT / "web-patches"
+WEB_PATHS = ("frontend", "sillytavern-runtime")
 
 
 def die(message: str) -> None:
@@ -57,6 +58,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="导出 web 端改动为 git patch")
     parser.add_argument("--name", default="", help="补丁名，会进文件名，写清改了什么")
     parser.add_argument("--stat", action="store_true", help="只列改动，不写文件")
+    parser.add_argument("--include-committed", action="store_true", help="从 pin 导出完整累计补丁，包含本地 Web 提交；需替换旧累计补丁，不能叠加应用")
     args = parser.parse_args()
 
     if not (TREE / ".git").exists():
@@ -64,13 +66,15 @@ def main() -> int:
 
     base = json.loads((ROOT / "web-base.json").read_text(encoding="utf-8"))
     head = git("rev-parse", "HEAD").strip()
-    if head != base["commit"]:
+    if head != base["commit"] and not args.include_committed:
         die(f"web 检出停在 {head[:12]}，但 web-base.json 写的是 {base['commit'][:12]}。\n"
             f"       先 python tools/bootstrap.py 对齐基线，再导补丁。")
 
-    stat = git("diff", "--stat", "HEAD").strip()
+    diff_base = base["commit"] if args.include_committed else "HEAD"
+    git("cat-file", "-e", f"{diff_base}^{{commit}}")
+    stat = git("diff", "--stat", diff_base, "--", *WEB_PATHS).strip()
     untracked = [
-        line for line in git("ls-files", "--others", "--exclude-standard").splitlines()
+        line for line in git("ls-files", "--others", "--exclude-standard", "--", *WEB_PATHS).splitlines()
         if line.strip()
     ]
 
@@ -81,7 +85,7 @@ def main() -> int:
     if untracked:
         # intent-to-add：让 git diff 把新增文件也算进来，但不真的暂存内容。
         git("add", "-N", "--", *untracked)
-        stat = git("diff", "--stat", "HEAD").strip()
+        stat = git("diff", "--stat", diff_base, "--", *WEB_PATHS).strip()
     print("web 端改动：")
     for line in stat.splitlines():
         print(f"  {line}")
@@ -96,7 +100,7 @@ def main() -> int:
         return 0
 
     # --binary 保住图片这类改动；full-index 让 git apply -3 能查到 blob 做三方合并。
-    patch = git("diff", "--binary", "--full-index", "HEAD")
+    patch = git("diff", "--binary", "--full-index", diff_base, "--", *WEB_PATHS)
     if not patch.strip():
         die("git diff 是空的，但前面看到有改动 —— 检查一下是不是都被 .gitignore 挡了")
 

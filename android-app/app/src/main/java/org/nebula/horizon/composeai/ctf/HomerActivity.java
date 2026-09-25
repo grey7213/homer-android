@@ -486,8 +486,7 @@ public final class HomerActivity extends Activity {
             return "/app/chat.html".equals(from.getPath()) && "/app/chat.html".equals(to.getPath())
                     && java.util.Objects.equals(from.getScheme(), to.getScheme())
                     && java.util.Objects.equals(from.getRawAuthority(), to.getRawAuthority())
-                    && query != null && query.matches(".*(?:^|&)app_id=[^&]+.*")
-                    && query.matches(".*(?:^|&)(?:conversation_id|conv_id)=[^&]+.*");
+                    && query != null && query.matches(".*(?:^|&)app_id=[^&]+.*");
         } catch (RuntimeException ignored) {
             return false;
         }

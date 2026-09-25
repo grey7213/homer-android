@@ -77,6 +77,20 @@ def main() -> int:
         (expected if packable(rel) else skipped).append(rel.as_posix())
 
     missing = [rel for rel in expected if f"assets/client/web/{rel}" not in names]
+    # Presence alone accepts stale assets with the same filenames. Compare
+    # actual bytes so a successful build cannot silently ship an older UI.
+    with zipfile.ZipFile(args.apk) as apk:
+        stale = [rel for rel in expected if rel not in missing
+                 and apk.read(f"assets/client/web/{rel}") != (web_root / rel).read_bytes()]
+        runtime_root = ROOT / 'sillytavern-runtime/public'
+        runtime_stale = []
+        for path in runtime_root.rglob('*'):
+            if not path.is_file(): continue
+            rel = path.relative_to(runtime_root)
+            if not packable(rel) or rel.as_posix() == 'lib.js' or 'st-yuzi-phone' in rel.parts: continue
+            entry = 'assets/client/runtime/' + rel.as_posix()
+            if entry not in names or apk.read(entry) != path.read_bytes():
+                runtime_stale.append(rel.as_posix())
 
     print(f"APK           {args.apk.name}  {args.apk.stat().st_size / 1048576:.1f} MB")
     print(f"资源清单条目   {len(index)}")
@@ -91,7 +105,12 @@ def main() -> int:
             print(f"  ... 另有 {len(missing) - 20} 个")
         die("有前端文件没进 APK。运行时会 404，页面白屏。")
 
-    print("\n通过：前端与运行时资源都在包里。")
+    if stale or runtime_stale:
+        for rel in stale[:10]: print(f"  内容不同 frontend/{rel}")
+        for rel in runtime_stale[:10]: print(f"  缺失或内容不同 runtime/{rel}")
+        die("APK 资源与当前源码不一致，必须重新打包。")
+
+    print("\n通过：前端与运行时资源齐全，内容与当前源码逐字节一致。")
     return 0
 
 
