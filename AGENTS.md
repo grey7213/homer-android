@@ -15,6 +15,8 @@
 
 ## Verified pitfalls
 
+- R32: test failed generation against actual balance components and fee events, including HTTP-200 error bodies, partial streams and final write failure. A disabled-looking send button alone is insufficient: gate click/Enter and programmatic generation, distinguish auth/balance errors, and verify failure → reopen → switch model → successful generation. Binding an existing local chat mirror must preserve its original integrity header; never generate a new identity on every reopen or bypass the integrity check to hide the conflict. Client tests do not replace deploying the Python billing changes.
+
 - User execution preference: after a cause is confirmed and an in-scope fix is actionable, implement and verify in the same work session. Do not end with another explanation of the same cause or promise to start. Keep updates short. Persist unfinished acceptance gates across handoffs; do not submit or hand off an APK as fixed while a gate still fails.
 
 - R31: failed cold-entry acceptance blocks APK handoff even if warmed entry and generation pass. Measure click-to-painted as well as internal ready, using fresh browser contexts without waiting for prewarm; report sample count and do not call a browser proxy an Android device test. Never publish an intermediate optimization as a completed fix. Lazy-loaded editors must pass real open/edit/save/reopen tests, not just asset existence or successful startup.
