@@ -1,0 +1,26 @@
+{
+  "ai_fengyue_local_server.py": {
+    "baseline_sha256_lf": "31dd3efb47da639366fe1e3701a93f90421ec7b805eabfd631eb520ac1c7e59b",
+    "result_sha256_lf": "d47db37e7469fd36c7e1ad3632a20469bc16291715c4ac2434474a7a6eafb420"
+  },
+  "community_workshop.py": {
+    "baseline_sha256_lf": "15917325a66f09dc2cd0937583783292e67a0649e93334d467d65856b59b0409",
+    "result_sha256_lf": "3c3da5a135b412272173ca207a9eb6a6ac90999b04762415b1bc6196bfe1b5b7"
+  },
+  "card_extra_workshop.py": {
+    "baseline_sha256_lf": "53fcb97aa3d59d6ed7beed6769c86325acbfce3fab8215c137c62df21fe08820",
+    "result_sha256_lf": "964fbe2fd0c888cf91f6c412d25012d775b639b1650d3137dd881185514dd94d"
+  },
+  "chat_mod_workshop.py": {
+    "baseline_sha256_lf": "36ec9276e572138840f9aff33b850418a9827aabf9330861de35d4f33dffbde2",
+    "result_sha256_lf": "9475a71f3c6a94ee01ab085d3896ebcbe0e743812cb09504951dc2d8d022f38f"
+  },
+  "homer_generation.py": {
+    "baseline_sha256_lf": null,
+    "result_sha256_lf": "c4a1c7f41dd2843696a6503ee97bb6cefd62a1da353062d13b9fe5bf7014cca9"
+  },
+  "homer_regex.cjs": {
+    "baseline_sha256_lf": null,
+    "result_sha256_lf": "2debab49316fbe812e1368d1896a91af3b3b3c3e5fa44740f9052a9b751a2d4e"
+  }
+}

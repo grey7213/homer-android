@@ -32,8 +32,12 @@ import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.webkit.RenderProcessGoneDetail;
 import android.net.http.SslError;
 import android.widget.FrameLayout;
+import android.widget.LinearLayout;
+import android.widget.TextView;
+import android.widget.Button;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -60,17 +64,31 @@ public final class HomerActivity extends Activity {
     private void scheduleDialoguePreparation() {
         // Use a separate callback: the visible-page readiness poll cancels its
         // own Handler callbacks. Never warm a card or reopen a conversation.
-        root.postDelayed(() -> {
-            if (!accountAvailable || isFinishing() || isDestroyed()
+        root.post(() -> {
+            if (!accountAvailable || startupFailed || isFinishing() || isDestroyed()
                     || persistentPages.containsKey("chat")) return;
-            if (!Set.of("explore", "community", "workshop", "histories", "me").contains(activePersistentPage)) return;
+            if (!java.util.Arrays.asList("explore", "community", "workshop", "histories", "me", "admin").contains(activePersistentPage)) return;
             WebView prepared = new WebView(this);
             configureLiveView(prepared);
             prepared.setVisibility(View.INVISIBLE);
             persistentPages.put("chat", prepared);
+            preparedDialogueHosts.add(prepared);
             root.addView(prepared, 0, matchParent());
             prepared.loadUrl(BuildConfig.SERVER_BASE_URL.replaceAll("/$", "") + "/app/chat.html?prewarm=1");
-        }, 600);
+        });
+    }
+
+    void prepareAdminConversation(String appId) {
+        // Only asks the retained host to perform authenticated read-only work.
+        // The server, not this bridge or the URL flag, grants preview access.
+        WebView prepared = persistentPages.get("chat");
+        if (!accountAvailable || prepared == null) return;
+        if (!readyConversationHosts.contains(prepared)) {
+            pendingAdminPreparation.put(prepared, appId);
+            return;
+        }
+        prepared.evaluateJavascript("window.dispatchEvent(new CustomEvent('homer:prepare-admin-preview',"
+                + "{detail:{app_id:" + JSONObject.quote(appId) + "}}))", null);
     }
 
     private static final String CLOSE_WEB_OVERLAY_SCRIPT = """
@@ -104,7 +122,7 @@ public final class HomerActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         if (apkUpdates != null) apkUpdates.onResume();
-        if (liveView != null) liveView.evaluateJavascript(
+        if (!startupFailed && liveView != null) liveView.evaluateJavascript(
                 "window.dispatchEvent(new Event('homer:app-enter'))", null);
     }
 
@@ -166,6 +184,10 @@ public final class HomerActivity extends Activity {
     private WebView snapshotView;
     private WebView liveView;
     private final Map<String, WebView> persistentPages = new HashMap<>();
+    private final Set<WebView> preparedDialogueHosts = new HashSet<>();
+    private final Set<WebView> readyConversationHosts = new HashSet<>();
+    private final Map<WebView, String> pendingConversationNavigations = new HashMap<>();
+    private final Map<WebView, String> pendingAdminPreparation = new HashMap<>();
     private final ArrayDeque<String> persistentPageHistory = new ArrayDeque<>();
     private String activePersistentPage = "";
     private HomerCacheDatabase cacheDatabase;
@@ -182,6 +204,8 @@ public final class HomerActivity extends Activity {
     private boolean updateChecked;
     private boolean immersiveLandscape;
     private boolean snapshotLoaded;
+    private boolean startupFailed;
+    private View recoveryPanel;
     private String snapshotConversationId = "";
     private int nativeSafeTop;
     private int nativeSafeRight;
@@ -201,14 +225,9 @@ public final class HomerActivity extends Activity {
         apkUpdates = new ApkUpdateController(this);
 
         root = new FrameLayout(this);
-        liveView = new WebView(this);
-        refreshInstalledAssetCache(liveView);
-        snapshotView = new WebView(this);
-        root.addView(liveView, matchParent());
-        // The local snapshot is the first interactive frame and therefore stays
-        // above the live WebView only until the bundled conversation shell says
-        // its own controls are wired. Runtime/model readiness is a later phase.
-        root.addView(snapshotView, matchParent());
+        root.setBackgroundColor(0xFFF5F3F7);
+        // A native surface exists before touching the system WebView provider.
+        // A disabled/broken provider must not leave a blank activity or crash it.
         setContentView(root);
 
         // Keep the WebView content inside the system bars.  This is the same
@@ -246,13 +265,90 @@ public final class HomerActivity extends Activity {
         });
         root.requestApplyInsets();
 
-        configureSnapshotView();
-        configureLiveView(liveView);
+        try {
+            liveView = new WebView(this);
+            if (WebViewCompatibility.needsUpdate(liveView.getSettings().getUserAgentString())) {
+                showRecovery("系统网页组件需要更新", "当前网页组件过旧，无法运行对话模块。更新 Android System WebView 或系统浏览器后重试；账号和聊天记录不会被清除。", true);
+                return;
+            }
+            refreshInstalledAssetCache(liveView);
+            snapshotView = new WebView(this);
+            root.addView(liveView, matchParent());
+            root.addView(snapshotView, matchParent());
+            configureSnapshotView();
+            configureLiveView(liveView);
+        } catch (RuntimeException | LinkageError unavailable) {
+            showRecovery("无法启动系统网页组件", "请启用或更新手机的 Android System WebView／系统浏览器后重试。无需卸载应用，也不要清除应用数据。", true);
+            return;
+        }
         String startupTarget = startupUrl(BuildConfig.SERVER_BASE_URL, cacheDatabase.readLastUrl());
         prepareSnapshotForTarget(startupTarget);
         // Give the tiny local document the first main-loop turn before the
         // heavier live WebView begins parsing the bundled runtime.
         handler.post(this::startLivePage);
+    }
+
+    private void showRecovery(String title, String message, boolean updateEngine) {
+        if (isFinishing() || isDestroyed()) return;
+        startupFailed = true;
+        liveRevealed = false;
+        handler.removeCallbacksAndMessages(null);
+        if (recoveryPanel != null) root.removeView(recoveryPanel);
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        int padding = Math.round(28 * getResources().getDisplayMetrics().density);
+        panel.setPadding(padding, padding, padding, padding);
+        panel.setBackgroundColor(0xFFF5F3F7);
+        TextView heading = new TextView(this);
+        heading.setText(title);
+        heading.setTextSize(22);
+        heading.setTextColor(0xFF202126);
+        panel.addView(heading);
+        TextView description = new TextView(this);
+        description.setText(message);
+        description.setTextSize(16);
+        description.setTextColor(0xFF45464E);
+        description.setPadding(0, padding / 2, 0, padding);
+        panel.addView(description);
+        Button retry = new Button(this);
+        retry.setText("重新打开");
+        retry.setOnClickListener(v -> recreate());
+        panel.addView(retry);
+        if (updateEngine) {
+            Button settings = new Button(this);
+            settings.setText("打开网页组件设置");
+            settings.setOnClickListener(v -> {
+                try {
+                    android.content.pm.PackageInfo provider = WebView.getCurrentWebViewPackage();
+                    Intent intent = provider == null ? new Intent(Settings.ACTION_SETTINGS)
+                            : new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                    Uri.parse("package:" + provider.packageName));
+                    startActivity(intent);
+                } catch (RuntimeException unavailable) {
+                    startActivity(new Intent(Settings.ACTION_SETTINGS));
+                }
+            });
+            panel.addView(settings);
+        }
+        recoveryPanel = panel;
+        root.addView(panel, matchParent());
+    }
+
+    private boolean handleRendererExit(WebView view) {
+        // Android calls this for every WebView sharing the failed renderer.
+        // Only dispose of the supplied view, never clear persistent user data.
+        persistentPages.values().removeAll(java.util.Collections.singleton(view));
+        preparedDialogueHosts.remove(view);
+        readyConversationHosts.remove(view);
+        pendingConversationNavigations.remove(view);
+        pendingAdminPreparation.remove(view);
+        if (view == liveView) liveView = null;
+        if (view == snapshotView) snapshotView = null;
+        if (view.getParent() instanceof ViewGroup) ((ViewGroup) view.getParent()).removeView(view);
+        view.destroy();
+        showRecovery("页面已停止运行", "系统回收了页面进程。点“重新打开”恢复，已保存的会话和登录状态会保留。", false);
+        return true;
     }
 
     private void refreshInstalledAssetCache(WebView view) {
@@ -309,6 +405,9 @@ public final class HomerActivity extends Activity {
                 "HomerNative"
         );
         snapshotView.setWebViewClient(new WebViewClient() {
+            @Override public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
+                return handleRendererExit(view);
+            }
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 String scheme = request.getUrl().getScheme();
@@ -317,6 +416,7 @@ public final class HomerActivity extends Activity {
 
             @Override
             public void onPageFinished(WebView view, String url) {
+                if (startupFailed || view != snapshotView) return;
                 applyNativeInsetsToWebViews();
                 patchManager.markActiveHealthy();
                 updateSnapshotConnectionState(isOnline(), false);
@@ -350,7 +450,7 @@ public final class HomerActivity extends Activity {
 
         view.setWebViewClient(new LiveClient());
         view.setWebChromeClient(new LiveChromeClient());
-        view.addJavascriptInterface(new LiveBridge(this, cacheDatabase), "HomerNative");
+        view.addJavascriptInterface(new LiveBridge(this, cacheDatabase, view), "HomerNative");
         view.setDownloadListener(openExternalDownload());
     }
 
@@ -435,6 +535,7 @@ public final class HomerActivity extends Activity {
     }
 
     private void startLivePage() {
+        if (startupFailed || liveView == null || snapshotView == null) return;
         liveStartedAt = System.currentTimeMillis();
         liveReadyHandled = false;
         liveView.setAlpha(1f);
@@ -508,6 +609,12 @@ public final class HomerActivity extends Activity {
 
     private boolean switchLiveConversation(WebView view, String target) {
         String current = view.getUrl();
+        if (preparedDialogueHosts.contains(view) && !readyConversationHosts.contains(view)) {
+            // A tap before chat.js installs its listener is queued, not treated
+            // as an old bundle requiring loadUrl (which would reboot the engine).
+            pendingConversationNavigations.put(view, target);
+            return true;
+        }
         if (!canSwitchConversationInPlace(current, target) && !isPreparedChatUrl(current)) return false;
         String script = "!window.dispatchEvent(new CustomEvent('homer:navigate-conversation',"
                 + "{cancelable:true,detail:{url:" + JSONObject.quote(target) + "}}))";
@@ -599,6 +706,10 @@ public final class HomerActivity extends Activity {
         }
         persistentPages.clear();
         persistentPageHistory.clear();
+        preparedDialogueHosts.clear();
+        readyConversationHosts.clear();
+        pendingConversationNavigations.clear();
+        pendingAdminPreparation.clear();
         activePersistentPage = "";
         snapshotLoaded = false;
         snapshotConversationId = "";
@@ -700,12 +811,12 @@ public final class HomerActivity extends Activity {
     }
 
     private void pollLiveReady() {
-        if (isFinishing() || liveView == null) return;
+        if (startupFailed || isFinishing() || liveView == null) return;
         final WebView observedView = liveView;
         observedView.evaluateJavascript(READ_LIVE_STATE_SCRIPT, raw -> {
             // An asynchronous callback from a page that has since become
             // inactive must not reveal it or overwrite the last visited page.
-            if (observedView != liveView || isFinishing() || isDestroyed()) return;
+            if (startupFailed || observedView != liveView || isFinishing() || isDestroyed()) return;
             try {
                 String decoded = decodeJavascriptString(raw);
                 if (decoded == null || decoded.isEmpty()) throw new IllegalStateException("empty state");
@@ -740,13 +851,21 @@ public final class HomerActivity extends Activity {
         return new JSONArray("[" + raw + "]").getString(0);
     }
 
-    void onLiveShellReady(String documentUrl) {
+    void onLiveShellReady(WebView owner, String documentUrl) {
         if (!SafeUrls.isTrustedNavigation(BuildConfig.SERVER_BASE_URL, documentUrl)
                 || !StartupPresentation.isConversationUrl(documentUrl)) return;
-        revealLiveShell();
+        if (owner != liveView && owner != persistentPages.get("chat")) return;
+        readyConversationHosts.add(owner);
+        String preparedCard = pendingAdminPreparation.remove(owner);
+        if (preparedCard != null) prepareAdminConversation(preparedCard);
+        String queuedTarget = pendingConversationNavigations.remove(owner);
+        if (queuedTarget != null) switchLiveConversation(owner, queuedTarget);
+        // A hidden prewarm completion must not reveal or mark the visible page.
+        if (owner == liveView) revealLiveShell();
     }
 
     private void revealLiveShell() {
+        if (startupFailed || liveView == null || snapshotView == null) return;
         if (liveRevealed && snapshotView.getVisibility() == View.GONE) return;
         liveRevealed = true;
         liveView.setAlpha(1f);
@@ -758,6 +877,7 @@ public final class HomerActivity extends Activity {
     }
 
     private void handleLiveRuntimeReady() {
+        if (startupFailed || liveView == null || snapshotView == null) return;
         if (liveReadyHandled) return;
         liveReadyHandled = true;
         revealLiveShell();
@@ -767,6 +887,11 @@ public final class HomerActivity extends Activity {
     }
 
     private void showSnapshotFallback() {
+        if (liveView == null || !StartupPresentation.isConversationUrl(liveView.getUrl())) {
+            showRecovery("页面暂时无法打开", "未能加载页面，请检查网络后重新打开。不会退出账号或删除历史记录。", false);
+            return;
+        }
+        if (snapshotView == null) return;
         liveRevealed = false;
         liveView.animate().cancel();
         snapshotView.animate().cancel();
@@ -794,7 +919,7 @@ public final class HomerActivity extends Activity {
         patchManager.checkForUpdateAsync(new PatchManager.Callback() {
             @Override
             public void onInstalled(String version) {
-                runOnUiThread(() -> snapshotView.loadUrl(patchManager.offlineEntryUrl()));
+                runOnUiThread(() -> { if (!startupFailed && snapshotView != null) snapshotView.loadUrl(patchManager.offlineEntryUrl()); });
             }
 
             @Override
@@ -850,7 +975,7 @@ public final class HomerActivity extends Activity {
     }
 
     private void navigateBack() {
-        if (liveRevealed && liveView.canGoBack()) {
+        if (liveRevealed && liveView != null && liveView.canGoBack()) {
             liveView.goBack();
             return;
         }
@@ -908,6 +1033,9 @@ public final class HomerActivity extends Activity {
     }
 
     private final class LiveClient extends WebViewClient {
+        @Override public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
+            return handleRendererExit(view);
+        }
         @Override
         public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
             WebResourceResponse local = clientAssetStore.intercept(request);
@@ -931,7 +1059,8 @@ public final class HomerActivity extends Activity {
 
         @Override
         public void onPageStarted(WebView view, String url, Bitmap favicon) {
-            if (view != liveView) return;
+            readyConversationHosts.remove(view);
+            if (startupFailed || view != liveView) return;
             liveStartedAt = System.currentTimeMillis();
             liveReadyHandled = false;
             boolean conversationTarget = StartupPresentation.isConversationUrl(url);
@@ -943,7 +1072,7 @@ public final class HomerActivity extends Activity {
 
         @Override
         public void onPageFinished(WebView view, String url) {
-            if (view != liveView) return;
+            if (startupFailed || view != liveView) return;
             if (!SafeUrls.isTrustedNavigation(BuildConfig.SERVER_BASE_URL, url)) return;
             applySystemBars();
             applyNativeInsetsToWebViews();
@@ -956,6 +1085,10 @@ public final class HomerActivity extends Activity {
         @Override
         public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
             if (view == liveView && request.isForMainFrame()) showSnapshotFallback();
+        }
+
+        @Override public void onReceivedHttpError(WebView view, WebResourceRequest request, WebResourceResponse response) {
+            if (view == liveView && request.isForMainFrame() && response.getStatusCode() >= 400) showSnapshotFallback();
         }
 
         @Override

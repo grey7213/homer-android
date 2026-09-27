@@ -1,5 +1,7 @@
 # R25–R27 本机服务端累计补丁
 
+> 已被 `../cumulative-r31/backend.patch` 替代。本目录仅保留历史追溯；本次不要单独应用。当前交接见 `docs/mobile-r31-submission.md`。
+
 本轮仅已应用到 `output/mobile-r25/server` 隔离测试副本；**没有部署正式服**。
 
 - `mobile-r26.patch` 保留原交接路径，现含 R27 修复；是基于本机 `D:/网站/功能/AIXingYue-main/tools` 原始四个模块生成的 **R25–R27 累计补丁**。不要在 R25 或先前 R26 补丁之上机械叠加。生产实际基线不一致时须先比对再合并，不得强行覆盖。

@@ -1,8 +1,9 @@
 """Versioned template/regex compatibility and real hydration, isolated SQLite."""
-import ast,json,re,sqlite3,sys,threading,unittest
+import ast,json,os,re,sqlite3,sys,threading,unittest
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[2]
-sys.path[:0]=[str(ROOT/'output/mobile-r25/server'),'D:/网站/功能/AIXingYue-main/tools']
+STAGE=Path(os.environ.get('HOMER_R26_STAGE',str(ROOT/'output/mobile-r25/server')))
+sys.path[:0]=[str(STAGE),'D:/网站/功能/AIXingYue-main/tools']
 from community_workshop import CommunityStore,ensure_community_schema,_validate_work_payload
 from card_version_workshop import ensure_card_version_schema
 from card_extra_workshop import prepare_card_extra
@@ -41,7 +42,7 @@ class TemplateTests(unittest.TestCase):
 class LosslessRegexTests(unittest.TestCase):
  @classmethod
  def setUpClass(cls):
-  tree=ast.parse((ROOT/'output/mobile-r25/server/ai_fengyue_local_server.py').read_text(encoding='utf-8-sig'))
+  tree=ast.parse((STAGE/'ai_fengyue_local_server.py').read_text(encoding='utf-8-sig'))
   names={'checked_regex_replacement','recover_legacy_regex_replacements','normalize_regex_scripts','normalize_full_regex_script','regex_script_to_sillytavern','split_silly_regex_pattern'}
   nodes=[n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name in names]
   cls.scope={'re':re,'ROLE_CARD_REGEX_MAX_ENTRIES':500,'REGEX_REPLACE_MAX_BYTES':8*1024*1024,'_preset_bool':lambda value,default:default if value is None else bool(value)}

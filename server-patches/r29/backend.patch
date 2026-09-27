@@ -1,0 +1,471 @@
+diff --git a/tools/ai_fengyue_local_server.py b/tools/ai_fengyue_local_server.py
+index e11f59ae94a5038f5b577f587371ef88923ef1c3..df23d0102aff696428903d9ba11d674057b6e0f4 100644
+--- a/tools/ai_fengyue_local_server.py
++++ b/tools/ai_fengyue_local_server.py
+@@ -25,6 +25,7 @@
+ import uuid
+ import zipfile
+ import zlib
++from homer_generation import display_regex, execute_prompt_regex, generation_error, preset_fingerprint
+ from collections import OrderedDict
+ from concurrent.futures import ThreadPoolExecutor, as_completed
+ from datetime import date
+@@ -69,6 +70,8 @@
+     sync_card_extra_flags,
+ )
+ from chat_mod_workshop import (
++    ConversationModStore,
++    _mod_entries,
+     apply_conversation_mods,
+     apply_locked_community_assets,
+     ensure_chat_mod_schema,
+@@ -949,7 +952,7 @@
+ SILLYTAVERN_BRIDGE_TOKEN_TTL_SECONDS = 15 * 60
+ 
+ 
+-def sillytavern_bridge_token_for(user_id: str, app_id: str, conversation_id: str = "") -> str:
++def sillytavern_bridge_token_for(user_id: str, app_id: str, conversation_id: str = "", *, admin_preview: bool = False) -> str:
+     """Issue a short-lived token scoped to one Homer user/card/conversation."""
+     if len(AUTH_TOKEN_SECRET.encode("utf-8")) < 32:
+         raise RuntimeError("AUTH_TOKEN_SECRET must be at least 32 bytes")
+@@ -962,6 +965,7 @@
+             "iat": issued_at,
+             "exp": issued_at + SILLYTAVERN_BRIDGE_TOKEN_TTL_SECONDS,
+             "scope": "sillytavern-chat",
++            "admin_preview": bool(admin_preview),
+         },
+         separators=(",", ":"),
+     ).encode("utf-8")
+@@ -1008,6 +1012,7 @@
+         "app_id": str(claims["app"]),
+         "conversation_id": str(claims.get("conv") or ""),
+         "expires_at": int(claims["exp"]),
++        "admin_preview": bool(claims.get("admin_preview")),
+     }
+ 
+ 
+@@ -9544,6 +9549,11 @@
+         return {"prompt": self.global_prompt_presets(), "regex": self.global_regex_presets()}
+ 
+     def _save_global_collection(self, key: str, collection: dict) -> None:
++        if key == GLOBAL_REGEX_PRESETS_KEY:
++            try:
++                execute_prompt_regex([], {"enabled": True, "scripts": [rule for preset in collection.get("items") or [] for rule in preset.get("scripts") or []]})
++            except RuntimeError as exc:
++                raise ValueError("HM-R422: 正则语法校验失败，请修正或停用无效条目后重试") from exc
+         raw = json.dumps(collection, ensure_ascii=False, separators=(",", ":"))
+         if len(raw.encode("utf-8")) > 4 * 1024 * 1024:
+             raise ValueError("global preset collection is too large")
+@@ -14429,6 +14439,13 @@
+     raw["id"] = str(raw.get("id") or f"regex-{index + 1}")[:160]
+     raw["scriptName"] = str(raw.get("scriptName") or raw.get("name") or f"Regex {index + 1}")[:200]
+     raw["findRegex"] = str(raw.get("findRegex") if raw.get("findRegex") is not None else raw.get("find") or raw.get("pattern") or "")[:12000]
++    # Exact compatibility repair for the audited truncated deletion rule. Never
++    # infer arbitrary broken patterns; require both the known source and intent.
++    if (raw["scriptName"] == "去生理状态栏美化"
++            and raw["findRegex"] == '/(<status_profile name="[^"]+">[\\s\\S]*?<\\/'
++            and not raw.get("replaceString", raw.get("replace", ""))):
++        raw["findRegex"] = '/(<status_profile name="[^"]+">[\\s\\S]*?<\\/status_profile>)/g'
++        raw["compatibility_repair"] = "status-profile-closing-tag-r29"
+     raw["replaceString"] = str(raw.get("replaceString") if raw.get("replaceString") is not None else raw.get("replace") or raw.get("replacement") or "")[:REGEX_REPLACE_MAX_CHARS]
+     raw["trimStrings"] = list(raw.get("trimStrings") or [])[:100] if isinstance(raw.get("trimStrings"), list) else []
+     placement = raw.get("placement")
+@@ -17808,6 +17825,36 @@
+     return normalized
+ 
+ 
++def admin_dialogue_configuration(store, app, user_id, draft=None):
++    """Admin-only caller. Normalize ephemeral overrides without writing global settings."""
++    draft = draft if isinstance(draft, dict) else {}
++    if len(json.dumps(draft, ensure_ascii=False)) > 2_000_000:
++        raise ValueError("会话草稿过大")
++    settings = store.effective_llm_settings(app, user_id=user_id)
++    prompt = normalize_full_prompt_preset(draft["prompt"]) if isinstance(draft.get("prompt"), dict) else settings.get("global_prompt_preset") or {}
++    regex = normalize_full_regex_preset(draft["regex"]) if isinstance(draft.get("regex"), dict) else settings.get("global_regex_preset") or {}
++    worldbook = normalize_world_info(draft["worldbook"]) if isinstance(draft.get("worldbook"), list) else normalize_world_info(app_extras(app).get("world_info") or [])
++    mod_ids = draft.get("mod_ids") or []
++    if not isinstance(mod_ids, list) or len(mod_ids) > 30:
++        raise ValueError("invalid mods")
++    mod_ids = list(dict.fromkeys(str(value) for value in mod_ids))
++    mod_worldbook = []
++    if mod_ids:
++        community = ConversationModStore(store.conn, store.lock).community
++        for mod_index, work_id in enumerate(mod_ids):
++            work = community.get_work(work_id)
++            if not work or work.get("work_type") != "mod" or not community.can_use_work(user_id, work):
++                raise ValueError("mod unavailable")
++            snapshot = community.versions.snapshot(str(work.get("current_version_id") or ""), "mod", work_id)
++            if not snapshot:
++                raise ValueError("mod version unavailable")
++            for entry_index, entry in enumerate(normalize_world_info(_mod_entries(snapshot.get("content")))):
++                entry.update(id=f"mod:{work_id}:{entry_index}", _homer_world_group="mod", _homer_world_group_index=mod_index, _homer_world_sequence=entry_index)
++                mod_worldbook.append(entry)
++    execute_prompt_regex([], regex)
++    return {"prompt": prompt, "regex": regex, "worldbook": worldbook, "mod_ids": mod_ids, "mod_worldbook": mod_worldbook, "display_regex": display_regex(regex)}
++
++
+ def prepare_sillytavern_bridge_generation(store: "Store", claims: dict, body: dict) -> dict:
+     """Build a provider request from an authenticated, conversation-scoped ST prompt."""
+     user_id = str(claims.get("user_id") or "")
+@@ -17816,6 +17863,10 @@
+     user = store.get_user_by_id(user_id)
+     if not user:
+         raise ValueError("user not found")
++    if claims.get("admin_preview") and not is_admin(user):
++        raise PermissionError("admin only")
++    if "homer_preview" in body and not (claims.get("admin_preview") and is_admin(user)):
++        raise PermissionError("admin preview only")
+     app_row = (
+         store.versioned_app_for_conversation(app_id, conversation_id, user_id)
+         if conversation_id
+@@ -17850,6 +17901,14 @@
+     context = store.chat_context(user_id, app_id, conversation_id, last_user, history) if conversation_id else {}
+ 
+     settings = store.effective_llm_settings(app, user_id=user_id)
++    if claims.get("admin_preview"):
++        config = admin_dialogue_configuration(store, app, user_id, body.get("homer_preview"))
++        settings = dict(settings, global_prompt_preset=config["prompt"], global_regex_preset=config["regex"])
++        app["extra_settings"] = dict(app_extras(app), world_info=config["mod_worldbook"] + config["worldbook"])
++    effective_regex = dict(settings.get("global_regex_preset") or {})
++    if conversation_id and effective_regex.get("id"):
++        overrides = store.conversation_preset_override_map(conversation_id, user_id).get("regex", {}).get(effective_regex["id"], {})
++        effective_regex["scripts"] = [dict(rule, disabled=not overrides.get(rule.get("id"), not rule.get("disabled"))) for rule in effective_regex.get("scripts") or []]
+     if isinstance(context.get("conversation_settings"), dict):
+         context["conversation_settings"]["prompt_preset"] = settings.get("global_prompt_preset") or {}
+         context["conversation_settings"]["regex_preset"] = settings.get("global_regex_preset") or {}
+@@ -17857,12 +17916,16 @@
+         app,
+         last_user,
+         [],
+-        settings,
++        dict(settings, global_regex_preset={"enabled": False, "scripts": []}),
+         store.get_persona(user_id),
+         context,
+     )
+     if not request_info.get("enabled"):
+         raise RuntimeError("模型服务配置不可用")
++    # Apply official prompt regex to the final runtime messages, not the temporary
++    # single-user payload that is replaced below. Keep display transformations out.
++    messages = execute_prompt_regex(messages, effective_regex,
++        user_name=str((store.get_persona(user_id) or {}).get("name") or "用户"), character_name=str(app.get("name") or "角色"))
+     protocol = str(request_info.get("protocol") or "openai")
+     payload = dict(request_info.get("payload") if isinstance(request_info.get("payload"), dict) else {})
+     if protocol == "anthropic":
+@@ -17966,6 +18029,14 @@
+         "conversation_id": conversation_id,
+         "pricing": normalize_model_pricing(settings.get("pricing")),
+         "input_tokens_estimate": estimate_payload_input_tokens(payload),
++        "diagnostic": {
++            "prompt_id": str((settings.get("global_prompt_preset") or {}).get("id") or ""),
++            "prompt_revision": preset_fingerprint(settings.get("global_prompt_preset")),
++            "regex_id": str(effective_regex.get("id") or ""),
++            "regex_revision": preset_fingerprint(effective_regex),
++            "regex_count": sum(not rule.get("disabled") for rule in effective_regex.get("scripts") or []),
++            "worldbook_revision": preset_fingerprint(app_extras(app).get("world_info")),
++        },
+     }
+ 
+ 
+@@ -19655,12 +19726,15 @@
+         self.send_json(200, {"object": "list", "data": data})
+ 
+     def handle_sillytavern_chat_completions(self, body: object) -> None:
++        request_id = uuid.uuid4().hex[:16]
++        def failure(status=502, reason=""):
++            return generation_error(status, reason, request_id)
+         claims = sillytavern_bridge_claims(self.headers.get("Authorization"))
+         if not claims:
+-            self.send_json(401, {"error": {"message": "无效或已过期的酒馆会话，请刷新页面", "type": "authentication_error"}})
++            self.send_json(401, failure(401))
+             return
+         if self.command.upper() != "POST" or not isinstance(body, dict):
+-            self.send_json(400, {"error": {"message": "invalid request", "type": "invalid_request_error"}})
++            self.send_json(400, failure(400))
+             return
+         try:
+             request_info = prepare_sillytavern_bridge_generation(self.store, claims, body)
+@@ -19677,11 +19751,14 @@
+         except ValueError as exc:
+             message = str(exc)[:500] or "invalid request"
+             status = 402 if "积分不足" in message else 404 if "not found" in message else 409 if "mismatch" in message else 400
+-            self.send_json(status, {"error": {"message": message, "type": "invalid_request_error"}})
++            self.send_json(status, failure(status))
++            return
++        except PermissionError:
++            self.send_json(403, failure(403))
+             return
+         except Exception as exc:
+-            log(f"sillytavern request preparation failed: {type(exc).__name__}: {exc}")
+-            self.send_json(503, {"error": {"message": "酒馆模型出口准备失败", "type": "server_error"}})
++            log(f"generation {request_id} preparation failed: {type(exc).__name__}")
++            self.send_json(503, failure(503, "regex" if str(exc) == "HM-R422" else ""))
+             return
+ 
+         completion_id = "chatcmpl-homer-" + uuid.uuid4().hex
+@@ -19696,7 +19773,7 @@
+             )
+             slot.__enter__()
+         except Exception as exc:
+-            self.send_json(429, {"error": {"message": str(exc)[:500] or "请求过于频繁", "type": "rate_limit_error"}})
++            self.send_json(429, failure(429))
+             return
+ 
+         if not stream:
+@@ -19732,13 +19809,14 @@
+                     }],
+                     "usage": {"prompt_tokens": actual_input_tokens, "completion_tokens": actual_output_tokens, "total_tokens": actual_input_tokens + actual_output_tokens},
+                     "homer": charge,
++                    "homer_diagnostic": dict(request_info.get("diagnostic") or {}, request_id=request_id),
+                 })
+             except HTTPError as exc:
+                 log(f"sillytavern upstream HTTP error: {exc.code}")
+-                self.send_json(502, {"error": {"message": f"模型服务返回 HTTP {exc.code}", "type": "upstream_error"}})
++                self.send_json(502, failure(429 if exc.code == 429 else 502))
+             except Exception as exc:
+-                log(f"sillytavern completion failed: {type(exc).__name__}: {exc}")
+-                self.send_json(502, {"error": {"message": "模型请求失败，请稍后重试", "type": "upstream_error"}})
++                log(f"generation {request_id} failed: {type(exc).__name__}")
++                self.send_json(502, failure(504 if isinstance(exc, (TimeoutError, socket.timeout)) else 502, "empty" if "没有返回有效内容" in str(exc) else ""))
+             finally:
+                 slot.__exit__(None, None, None)
+             return
+@@ -19757,6 +19835,8 @@
+                     "finish_reason": finish_reason,
+                 }],
+             }
++            if delta.get("role") or finish_reason:
++                payload["homer_diagnostic"] = dict(request_info.get("diagnostic") or {}, request_id=request_id)
+             self.wfile.write(
+                 ("data: " + json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n\n").encode("utf-8")
+             )
+@@ -19792,14 +19872,9 @@
+             self.wfile.write(b"data: [DONE]\n\n")
+             self.wfile.flush()
+         except Exception as exc:
+-            log(f"sillytavern stream failed: {type(exc).__name__}: {exc}")
++            log(f"generation {request_id} stream failed: {type(exc).__name__}")
+             try:
+-                error_payload = {
+-                    "error": {
+-                        "message": "模型流式请求失败，请稍后重试",
+-                        "type": "upstream_error",
+-                    }
+-                }
++                error_payload = failure(504 if isinstance(exc, (TimeoutError, socket.timeout)) else 429 if isinstance(exc, HTTPError) and exc.code == 429 else 502, "empty" if "没有返回有效内容" in str(exc) else "")
+                 self.wfile.write(
+                     ("data: " + json.dumps(error_payload, ensure_ascii=False, separators=(",", ":")) + "\n\n").encode("utf-8")
+                 )
+@@ -20085,6 +20160,73 @@
+ 
+         user = self.authenticated_user()
+ 
++        if normalized == "admin/api/dialogue/configuration":
++            if not is_admin(self.authenticated_token_user()):
++                return error_response("forbidden: admin only", 403)
++            if self.command.upper() != "POST" or not isinstance(body, dict):
++                return error_response("method not allowed", 405)
++            app_id = self.store.resolve_local_app_id(str(body.get("app_id") or ""))
++            app_row = self.store.versioned_app_for_new_conversation(app_id, str(user["id"]))[0]
++            if not user_can_play_app(app_row, str(user["id"])):
++                return error_response("character unavailable", 404)
++            app = dict(app_row)
++            model = self.store.public_model_selection(body.get("model"))
++            if model:
++                app["llm_model"] = model
++            try:
++                config = admin_dialogue_configuration(self.store, app, str(user["id"]), body.get("draft"))
++                if body.get("include_library"):
++                    config["library"] = self.store.global_presets()
++                return ok_response(config)
++            except (ValueError, RuntimeError):
++                return error_response("[HM-R422] 会话配置无效，请检查正则与条目内容", 422)
++
++        if normalized in ("admin/api/dialogue/preview", "console/api/web/dialogue/regex"):
++            if self.command.upper() != "GET":
++                return error_response("method not allowed", 405)
++            if not user:
++                return error_response("unauthorized", 401)
++            preview = normalized == "admin/api/dialogue/preview"
++            if preview and not is_admin(self.authenticated_token_user()):
++                return error_response("forbidden: admin only", 403)
++            user_id = str(user["id"])
++            app_id = self.store.resolve_local_app_id(parse_query_str(query, "app_id", ""))
++            conv_id = parse_query_str(query, "conversation_id", "")
++            conversation = self.store.get_conversation(conv_id, user_id) if conv_id else None
++            if conv_id and (not conversation or self.store.resolve_local_app_id(str(conversation.get("app_id") or "")) != app_id):
++                return error_response("conversation not found", 404)
++            app_row = self.store.versioned_app_for_conversation(app_id, conv_id, user_id) if conv_id else self.store.versioned_app_for_new_conversation(app_id, user_id)[0]
++            if not user_can_play_app(app_row, user_id):
++                return error_response("character unavailable", 404)
++            app_data = dict(app_row)
++            selected = self.store.public_model_selection(parse_query_str(query, "model", ""))
++            if selected:
++                app_data["llm_model"] = selected
++            settings = self.store.effective_llm_settings(app_data, user_id=user_id)
++            preset = dict(settings.get("global_regex_preset") or {})
++            if conv_id and preset.get("id"):
++                overrides = self.store.conversation_preset_override_map(conv_id, user_id).get("regex", {}).get(preset["id"], {})
++                preset["scripts"] = [dict(rule, disabled=not overrides.get(rule.get("id"), not rule.get("disabled"))) for rule in preset.get("scripts") or []]
++            rules = display_regex(preset)
++            if not preview:
++                return ok_response(rules)
++            # Read-only launch: no conversation row, no history writes, no cloud token
++            # for a real conversation. The signed preview claim is rechecked on generate.
++            card = local_app_to_card(app_data)
++            preview_card = silly_card_with_homer_cover(local_app_to_silly_card(app_data, card), str(app_data.get("cover_url") or ""))
++            # The authoritative backend applies the editable worldbook once. Do not
++            # also embed a stale duplicate in the native runtime prompt.
++            preview_card.setdefault("data", {})["character_book"] = {"entries": []}
++            return ok_response({
++                "user": {"id": user_id, "name": str(user["name"] or "管理员"), "is_admin": True},
++                "runtime": {"backend_base_url": PUBLIC_BASE_URL.rstrip("/"), "public_url": SILLYTAVERN_PUBLIC_URL},
++                "launch": {"app_id": app_id, "conversation_id": "preview-" + uuid.uuid4().hex,
++                    "admin_preview": True, "card": preview_card,
++                    "messages": [], "runtime_config": {}, "runtime_profile": {}, "display_regex": rules,
++                    "bridge_token": sillytavern_bridge_token_for(user_id, app_id, admin_preview=True),
++                    "bridge_token_ttl_seconds": SILLYTAVERN_BRIDGE_TOKEN_TTL_SECONDS},
++            })
++
+         if normalized in (
+             "console/api/web/dialogue/session",
+             "console/api/web/sillytavern/session",
+diff --git a/tools/homer_generation.py b/tools/homer_generation.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..f9f641054b9081843394c3f58513aa9820ccb38c
+--- /dev/null
++++ b/tools/homer_generation.py
+@@ -0,0 +1,64 @@
++"""Generation diagnostics and regex execution. Never return provider secrets."""
++import hashlib
++import json
++import os
++from pathlib import Path
++import subprocess
++
++
++def preset_fingerprint(value):
++    return hashlib.sha256(json.dumps(value or {}, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:16]
++
++
++def generation_error(status=502, reason="", request_id=""):
++    # Only use locally classified reasons, never echo arbitrary provider bodies.
++    code, message = {
++        400: ("HM-G400", "请求参数无效，请调整后重试"),
++        401: ("HM-G401", "登录或会话已过期，请重新进入会话"),
++        402: ("HM-G402", "积分不足，请补充积分或选择消耗更低的模型"),
++        403: ("HM-G403", "没有权限进行此操作"),
++        404: ("HM-G404", "角色或会话已不可用，请重新选择"),
++        409: ("HM-G409", "会话与角色不匹配，请重新进入会话"),
++        429: ("HM-G429", "请求过于频繁，请稍后重试或更换模型"),
++        503: ("HM-G503", "当前模型暂不可用，请更换模型后重试"),
++        504: ("HM-G504", "当前模型响应超时，请更换模型后重试"),
++    }.get(status, ("HM-G502", "当前模型生成失败，请更换模型后重试"))
++    if reason == "empty":
++        code, message = "HM-G204", "当前模型未返回有效内容，请更换模型后重试"
++    elif reason == "regex":
++        code, message = "HM-R422", "预设正则执行失败，请联系管理员检查规则"
++    return {"error": {"code": code, "message": f"[{code}] {message}", "request_id": request_id}}
++
++
++def execute_prompt_regex(messages, preset, *, user_name="用户", character_name="角色"):
++    if not preset or not preset.get("enabled"):
++        return messages
++    worker = Path(__file__).with_name("homer_regex.cjs")
++    # Separate, killable process: pathological admin regex must not hang server threads.
++    payload = {"messages": messages, "scripts": preset.get("scripts") or [],
++               "user": user_name, "char": character_name}
++    try:
++        result = subprocess.run([os.environ.get("HOMER_NODE_BINARY", "node"), "--max-old-space-size=96", str(worker)],
++                                input=json.dumps(payload, ensure_ascii=False), text=True, encoding="utf-8",
++                                capture_output=True, timeout=3, check=True,
++                                creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
++        data = json.loads(result.stdout)
++        if data.get("errors"):
++            raise ValueError("official regex invalid")
++        return data["messages"]
++    except (OSError, subprocess.SubprocessError, ValueError, KeyError) as exc:
++        raise RuntimeError("HM-R422") from exc
++
++
++def display_regex(preset):
++    """Only display transformations; private prompt-only rules stay on the server."""
++    result = []
++    if preset.get("enabled"):
++        for raw in preset.get("scripts") or []:
++            if raw.get("disabled") or (raw.get("promptOnly") and not raw.get("markdownOnly")):
++                continue
++            result.append({key: raw.get(key) for key in (
++                "id", "scriptName", "findRegex", "replaceString", "trimStrings", "placement",
++                "runOnEdit", "substituteRegex", "minDepth", "maxDepth", "order")})
++            result[-1].update({"markdownOnly": True, "promptOnly": False, "disabled": False})
++    return {"preset_id": preset.get("id") or "", "revision": preset_fingerprint(preset), "scripts": result}
+diff --git a/tools/homer_regex.cjs b/tools/homer_regex.cjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..d8ab6300a1cf6eab31bf0e4a52944b746592a209
+--- /dev/null
++++ b/tools/homer_regex.cjs
+@@ -0,0 +1,64 @@
++// Isolated JavaScript regex worker. No eval, network, filesystem, or logging of inputs.
++'use strict';
++function compile(pattern) {
++    const text = String(pattern || '');
++    if (!text) throw Error('empty-pattern');
++    if (text.startsWith('/')) {
++        for (let i = text.length - 1; i > 0; i--) {
++            if (text[i] !== '/') continue;
++            let n = 0; for (let j = i - 1; j >= 0 && text[j] === '\\'; j--) n++;
++            if (n % 2 === 0 && /^[dgimsuvy]*$/.test(text.slice(i + 1))) {
++                return new RegExp(text.slice(1, i), text.slice(i + 1));
++            }
++        }
++    }
++    return new RegExp(text);
++}
++function macro(text, data, escape = false) {
++    return String(text || '').replace(/\{\{(user|char)\}\}/gi, (_, key) => {
++        const value = String(data[key.toLowerCase()] || '');
++        return escape ? value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') : value;
++    });
++}
++function run(data) {
++    const errors = [];
++    const rules = [...(data.scripts || [])].sort((a, b) => (a.order || 0) - (b.order || 0)).filter(r => !r.disabled);
++    // Validate even if no message currently matches its placement/depth.
++    const compiled = rules.map(r => {
++        try { return compile(Number(r.substituteRegex) ? macro(r.findRegex, data, Number(r.substituteRegex) === 2) : r.findRegex); }
++        catch { errors.push(String(r.id || 'unknown')); return null; }
++    });
++    const conversational = data.messages.filter(m => ['user', 'assistant'].includes(m.role));
++    let position = 0;
++    const messages = data.messages.map(m => {
++        if (!['user', 'assistant'].includes(m.role)) return m;
++        const depth = conversational.length - 1 - position++;
++        let text = String(m.content || '');
++        rules.forEach((r, i) => {
++            if (!compiled[i] || (r.markdownOnly && !r.promptOnly)) return;
++            if (!(r.placement || [2]).includes(m.role === 'user' ? 1 : 2)) return;
++            if (r.minDepth != null && Number(r.minDepth) >= 0 && depth < Number(r.minDepth)) return;
++            if (r.maxDepth != null && Number(r.maxDepth) >= 0 && depth > Number(r.maxDepth)) return;
++            compiled[i].lastIndex = 0;
++            text = text.replace(compiled[i], (...args) => {
++                const named = typeof args.at(-1) === 'object' ? args.at(-1) : {};
++                const captures = args.slice(0, typeof args.at(-1) === 'object' ? -3 : -2);
++                // ST supports $n/$<name>/{{match}} with trimStrings applied to captures.
++                const trim = value => (r.trimStrings || []).reduce((s, t) => s.split(macro(t, data)).join(''), String(value || ''));
++                const replacement = String(r.replaceString || '').replace(/\{\{match\}\}/gi, '$0')
++                    .replace(/\$(\d+)|\$<([^>]+)>/g, (_, n, name) => trim(name ? named[name] : captures[Number(n)]));
++                return macro(replacement, data);
++            });
++            if (text.length > 240000) throw Error('regex-output-limit');
++        });
++        return { ...m, content: text };
++    });
++    return { messages, errors };
++}
++module.exports = { compile, run };
++if (require.main === module) {
++    let input = '';
++    process.stdin.setEncoding('utf8');
++    process.stdin.on('data', data => { input += data; if (input.length > 8000000) process.exit(2); });
++    process.stdin.on('end', () => { try { process.stdout.write(JSON.stringify(run(JSON.parse(input)))); } catch { process.exitCode = 2; } });
++}

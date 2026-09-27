@@ -48,6 +48,7 @@ tasks.register("syncHomerClientAssets", Sync) {
     group = "build"
     description = "Bundles the Homer web UI and dialogue client runtime into the APK."
     dependsOn(tasks.named("compileHomerDialogueLibraries"))
+    inputs.files(fileTree(new File(workspaceRoot, "tools/webview-compat")) { exclude "node_modules/**" })
     into(generatedClientAssets)
     from(webClientSource) {
         into "client/web"
@@ -58,7 +59,7 @@ tasks.register("syncHomerClientAssets", Sync) {
         exclude "scripts/extensions/third-party/st-yuzi-phone/**"
         // Memory Books is shipped as index.build.js; its build-only npm tree
         // must not become public WebView resources after rebuilding the plugin.
-        exclude "scripts/extensions/third-party/SillyTavern-MemoryBooks/node_modules/**"
+        exclude "**/node_modules/**"
     }
     doLast {
         File root = generatedClientAssets.get().asFile
@@ -77,6 +78,10 @@ tasks.register("syncHomerClientAssets", Sync) {
             rename { "lib.js" }
         }
         File indexFile = new File(clientRoot, "index.txt")
+        exec {
+            workingDir workspaceRoot
+            commandLine "node", "tools/webview-compat/build.mjs", clientRoot.absolutePath
+        }
         List<String> entries = fileTree(clientRoot)
                 .matching { exclude "index.txt" }
                 .files
@@ -106,11 +111,13 @@ android {
     compileSdk 35
 
     defaultConfig {
-        applicationId "org.nebula.horizon.composeai"
+        // The former ID belongs to Wind as well, with a different certificate.
+        // Keep our signing key, but give Homer its own install/update identity.
+        applicationId "app.huomeng.homer"
         minSdk 26
         targetSdk 35
-        versionCode 274
-        versionName "1.15.4"
+        versionCode 279
+        versionName "1.17.1"
         buildConfigField "String", "PATCH_PUBLIC_KEY_B64", javaString(configuredPatchKey)
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
