@@ -1,0 +1,2 @@
+# Required by homer_images.py for bounded decoding and metadata removal.
+Pillow>=11.3,<13

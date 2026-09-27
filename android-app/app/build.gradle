@@ -116,8 +116,8 @@ android {
         applicationId "app.huomeng.homer"
         minSdk 26
         targetSdk 35
-        versionCode 280
-        versionName "1.17.2"
+        versionCode 281
+        versionName "1.17.3"
         buildConfigField "String", "PATCH_PUBLIC_KEY_B64", javaString(configuredPatchKey)
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }

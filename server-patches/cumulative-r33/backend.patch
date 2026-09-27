@@ -1,0 +1,1332 @@
+diff --git a/tools/ai_fengyue_local_server.py b/tools/ai_fengyue_local_server.py
+index e11f59ae94a5038f5b577f587371ef88923ef1c3..105e308c5227a1b9ccfa3ed1318b5aec5779abd8 100644
+--- a/tools/ai_fengyue_local_server.py
++++ b/tools/ai_fengyue_local_server.py
+@@ -25,6 +25,8 @@
+ import uuid
+ import zipfile
+ import zlib
++from homer_generation import display_regex, execute_prompt_regex, generation_error, preset_fingerprint, validate_upstream_event, require_generated_text, settle_delivered_generation
++from homer_images import route as image_route, ImageError
+ from collections import OrderedDict
+ from concurrent.futures import ThreadPoolExecutor, as_completed
+ from datetime import date
+@@ -69,6 +71,8 @@
+     sync_card_extra_flags,
+ )
+ from chat_mod_workshop import (
++    ConversationModStore,
++    _mod_entries,
+     apply_conversation_mods,
+     apply_locked_community_assets,
+     ensure_chat_mod_schema,
+@@ -949,7 +953,7 @@
+ SILLYTAVERN_BRIDGE_TOKEN_TTL_SECONDS = 15 * 60
+ 
+ 
+-def sillytavern_bridge_token_for(user_id: str, app_id: str, conversation_id: str = "") -> str:
++def sillytavern_bridge_token_for(user_id: str, app_id: str, conversation_id: str = "", *, admin_preview: bool = False) -> str:
+     """Issue a short-lived token scoped to one Homer user/card/conversation."""
+     if len(AUTH_TOKEN_SECRET.encode("utf-8")) < 32:
+         raise RuntimeError("AUTH_TOKEN_SECRET must be at least 32 bytes")
+@@ -962,6 +966,7 @@
+             "iat": issued_at,
+             "exp": issued_at + SILLYTAVERN_BRIDGE_TOKEN_TTL_SECONDS,
+             "scope": "sillytavern-chat",
++            "admin_preview": bool(admin_preview),
+         },
+         separators=(",", ":"),
+     ).encode("utf-8")
+@@ -1008,6 +1013,7 @@
+         "app_id": str(claims["app"]),
+         "conversation_id": str(claims.get("conv") or ""),
+         "expires_at": int(claims["exp"]),
++        "admin_preview": bool(claims.get("admin_preview")),
+     }
+ 
+ 
+@@ -9544,6 +9550,11 @@
+         return {"prompt": self.global_prompt_presets(), "regex": self.global_regex_presets()}
+ 
+     def _save_global_collection(self, key: str, collection: dict) -> None:
++        if key == GLOBAL_REGEX_PRESETS_KEY:
++            try:
++                execute_prompt_regex([], {"enabled": True, "scripts": [rule for preset in collection.get("items") or [] for rule in preset.get("scripts") or []]})
++            except RuntimeError as exc:
++                raise ValueError("HM-R422: 正则语法校验失败，请修正或停用无效条目后重试") from exc
+         raw = json.dumps(collection, ensure_ascii=False, separators=(",", ":"))
+         if len(raw.encode("utf-8")) > 4 * 1024 * 1024:
+             raise ValueError("global preset collection is too large")
+@@ -9995,22 +10006,22 @@
+     def public_model_presets(self) -> dict:
+         presets, default_id = self.llm_presets(include_secrets=False)
+         visible: list[dict] = []
+-        seen_models: set[str] = set()
++        seen_models: set[tuple[str, str]] = set()
+         for p in presets:
+             if not p.get("enabled"):
+                 continue
+             models = split_model_names(p.get("models") or p.get("model")) or [p.get("model") or ""]
+             default_model = str(p.get("model") or "") if str(p.get("model") or "") in models else models[0]
+             for model in models:
+-                if not model or model in seen_models:
++                if not model or (p["id"], model) in seen_models:
+                     continue
+-                seen_models.add(model)
++                seen_models.add((p["id"], model))
+                 model_config = model_config_for_preset(p, model)
+                 pricing = normalize_model_pricing(model_config.get("pricing"))
+                 points_cost = model_charge_points(pricing)
+                 visible.append({
+                     "id": model_selection_id(p["id"], model) if len(split_model_names(p.get("models") or p.get("model"))) > 1 else p["id"],
+-                    "preset_id": p["id"],
++                    "preset_id": p["id"], "group_id": p["id"], "group_name": str(p.get("name") or "站点模型"), "preset_name": str(p.get("name") or "站点模型"),
+                     "name": model_config.get("display_name") or p.get("name") or p.get("model") or p["id"],
+                     "protocol": p.get("protocol") or "openai",
+                     "model": model,
+@@ -10026,7 +10037,7 @@
+             model = p.get("model") or ""
+             model_config = model_config_for_preset(p, model)
+             pricing = normalize_model_pricing(model_config.get("pricing"))
+-            visible = [{"id": p["id"], "preset_id": p["id"], "name": model_config.get("display_name") or p.get("name") or model or p["id"], "protocol": p.get("protocol") or "openai", "model": model, "enabled": True, "is_default": True, "points_cost": model_charge_points(pricing), "pricing": pricing, "price_label": model_price_label(pricing), "preset_id_bound": model_config.get("preset_id") or ""}]
++            visible = [{"id": p["id"], "preset_id": p["id"], "group_id": p["id"], "group_name": str(p.get("name") or "站点模型"), "preset_name": str(p.get("name") or "站点模型"), "name": model_config.get("display_name") or p.get("name") or model or p["id"], "protocol": p.get("protocol") or "openai", "model": model, "enabled": True, "is_default": True, "points_cost": model_charge_points(pricing), "pricing": pricing, "price_label": model_price_label(pricing), "preset_id_bound": model_config.get("preset_id") or ""}]
+             default_id = p["id"]
+         else:
+             default_id = next((p["id"] for p in visible if p.get("is_default")), visible[0]["id"] if visible else default_id)
+@@ -12118,7 +12129,10 @@
+             template_context=template_context,
+             phase="generate",
+         )
+-        text = apply_regex_scripts(text, card or {})
++        # Persist source, never display-regex output. The SillyTavern runtime
++        # owns display processing; a second pass can inject an HTML document
++        # into its own trigger and expose the remaining source as Markdown.
++        text = apply_regex_scripts(text, card or {}, source_only=True)
+         key = _dedupe_text_key(text)
+         if text and key and key not in {_dedupe_text_key(g) for g in greetings}:
+             greetings.append(text)
+@@ -12189,6 +12203,7 @@
+     regex_scripts = extra.get("regex_scripts")
+     if not isinstance(regex_scripts, list):
+         regex_scripts = []
++    regex_scripts = recover_legacy_regex_replacements(regex_scripts, extra)
+     media_assets = extra.get("media_assets") if isinstance(extra.get("media_assets"), list) else []
+     card_experience = extra.get("card_experience") if isinstance(extra.get("card_experience"), dict) else {}
+     card_prompt_preset = normalize_card_prompt_preset(extra.get("card_prompt_preset"))
+@@ -12565,7 +12580,7 @@
+             ext = {}
+         meta = ext.get("homer_import_meta") if isinstance(ext.get("homer_import_meta"), dict) else {}
+         if statusbar_val.strip():
+-            meta["statusbar"] = statusbar_val.strip()[:REGEX_REPLACE_MAX_CHARS]
++            meta["statusbar"] = checked_regex_replacement(statusbar_val.strip())
+         if isinstance(page_depth_val, (int, float)):
+             meta["pageDepth"] = int(page_depth_val)
+         ext["homer_import_meta"] = meta
+@@ -14429,7 +14444,14 @@
+     raw["id"] = str(raw.get("id") or f"regex-{index + 1}")[:160]
+     raw["scriptName"] = str(raw.get("scriptName") or raw.get("name") or f"Regex {index + 1}")[:200]
+     raw["findRegex"] = str(raw.get("findRegex") if raw.get("findRegex") is not None else raw.get("find") or raw.get("pattern") or "")[:12000]
+-    raw["replaceString"] = str(raw.get("replaceString") if raw.get("replaceString") is not None else raw.get("replace") or raw.get("replacement") or "")[:REGEX_REPLACE_MAX_CHARS]
++    # Exact compatibility repair for the audited truncated deletion rule. Never
++    # infer arbitrary broken patterns; require both the known source and intent.
++    if (raw["scriptName"] == "去生理状态栏美化"
++            and raw["findRegex"] == '/(<status_profile name="[^"]+">[\\s\\S]*?<\\/'
++            and not raw.get("replaceString", raw.get("replace", ""))):
++        raw["findRegex"] = '/(<status_profile name="[^"]+">[\\s\\S]*?<\\/status_profile>)/g'
++        raw["compatibility_repair"] = "status-profile-closing-tag-r29"
++    raw["replaceString"] = checked_regex_replacement(raw.get("replaceString") if raw.get("replaceString") is not None else raw.get("replace") or raw.get("replacement") or "")
+     raw["trimStrings"] = list(raw.get("trimStrings") or [])[:100] if isinstance(raw.get("trimStrings"), list) else []
+     placement = raw.get("placement")
+     if not isinstance(placement, list):
+@@ -14544,7 +14566,63 @@
+     return text, ""
+ 
+ 
+-REGEX_REPLACE_MAX_CHARS = 240000
++REGEX_REPLACE_MAX_BYTES = 8 * 1024 * 1024
++
++
++def checked_regex_replacement(value: object) -> str:
++    text = str(value if value is not None else "")
++    if len(text.encode("utf-8")) > REGEX_REPLACE_MAX_BYTES:
++        raise ValueError("界面模板（正则）单条替换内容不能超过 8 MiB；未保存，请缩小文件后重试")
++    return text
++
++
++def recover_legacy_regex_replacements(rules: list, extra: dict) -> list:
++    """Repair only the provable old 240000-character truncation, without a DB migration.
++
++    The retained original card is the same version, not a newer creator resource.
++    Never replace edited text, change flags/order, resurrect deleted rules, or
++    choose between conflicting source candidates.
++    """
++    if not any(isinstance(r, dict) and len(str(r.get("replace", ""))) == 240000 for r in rules):
++        return rules
++    candidates = []
++    snapshot = extra.get("sillytavern_card")
++    roots = [extra]
++    if isinstance(snapshot, dict):
++        roots.append(snapshot)
++        if isinstance(snapshot.get("data"), dict):
++            roots.append(snapshot["data"])
++    for root in roots:
++        extensions = root.get("extensions")
++        if isinstance(extensions, dict):
++            for key in ("regex_scripts", "TavernHelper_scripts", "tavern_helper_scripts"):
++                if isinstance(extensions.get(key), list):
++                    candidates.extend(extensions[key])
++        if root is not extra and isinstance(root.get("regex_scripts"), list):
++            candidates.extend(root["regex_scripts"])
++    by_key = {}
++    for index, candidate in enumerate(candidates):
++        if not isinstance(candidate, dict):
++            continue
++        try:
++            normalized = normalize_regex_scripts([dict(candidate, id=candidate.get("id") or f"regex-{index + 1}")])
++        except ValueError:
++            continue
++        if not normalized:
++            continue
++        candidate = normalized[0]
++        key = (candidate["id"], candidate["find"], candidate["flags"])
++        by_key.setdefault(key, set()).add(candidate["replace"])
++    restored = []
++    for rule in rules:
++        if not isinstance(rule, dict):
++            restored.append(rule)
++            continue
++        text = str(rule.get("replace", ""))
++        matches = {value for value in by_key.get((rule.get("id"), rule.get("find"), rule.get("flags", "")), ())
++                   if len(text) == 240000 and len(value) > len(text) and value.startswith(text)}
++        restored.append(dict(rule, replace=matches.pop()) if len(matches) == 1 else rule)
++    return restored
+ 
+ 
+ def normalize_regex_scripts(value: object) -> list:
+@@ -14571,7 +14649,7 @@
+             "id": str(raw.get("id") or f"regex-{idx + 1}")[:80],
+             "name": str(raw.get("name") or raw.get("scriptName") or f"Regex {idx + 1}")[:80],
+             "find": find[:1000],
+-            "replace": replace[:REGEX_REPLACE_MAX_CHARS],
++            "replace": checked_regex_replacement(replace),
+             # Preserve JavaScript flags for the native SillyTavern projection.
+             # The Python renderer still consumes only i/m/s where applicable.
+             "flags": "".join(dict.fromkeys(ch for ch in flags if ch in "gimsuy"))[:6],
+@@ -14627,14 +14705,14 @@
+         "id": str(raw.get("id") or f"regex-{index + 1}")[:80],
+         "scriptName": str(raw.get("name") or raw.get("scriptName") or f"Regex {index + 1}")[:80],
+         "findRegex": find_regex[:1100],
+-        "replaceString": str(
++        "replaceString": checked_regex_replacement(
+             raw.get("replace")
+             if raw.get("replace") is not None
+             else raw.get("replacement")
+             if raw.get("replacement") is not None
+             else raw.get("replaceString")
+             or ""
+-        )[:REGEX_REPLACE_MAX_CHARS],
++        ),
+         "trimStrings": list(raw.get("trimStrings") or []) if isinstance(raw.get("trimStrings"), list) else [],
+         "placement": placement or [1, 2],
+         "disabled": not enabled,
+@@ -15679,6 +15757,7 @@
+ 
+ 
+ def extract_upstream_chat_answer(payload: object) -> str | None:
++    validate_upstream_event(payload)
+     if isinstance(payload, dict):
+         content_blocks = payload.get("content")
+         if isinstance(content_blocks, list):
+@@ -15704,13 +15783,13 @@
+             value = choice.get("text")
+             if isinstance(value, str) and value.strip():
+                 return value.strip()
+-        for key in ("reply", "answer", "content", "text", "message"):
++        for key in ("reply", "answer", "content", "text"):
+             value = payload.get(key)
+             if isinstance(value, str) and value.strip():
+                 return value.strip()
+         data = payload.get("data")
+         if isinstance(data, dict):
+-            for key in ("reply", "answer", "content", "text", "message"):
++            for key in ("reply", "answer", "content", "text"):
+                 value = data.get(key)
+                 if isinstance(value, str) and value.strip():
+                     return value.strip()
+@@ -15741,8 +15820,9 @@
+         try:
+             payload = json.loads(joined)
+         except Exception:
+-            last = joined.strip()
+-            continue
++            if joined.strip() == '[DONE]':
++                continue
++            raise RuntimeError('模型返回了无效响应，请更换模型')
+         answer = extract_upstream_chat_answer(payload)
+         if answer:
+             last = answer
+@@ -16516,9 +16596,18 @@
+     return "".join(out)
+ 
+ 
+-def apply_regex_scripts(text: str, app: dict) -> str:
++def apply_regex_scripts(text: str, app: dict, *, source_only: bool = False) -> str:
+     value = str(text or "")
+     for script in enabled_regex_scripts(app):
++        if source_only:
++            # Follow native source-stage semantics. Display-only rules render
++            # in the client, prompt-only rules belong to model input. Keep
++            # source-transforming assistant rules working for ordinary cards.
++            if script.get("markdownOnly") or script.get("promptOnly"):
++                continue
++            placements = script.get("placement") or [2]
++            if 2 not in placements:
++                continue
+         replacement = str(script.get("replace") or "")
+         appends_document = bool(
+             re.search(r"<!doctype\s+html|<html[\s>]", replacement, flags=re.IGNORECASE)
+@@ -16587,9 +16676,7 @@
+         try:
+             pattern = re.compile(find, flags=flags)
+             replacement = str(script.get("replaceString") or "")
+-            value = pattern.sub(lambda match: expand_silly_regex_replacement(replacement, match), value)
+-            if len(value) > REGEX_REPLACE_MAX_CHARS:
+-                value = value[:REGEX_REPLACE_MAX_CHARS]
++            value = checked_regex_replacement(pattern.sub(lambda match: expand_silly_regex_replacement(replacement, match), value))
+         except (re.error, ValueError, OverflowError) as exc:
+             log(f"global regex script skipped for {preset.get('id')}: {exc}")
+     return value
+@@ -17628,6 +17715,7 @@
+ 
+ 
+ def extract_stream_delta(payload: object) -> str:
++    validate_upstream_event(payload)
+     if not isinstance(payload, dict):
+         return ""
+     delta = payload.get("delta") if isinstance(payload.get("delta"), dict) else {}
+@@ -17678,6 +17766,7 @@
+ 
+ 
+ def _stream_event_is_terminal(event: object) -> bool:
++    validate_upstream_event(event)
+     if not isinstance(event, dict):
+         return False
+     event_type = str(event.get("type") or event.get("event") or "").strip().lower()
+@@ -17808,6 +17897,36 @@
+     return normalized
+ 
+ 
++def admin_dialogue_configuration(store, app, user_id, draft=None):
++    """Admin-only caller. Normalize ephemeral overrides without writing global settings."""
++    draft = draft if isinstance(draft, dict) else {}
++    if len(json.dumps(draft, ensure_ascii=False)) > 2_000_000:
++        raise ValueError("会话草稿过大")
++    settings = store.effective_llm_settings(app, user_id=user_id)
++    prompt = normalize_full_prompt_preset(draft["prompt"]) if isinstance(draft.get("prompt"), dict) else settings.get("global_prompt_preset") or {}
++    regex = normalize_full_regex_preset(draft["regex"]) if isinstance(draft.get("regex"), dict) else settings.get("global_regex_preset") or {}
++    worldbook = normalize_world_info(draft["worldbook"]) if isinstance(draft.get("worldbook"), list) else normalize_world_info(app_extras(app).get("world_info") or [])
++    mod_ids = draft.get("mod_ids") or []
++    if not isinstance(mod_ids, list) or len(mod_ids) > 30:
++        raise ValueError("invalid mods")
++    mod_ids = list(dict.fromkeys(str(value) for value in mod_ids))
++    mod_worldbook = []
++    if mod_ids:
++        community = ConversationModStore(store.conn, store.lock).community
++        for mod_index, work_id in enumerate(mod_ids):
++            work = community.get_work(work_id)
++            if not work or work.get("work_type") != "mod" or not community.can_use_work(user_id, work):
++                raise ValueError("mod unavailable")
++            snapshot = community.versions.snapshot(str(work.get("current_version_id") or ""), "mod", work_id)
++            if not snapshot:
++                raise ValueError("mod version unavailable")
++            for entry_index, entry in enumerate(normalize_world_info(_mod_entries(snapshot.get("content")))):
++                entry.update(id=f"mod:{work_id}:{entry_index}", _homer_world_group="mod", _homer_world_group_index=mod_index, _homer_world_sequence=entry_index)
++                mod_worldbook.append(entry)
++    execute_prompt_regex([], regex)
++    return {"prompt": prompt, "regex": regex, "worldbook": worldbook, "mod_ids": mod_ids, "mod_worldbook": mod_worldbook, "display_regex": display_regex(regex)}
++
++
+ def prepare_sillytavern_bridge_generation(store: "Store", claims: dict, body: dict) -> dict:
+     """Build a provider request from an authenticated, conversation-scoped ST prompt."""
+     user_id = str(claims.get("user_id") or "")
+@@ -17816,6 +17935,10 @@
+     user = store.get_user_by_id(user_id)
+     if not user:
+         raise ValueError("user not found")
++    if claims.get("admin_preview") and not is_admin(user):
++        raise PermissionError("admin only")
++    if "homer_preview" in body and not (claims.get("admin_preview") and is_admin(user)):
++        raise PermissionError("admin preview only")
+     app_row = (
+         store.versioned_app_for_conversation(app_id, conversation_id, user_id)
+         if conversation_id
+@@ -17850,6 +17973,14 @@
+     context = store.chat_context(user_id, app_id, conversation_id, last_user, history) if conversation_id else {}
+ 
+     settings = store.effective_llm_settings(app, user_id=user_id)
++    if claims.get("admin_preview"):
++        config = admin_dialogue_configuration(store, app, user_id, body.get("homer_preview"))
++        settings = dict(settings, global_prompt_preset=config["prompt"], global_regex_preset=config["regex"])
++        app["extra_settings"] = dict(app_extras(app), world_info=config["mod_worldbook"] + config["worldbook"])
++    effective_regex = dict(settings.get("global_regex_preset") or {})
++    if conversation_id and effective_regex.get("id"):
++        overrides = store.conversation_preset_override_map(conversation_id, user_id).get("regex", {}).get(effective_regex["id"], {})
++        effective_regex["scripts"] = [dict(rule, disabled=not overrides.get(rule.get("id"), not rule.get("disabled"))) for rule in effective_regex.get("scripts") or []]
+     if isinstance(context.get("conversation_settings"), dict):
+         context["conversation_settings"]["prompt_preset"] = settings.get("global_prompt_preset") or {}
+         context["conversation_settings"]["regex_preset"] = settings.get("global_regex_preset") or {}
+@@ -17857,12 +17988,16 @@
+         app,
+         last_user,
+         [],
+-        settings,
++        dict(settings, global_regex_preset={"enabled": False, "scripts": []}),
+         store.get_persona(user_id),
+         context,
+     )
+     if not request_info.get("enabled"):
+         raise RuntimeError("模型服务配置不可用")
++    # Apply official prompt regex to the final runtime messages, not the temporary
++    # single-user payload that is replaced below. Keep display transformations out.
++    messages = execute_prompt_regex(messages, effective_regex,
++        user_name=str((store.get_persona(user_id) or {}).get("name") or "用户"), character_name=str(app.get("name") or "角色"))
+     protocol = str(request_info.get("protocol") or "openai")
+     payload = dict(request_info.get("payload") if isinstance(request_info.get("payload"), dict) else {})
+     if protocol == "anthropic":
+@@ -17966,6 +18101,14 @@
+         "conversation_id": conversation_id,
+         "pricing": normalize_model_pricing(settings.get("pricing")),
+         "input_tokens_estimate": estimate_payload_input_tokens(payload),
++        "diagnostic": {
++            "prompt_id": str((settings.get("global_prompt_preset") or {}).get("id") or ""),
++            "prompt_revision": preset_fingerprint(settings.get("global_prompt_preset")),
++            "regex_id": str(effective_regex.get("id") or ""),
++            "regex_revision": preset_fingerprint(effective_regex),
++            "regex_count": sum(not rule.get("disabled") for rule in effective_regex.get("scripts") or []),
++            "worldbook_revision": preset_fingerprint(app_extras(app).get("world_info")),
++        },
+     }
+ 
+ 
+@@ -17992,7 +18135,7 @@
+     answer = extract_upstream_chat_answer(data) or extract_sse_answer(text)
+     if not answer:
+         raise RuntimeError("模型没有返回有效内容，请重试")
+-    return answer
++    return require_generated_text(answer)
+ 
+ 
+ def stream_sillytavern_bridge_completion(request_info: dict):
+@@ -18012,7 +18155,7 @@
+     with urlopen(req, timeout=90) as response:
+         for raw_line in response:
+             line = raw_line.decode("utf-8", errors="replace").strip()
+-            if not line or line.startswith(":"):
++            if not line or line.startswith((":", "event:", "id:", "retry:")):
+                 continue
+             if line.startswith("data:"):
+                 line = line[5:].strip()
+@@ -18024,7 +18167,8 @@
+             try:
+                 event = json.loads(line)
+             except Exception:
+-                continue
++                raise RuntimeError('模型返回了无效流式响应，请更换模型')
++            validate_upstream_event(event)
+             usage = merge_token_usage(usage, extract_token_usage(event))
+             delta = extract_stream_delta(event)
+             if delta:
+@@ -19655,12 +19799,15 @@
+         self.send_json(200, {"object": "list", "data": data})
+ 
+     def handle_sillytavern_chat_completions(self, body: object) -> None:
++        request_id = uuid.uuid4().hex[:16]
++        def failure(status=502, reason=""):
++            return generation_error(status, reason, request_id)
+         claims = sillytavern_bridge_claims(self.headers.get("Authorization"))
+         if not claims:
+-            self.send_json(401, {"error": {"message": "无效或已过期的酒馆会话，请刷新页面", "type": "authentication_error"}})
++            self.send_json(401, failure(401))
+             return
+         if self.command.upper() != "POST" or not isinstance(body, dict):
+-            self.send_json(400, {"error": {"message": "invalid request", "type": "invalid_request_error"}})
++            self.send_json(400, failure(400))
+             return
+         try:
+             request_info = prepare_sillytavern_bridge_generation(self.store, claims, body)
+@@ -19677,11 +19824,14 @@
+         except ValueError as exc:
+             message = str(exc)[:500] or "invalid request"
+             status = 402 if "积分不足" in message else 404 if "not found" in message else 409 if "mismatch" in message else 400
+-            self.send_json(status, {"error": {"message": message, "type": "invalid_request_error"}})
++            self.send_json(status, failure(status))
++            return
++        except PermissionError:
++            self.send_json(403, failure(403))
+             return
+         except Exception as exc:
+-            log(f"sillytavern request preparation failed: {type(exc).__name__}: {exc}")
+-            self.send_json(503, {"error": {"message": "酒馆模型出口准备失败", "type": "server_error"}})
++            log(f"generation {request_id} preparation failed: {type(exc).__name__}")
++            self.send_json(503, failure(503, "regex" if str(exc) == "HM-R422" else ""))
+             return
+ 
+         completion_id = "chatcmpl-homer-" + uuid.uuid4().hex
+@@ -19696,22 +19846,31 @@
+             )
+             slot.__enter__()
+         except Exception as exc:
+-            self.send_json(429, {"error": {"message": str(exc)[:500] or "请求过于频繁", "type": "rate_limit_error"}})
++            self.send_json(429, failure(429))
+             return
+ 
+         if not stream:
+             try:
+-                answer = sillytavern_bridge_completion(request_info)
++                answer = require_generated_text(sillytavern_bridge_completion(request_info))
+                 usage = request_info.get("usage") if isinstance(request_info.get("usage"), dict) else {}
+                 actual_input_tokens = int(usage.get("input_tokens") or request_info.get("input_tokens_estimate") or 1)
+                 actual_output_tokens = int(usage.get("output_tokens") or estimate_text_tokens(answer))
+                 points_cost = model_charge_points(request_info.get("pricing"), actual_input_tokens, actual_output_tokens)
+-                charge = self.store.spend_credit_points(
++                def deliver(charge):
++                    self.send_json(200, {
++                        "id": completion_id, "object": "chat.completion", "created": created, "model": model,
++                        "choices": [{"index": 0, "message": {"role": "assistant", "content": answer}, "finish_reason": "stop"}],
++                        "usage": {"prompt_tokens": actual_input_tokens, "completion_tokens": actual_output_tokens, "total_tokens": actual_input_tokens + actual_output_tokens},
++                        "homer": charge,
++                        "homer_diagnostic": dict(request_info.get("diagnostic") or {}, request_id=request_id),
++                    })
++                    self.wfile.flush()
++                settle_delivered_generation(
++                    self.store,
+                     str(request_info["user_id"]),
+                     points_cost,
+-                    event_type="sillytavern_chat_cost",
+-                    summary="角色对话消耗",
+                     payload={
++                        "request_id": request_id,
+                         "app_id": request_info["app_id"],
+                         "conversation_id": request_info["conversation_id"],
+                         "model": model,
+@@ -19719,26 +19878,15 @@
+                         "input_tokens": actual_input_tokens,
+                         "output_tokens": actual_output_tokens,
+                     },
++                    deliver=deliver,
+                 )
+-                self.send_json(200, {
+-                    "id": completion_id,
+-                    "object": "chat.completion",
+-                    "created": created,
+-                    "model": model,
+-                    "choices": [{
+-                        "index": 0,
+-                        "message": {"role": "assistant", "content": answer},
+-                        "finish_reason": "stop",
+-                    }],
+-                    "usage": {"prompt_tokens": actual_input_tokens, "completion_tokens": actual_output_tokens, "total_tokens": actual_input_tokens + actual_output_tokens},
+-                    "homer": charge,
+-                })
+             except HTTPError as exc:
+                 log(f"sillytavern upstream HTTP error: {exc.code}")
+-                self.send_json(502, {"error": {"message": f"模型服务返回 HTTP {exc.code}", "type": "upstream_error"}})
++                self.send_json(502, failure(429 if exc.code == 429 else 502))
+             except Exception as exc:
+-                log(f"sillytavern completion failed: {type(exc).__name__}: {exc}")
+-                self.send_json(502, {"error": {"message": "模型请求失败，请稍后重试", "type": "upstream_error"}})
++                log(f"generation {request_id} failed: {type(exc).__name__}")
++                status = 402 if isinstance(exc, ValueError) and '积分不足' in str(exc) else 504 if isinstance(exc, (TimeoutError, socket.timeout)) else 502
++                self.send_json(status, failure(status, "empty" if "没有返回有效内容" in str(exc) else ""))
+             finally:
+                 slot.__exit__(None, None, None)
+             return
+@@ -19757,6 +19905,8 @@
+                     "finish_reason": finish_reason,
+                 }],
+             }
++            if delta.get("role") or finish_reason:
++                payload["homer_diagnostic"] = dict(request_info.get("diagnostic") or {}, request_id=request_id)
+             self.wfile.write(
+                 ("data: " + json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n\n").encode("utf-8")
+             )
+@@ -19770,16 +19920,21 @@
+                     text_chunk = str(chunk)
+                     output_parts.append(text_chunk)
+                     write_openai_chunk({"content": text_chunk})
++            require_generated_text(''.join(output_parts))
+             usage = request_info.get("usage") if isinstance(request_info.get("usage"), dict) else {}
+             actual_input_tokens = int(usage.get("input_tokens") or request_info.get("input_tokens_estimate") or 1)
+             actual_output_tokens = int(usage.get("output_tokens") or estimate_text_tokens("".join(output_parts)))
+             points_cost = model_charge_points(request_info.get("pricing"), actual_input_tokens, actual_output_tokens)
+-            self.store.spend_credit_points(
++            def deliver(_charge):
++                write_openai_chunk({}, "stop")
++                self.wfile.write(b"data: [DONE]\n\n")
++                self.wfile.flush()
++            settle_delivered_generation(
++                self.store,
+                 str(request_info["user_id"]),
+                 points_cost,
+-                event_type="sillytavern_chat_cost",
+-                summary="角色对话消耗",
+                 payload={
++                    "request_id": request_id,
+                     "app_id": request_info["app_id"],
+                     "conversation_id": request_info["conversation_id"],
+                     "model": model,
+@@ -19787,19 +19942,12 @@
+                     "input_tokens": actual_input_tokens,
+                     "output_tokens": actual_output_tokens,
+                 },
++                deliver=deliver,
+             )
+-            write_openai_chunk({}, "stop")
+-            self.wfile.write(b"data: [DONE]\n\n")
+-            self.wfile.flush()
+         except Exception as exc:
+-            log(f"sillytavern stream failed: {type(exc).__name__}: {exc}")
++            log(f"generation {request_id} stream failed: {type(exc).__name__}")
+             try:
+-                error_payload = {
+-                    "error": {
+-                        "message": "模型流式请求失败，请稍后重试",
+-                        "type": "upstream_error",
+-                    }
+-                }
++                error_payload = failure(402 if isinstance(exc, ValueError) and '积分不足' in str(exc) else 504 if isinstance(exc, (TimeoutError, socket.timeout)) else 429 if isinstance(exc, HTTPError) and exc.code == 429 else 502, "empty" if "没有返回有效内容" in str(exc) else "")
+                 self.wfile.write(
+                     ("data: " + json.dumps(error_payload, ensure_ascii=False, separators=(",", ":")) + "\n\n").encode("utf-8")
+                 )
+@@ -19996,6 +20144,8 @@
+             if status < 400 or status > 599:
+                 status = 400
+         request_log_body = body_text
++        if path == '/admin/api/image-models' or path.startswith('/console/api/web/images/'):
++            request_log_body = '[private image request]'
+         if path in (
+             "/console/api/web/dialogue/events",
+             "/console/api/web/sillytavern/events",
+@@ -20070,6 +20220,14 @@
+     def route(self, path: str, query: str, body: object) -> object:
+         normalized = path.lstrip("/")
+ 
++        if normalized == 'admin/api/image-models' or normalized.startswith('console/api/web/images/'):
++            try:
++                return ok_response(image_route(self.store, self.command.upper(), normalized, parse_qs(query or ''), body, self.authenticated_token_user()))
++            except ImageError as exc:
++                return error_response(str(exc), exc.status)
++            except Exception:
++                return error_response('[HM-I500] 生图服务暂不可用，请稍后重试', 500)
++
+         if normalized == "console/api/public/notifications":
+             if self.command.upper() != "GET":
+                 return error_response("method not allowed", 405)
+@@ -20084,6 +20242,73 @@
+             return ok_response("ok")
+ 
+         user = self.authenticated_user()
++
++        if normalized == "admin/api/dialogue/configuration":
++            if not is_admin(self.authenticated_token_user()):
++                return error_response("forbidden: admin only", 403)
++            if self.command.upper() != "POST" or not isinstance(body, dict):
++                return error_response("method not allowed", 405)
++            app_id = self.store.resolve_local_app_id(str(body.get("app_id") or ""))
++            app_row = self.store.versioned_app_for_new_conversation(app_id, str(user["id"]))[0]
++            if not user_can_play_app(app_row, str(user["id"])):
++                return error_response("character unavailable", 404)
++            app = dict(app_row)
++            model = self.store.public_model_selection(body.get("model"))
++            if model:
++                app["llm_model"] = model
++            try:
++                config = admin_dialogue_configuration(self.store, app, str(user["id"]), body.get("draft"))
++                if body.get("include_library"):
++                    config["library"] = self.store.global_presets()
++                return ok_response(config)
++            except (ValueError, RuntimeError):
++                return error_response("[HM-R422] 会话配置无效，请检查正则与条目内容", 422)
++
++        if normalized in ("admin/api/dialogue/preview", "console/api/web/dialogue/regex"):
++            if self.command.upper() != "GET":
++                return error_response("method not allowed", 405)
++            if not user:
++                return error_response("unauthorized", 401)
++            preview = normalized == "admin/api/dialogue/preview"
++            if preview and not is_admin(self.authenticated_token_user()):
++                return error_response("forbidden: admin only", 403)
++            user_id = str(user["id"])
++            app_id = self.store.resolve_local_app_id(parse_query_str(query, "app_id", ""))
++            conv_id = parse_query_str(query, "conversation_id", "")
++            conversation = self.store.get_conversation(conv_id, user_id) if conv_id else None
++            if conv_id and (not conversation or self.store.resolve_local_app_id(str(conversation.get("app_id") or "")) != app_id):
++                return error_response("conversation not found", 404)
++            app_row = self.store.versioned_app_for_conversation(app_id, conv_id, user_id) if conv_id else self.store.versioned_app_for_new_conversation(app_id, user_id)[0]
++            if not user_can_play_app(app_row, user_id):
++                return error_response("character unavailable", 404)
++            app_data = dict(app_row)
++            selected = self.store.public_model_selection(parse_query_str(query, "model", ""))
++            if selected:
++                app_data["llm_model"] = selected
++            settings = self.store.effective_llm_settings(app_data, user_id=user_id)
++            preset = dict(settings.get("global_regex_preset") or {})
++            if conv_id and preset.get("id"):
++                overrides = self.store.conversation_preset_override_map(conv_id, user_id).get("regex", {}).get(preset["id"], {})
++                preset["scripts"] = [dict(rule, disabled=not overrides.get(rule.get("id"), not rule.get("disabled"))) for rule in preset.get("scripts") or []]
++            rules = display_regex(preset)
++            if not preview:
++                return ok_response(rules)
++            # Read-only launch: no conversation row, no history writes, no cloud token
++            # for a real conversation. The signed preview claim is rechecked on generate.
++            card = local_app_to_card(app_data)
++            preview_card = silly_card_with_homer_cover(local_app_to_silly_card(app_data, card), str(app_data.get("cover_url") or ""))
++            # The authoritative backend applies the editable worldbook once. Do not
++            # also embed a stale duplicate in the native runtime prompt.
++            preview_card.setdefault("data", {})["character_book"] = {"entries": []}
++            return ok_response({
++                "user": {"id": user_id, "name": str(user["name"] or "管理员"), "is_admin": True},
++                "runtime": {"backend_base_url": PUBLIC_BASE_URL.rstrip("/"), "public_url": SILLYTAVERN_PUBLIC_URL},
++                "launch": {"app_id": app_id, "conversation_id": "preview-" + uuid.uuid4().hex,
++                    "admin_preview": True, "card": preview_card,
++                    "messages": [], "runtime_config": {}, "runtime_profile": {}, "display_regex": rules,
++                    "bridge_token": sillytavern_bridge_token_for(user_id, app_id, admin_preview=True),
++                    "bridge_token_ttl_seconds": SILLYTAVERN_BRIDGE_TOKEN_TTL_SECONDS},
++            })
+ 
+         if normalized in (
+             "console/api/web/dialogue/session",
+diff --git a/tools/community_workshop.py b/tools/community_workshop.py
+index 6124acffdac6d684c0ef29f62eb90937e1476a80..fa9e9165c8df8766ff2c9eed02cb65ece7fb0ffa 100644
+--- a/tools/community_workshop.py
++++ b/tools/community_workshop.py
+@@ -10,13 +10,13 @@
+ from card_version_workshop import ContentVersionStore
+ 
+ 
+-WORK_TYPES = {"mod", "ui_template", "preset"}
++WORK_TYPES = {"mod", "ui_template", "preset", "regex"}
+ MAX_WORKS_PER_USER = 100
+ MAX_VERSIONS_PER_WORK = 100
+ MIN_VERSION_INTERVAL_MS = 10_000
+ MAX_STRUCTURED_ENTRIES = 400
+-MAX_ENTRY_JSON_BYTES = 32 * 1024
+-MAX_CONTENT_JSON_BYTES = 512 * 1024
++MAX_ENTRY_JSON_BYTES = 8 * 1024 * 1024
++MAX_CONTENT_JSON_BYTES = 8 * 1024 * 1024
+ MAX_UI_DEMO_BYTES = 200 * 1024
+ 
+ 
+@@ -133,7 +133,7 @@
+ 
+ def _entry_titles(work_type: str, content) -> list[str]:
+     if isinstance(content, dict):
+-        values = content.get("entries") or content.get("prompts") or content.get("blocks") or []
++        values = content.get("entries") or content.get("prompts") or content.get("blocks") or content.get("regex_scripts") or []
+         if isinstance(values, dict):
+             values = list(values.values())
+     else:
+@@ -142,7 +142,7 @@
+     for item in values[:200]:
+         if not isinstance(item, dict):
+             continue
+-        name = item.get("name") or item.get("title") or item.get("comment") or item.get("identifier")
++        name = item.get("scriptName") or item.get("name") or item.get("title") or item.get("comment") or item.get("identifier")
+         if not name and work_type == "mod":
+             keys = item.get("keys") or item.get("key") or []
+             name = keys[0] if isinstance(keys, list) and keys else ""
+@@ -156,7 +156,7 @@
+         return content
+     if not isinstance(content, dict):
+         return []
+-    for key in ("entries", "prompts", "blocks"):
++    for key in ("entries", "prompts", "blocks", "regex_scripts"):
+         value = content.get(key)
+         if isinstance(value, dict):
+             return list(value.values())
+@@ -166,7 +166,7 @@
+ 
+ 
+ def _validate_work_payload(work_type: str, content, demo_html: str = "") -> None:
+-    if work_type in {"mod", "preset"}:
++    if work_type in {"mod", "preset", "regex"} or (work_type == "ui_template" and isinstance(content, dict) and "regex_scripts" in content):
+         entries = _content_entries(content)
+         if not entries:
+             raise ValueError("content entries are required")
+@@ -175,6 +175,8 @@
+         for entry in entries:
+             if not isinstance(entry, dict):
+                 raise ValueError("content entries must be objects")
++            if work_type in {"regex", "ui_template"} and not isinstance(entry.get("findRegex", entry.get("find")), str):
++                raise ValueError("regex pattern is required")
+             if len(json.dumps(entry, ensure_ascii=False, separators=(",", ":")).encode("utf-8")) > MAX_ENTRY_JSON_BYTES:
+                 raise ValueError("content entry is too large")
+     raw_content = json.dumps(content, ensure_ascii=False, separators=(",", ":")) if content is not None else "null"
+@@ -236,9 +238,9 @@
+             "current_version_id": row.get("current_version_id") or "",
+             "created_at": int(row.get("created_at") or 0), "updated_at": int(row.get("updated_at") or 0),
+         }
+-        if row.get("work_type") in {"mod", "preset"}:
++        if row.get("work_type") in {"mod", "preset", "regex"}:
+             out["entry_count"] = len(_entry_titles(str(row.get("work_type")), content))
+-        if detail and row.get("work_type") in {"mod", "preset"}:
++        if detail and row.get("work_type") in {"mod", "preset", "regex"}:
+             out["entry_titles"] = _entry_titles(str(row.get("work_type")), content)
+         if detail and row.get("work_type") == "ui_template":
+             out["demo_html"] = row.get("demo_html") or ""
+@@ -251,7 +253,9 @@
+ 
+     def list_works(self, work_type: str, scope: str, user_id: str, search: str = "", limit: int = 60):
+         where, args = [], []
+-        if work_type in WORK_TYPES:
++        if work_type in {"ui_template", "regex"}:
++            where.append("work_type in ('ui_template','regex')")
++        elif work_type in WORK_TYPES:
+             where.append("work_type=?"); args.append(work_type)
+         if scope == "mine":
+             where.append("owner_user_id=?"); args.append(user_id)
+diff --git a/tools/card_extra_workshop.py b/tools/card_extra_workshop.py
+index 51b759124e42d4f4e42d6538af08bbf0545c1a29..ac1c97afbd9e4adf16c3ebee57b497aef1ae6336 100644
+--- a/tools/card_extra_workshop.py
++++ b/tools/card_extra_workshop.py
+@@ -89,10 +89,10 @@
+     ui_versions = []
+     for index, work_id in enumerate(ui_ids):
+         row = store.get_work(work_id)
+-        if not row or row.get("work_type") != "ui_template" or not store.can_use_work(user_id, row):
++        if not row or row.get("work_type") not in {"ui_template", "regex"} or not store.can_use_work(user_id, row):
+             raise ValueError("selected UI template is not available or favorited")
+         version_id = requested_ui_versions[index] if index < len(requested_ui_versions) else str(row.get("current_version_id") or "")
+-        if not store.versions.get_version(version_id, "ui_template", work_id):
++        if not store.versions.get_version(version_id, row["work_type"], work_id):
+             raise ValueError("selected UI template version is invalid")
+         ui_versions.append(version_id)
+     return {
+diff --git a/tools/chat_mod_workshop.py b/tools/chat_mod_workshop.py
+index 9543e4c65bcc0e5f4dddc56d8ed610d7487ceb31..f5289d0f1c1be9f11699bb1ab033c6a19d47e2cb 100644
+--- a/tools/chat_mod_workshop.py
++++ b/tools/chat_mod_workshop.py
+@@ -172,16 +172,27 @@
+     template_experience: dict = {}
+     template_legacy: dict = {}
+     applied_ui: list[dict] = []
++    template_regex: list[dict] = []
+     for index, work_id_raw in enumerate(ui_ids):
+         work_id = str(work_id_raw or "")
+         version_id = str(ui_versions[index] or "") if index < len(ui_versions) else ""
+         if not work_id or not version_id:
+             continue
+-        snapshot = community.versions.snapshot(version_id, "ui_template", work_id)
++        work = community.get_work(work_id)
++        if not work or work.get("work_type") not in {"ui_template", "regex"}:
++            continue
++        snapshot = community.versions.snapshot(version_id, work["work_type"], work_id)
+         if not snapshot:
+             continue
+         content = _snapshot_content(snapshot)
+         source = content.get("ui_template") if isinstance(content.get("ui_template"), dict) else content
++        rules = source.get("regex_scripts", [])
++        for rule_index, raw_rule in enumerate(rules if isinstance(rules, list) else []):
++            if not isinstance(raw_rule, dict) or not isinstance(raw_rule.get("findRegex"), str):
++                continue
++            rule = dict(raw_rule)
++            rule["id"] = f"work-regex:{work_id}:{version_id}:{rule_index}"
++            template_regex.append(rule)
+         experience = source.get("card_experience") if isinstance(source.get("card_experience"), dict) else {}
+         legacy = source.get("legacy_rp_hub") if isinstance(source.get("legacy_rp_hub"), dict) else {}
+         template_experience = _deep_merge(template_experience, experience)
+@@ -193,6 +204,10 @@
+         extras["card_experience"] = _deep_merge(template_experience, own_experience)
+     if template_legacy:
+         extras["legacy_rp_hub"] = _deep_merge(template_legacy, own_legacy)
++    if template_regex:
++        # Idempotent hydration: keep author rules, replace only our own projection.
++        authored = [rule for rule in extras.get("regex_scripts", []) if isinstance(rule, dict) and not str(rule.get("id", "")).startswith("work-regex:")]
++        extras["regex_scripts"] = template_regex + authored
+     if applied_ui:
+         extras["_applied_ui_template_versions"] = applied_ui
+     app["extra_settings"] = extras
+diff --git a/tools/homer_generation.py b/tools/homer_generation.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..ebca021773f1488e53a43aa522cd12dd7950f064
+--- /dev/null
++++ b/tools/homer_generation.py
+@@ -0,0 +1,117 @@
++"""Generation diagnostics and regex execution. Never return provider secrets."""
++import hashlib
++import json
++import os
++from pathlib import Path
++import subprocess
++import time
++
++
++def validate_upstream_event(value):
++    """Reject provider failures even inside HTTP 200 or after partial tokens."""
++    if not isinstance(value, dict):
++        return
++    kind = str(value.get('type') or value.get('event') or '').lower()
++    status = value.get('status')
++    code = value.get('code')
++    failed = (('error' in value and value['error'] is not None and value['error'] is not False)
++              or value.get('success') is False
++              or kind in {'error', 'response.failed', 'response.incomplete'}
++              or status in ('error', 'failed', 'cancelled', 'incomplete')
++              or (isinstance(status, int) and status >= 400)
++              or (code is not None and str(code).lower() not in {'0', '200', 'ok', 'success'}))
++    for choice in value.get('choices') or []:
++        if isinstance(choice, dict) and choice.get('finish_reason') in {'error', 'content_filter', 'safety', 'recitation'}:
++            failed = True
++    if failed:
++        # Never copy arbitrary provider bodies/credentials into diagnostics.
++        raise RuntimeError('模型上游返回错误，请更换模型')
++    for key in ('data', 'response'):
++        if isinstance(value.get(key), dict):
++            validate_upstream_event(value[key])
++
++
++def require_generated_text(value):
++    if not isinstance(value, str) or not value.strip():
++        raise RuntimeError('模型没有返回有效内容，请更换模型')
++    return value
++
++
++def settle_delivered_generation(store, user_id, amount, payload, deliver):
++    """Charge and publish the final response in one rollback-able transaction.
++
++    Only called after upstream completed with nonempty text. Store.lock prevents
++    concurrent requests from spending the same balance. No refund HTTP endpoint.
++    """
++    with store.lock:
++        try:
++            spent = store._spend_credit_points_locked(user_id, amount)
++            event = dict(payload, points_spent=spent['points_cost'], deducted=spent['deducted'], points=spent['points'])
++            store.conn.execute(
++                'insert into user_events(user_id,event_type,summary,payload_json,created_at) values(?,?,?,?,?)',
++                (user_id, 'sillytavern_chat_cost', '角色对话消耗', json.dumps(event, ensure_ascii=False), int(time.time()*1000)),
++            )
++            deliver(spent)
++            store.conn.commit()
++            return spent
++        except BaseException:
++            store.conn.rollback()
++            raise
++
++
++def preset_fingerprint(value):
++    return hashlib.sha256(json.dumps(value or {}, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:16]
++
++
++def generation_error(status=502, reason="", request_id=""):
++    # Only use locally classified reasons, never echo arbitrary provider bodies.
++    code, message = {
++        400: ("HM-G400", "请求参数无效，请调整后重试"),
++        401: ("HM-G401", "登录或会话已过期，请重新进入会话"),
++        402: ("HM-G402", "积分不足，请补充积分或选择消耗更低的模型"),
++        403: ("HM-G403", "没有权限进行此操作"),
++        404: ("HM-G404", "角色或会话已不可用，请重新选择"),
++        409: ("HM-G409", "会话与角色不匹配，请重新进入会话"),
++        429: ("HM-G429", "请求过于频繁，请稍后重试或更换模型"),
++        503: ("HM-G503", "当前模型暂不可用，请更换模型后重试"),
++        504: ("HM-G504", "当前模型响应超时，请更换模型后重试"),
++    }.get(status, ("HM-G502", "当前模型生成失败，请更换模型后重试"))
++    if reason == "empty":
++        code, message = "HM-G204", "当前模型未返回有效内容，请更换模型后重试"
++    elif reason == "regex":
++        code, message = "HM-R422", "预设正则执行失败，请联系管理员检查规则"
++    return {"error": {"code": code, "message": f"[{code}] {message}", "request_id": request_id}}
++
++
++def execute_prompt_regex(messages, preset, *, user_name="用户", character_name="角色"):
++    if not preset or not preset.get("enabled"):
++        return messages
++    worker = Path(__file__).with_name("homer_regex.cjs")
++    # Separate, killable process: pathological admin regex must not hang server threads.
++    payload = {"messages": messages, "scripts": preset.get("scripts") or [],
++               "user": user_name, "char": character_name}
++    try:
++        result = subprocess.run([os.environ.get("HOMER_NODE_BINARY", "node"), "--max-old-space-size=96", str(worker)],
++                                input=json.dumps(payload, ensure_ascii=False), text=True, encoding="utf-8",
++                                capture_output=True, timeout=3, check=True,
++                                creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
++        data = json.loads(result.stdout)
++        if data.get("errors"):
++            raise ValueError("official regex invalid")
++        return data["messages"]
++    except (OSError, subprocess.SubprocessError, ValueError, KeyError) as exc:
++        raise RuntimeError("HM-R422") from exc
++
++
++def display_regex(preset):
++    """Only display transformations; private prompt-only rules stay on the server."""
++    result = []
++    if preset.get("enabled"):
++        for raw in preset.get("scripts") or []:
++            if raw.get("disabled") or (raw.get("promptOnly") and not raw.get("markdownOnly")):
++                continue
++            result.append({key: raw.get(key) for key in (
++                "id", "scriptName", "findRegex", "replaceString", "trimStrings", "placement",
++                "runOnEdit", "substituteRegex", "minDepth", "maxDepth", "order")})
++            result[-1].update({"markdownOnly": True, "promptOnly": False, "disabled": False})
++    return {"preset_id": preset.get("id") or "", "revision": preset_fingerprint(preset), "scripts": result}
+diff --git a/tools/homer_regex.cjs b/tools/homer_regex.cjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..d8ab6300a1cf6eab31bf0e4a52944b746592a209
+--- /dev/null
++++ b/tools/homer_regex.cjs
+@@ -0,0 +1,64 @@
++// Isolated JavaScript regex worker. No eval, network, filesystem, or logging of inputs.
++'use strict';
++function compile(pattern) {
++    const text = String(pattern || '');
++    if (!text) throw Error('empty-pattern');
++    if (text.startsWith('/')) {
++        for (let i = text.length - 1; i > 0; i--) {
++            if (text[i] !== '/') continue;
++            let n = 0; for (let j = i - 1; j >= 0 && text[j] === '\\'; j--) n++;
++            if (n % 2 === 0 && /^[dgimsuvy]*$/.test(text.slice(i + 1))) {
++                return new RegExp(text.slice(1, i), text.slice(i + 1));
++            }
++        }
++    }
++    return new RegExp(text);
++}
++function macro(text, data, escape = false) {
++    return String(text || '').replace(/\{\{(user|char)\}\}/gi, (_, key) => {
++        const value = String(data[key.toLowerCase()] || '');
++        return escape ? value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') : value;
++    });
++}
++function run(data) {
++    const errors = [];
++    const rules = [...(data.scripts || [])].sort((a, b) => (a.order || 0) - (b.order || 0)).filter(r => !r.disabled);
++    // Validate even if no message currently matches its placement/depth.
++    const compiled = rules.map(r => {
++        try { return compile(Number(r.substituteRegex) ? macro(r.findRegex, data, Number(r.substituteRegex) === 2) : r.findRegex); }
++        catch { errors.push(String(r.id || 'unknown')); return null; }
++    });
++    const conversational = data.messages.filter(m => ['user', 'assistant'].includes(m.role));
++    let position = 0;
++    const messages = data.messages.map(m => {
++        if (!['user', 'assistant'].includes(m.role)) return m;
++        const depth = conversational.length - 1 - position++;
++        let text = String(m.content || '');
++        rules.forEach((r, i) => {
++            if (!compiled[i] || (r.markdownOnly && !r.promptOnly)) return;
++            if (!(r.placement || [2]).includes(m.role === 'user' ? 1 : 2)) return;
++            if (r.minDepth != null && Number(r.minDepth) >= 0 && depth < Number(r.minDepth)) return;
++            if (r.maxDepth != null && Number(r.maxDepth) >= 0 && depth > Number(r.maxDepth)) return;
++            compiled[i].lastIndex = 0;
++            text = text.replace(compiled[i], (...args) => {
++                const named = typeof args.at(-1) === 'object' ? args.at(-1) : {};
++                const captures = args.slice(0, typeof args.at(-1) === 'object' ? -3 : -2);
++                // ST supports $n/$<name>/{{match}} with trimStrings applied to captures.
++                const trim = value => (r.trimStrings || []).reduce((s, t) => s.split(macro(t, data)).join(''), String(value || ''));
++                const replacement = String(r.replaceString || '').replace(/\{\{match\}\}/gi, '$0')
++                    .replace(/\$(\d+)|\$<([^>]+)>/g, (_, n, name) => trim(name ? named[name] : captures[Number(n)]));
++                return macro(replacement, data);
++            });
++            if (text.length > 240000) throw Error('regex-output-limit');
++        });
++        return { ...m, content: text };
++    });
++    return { messages, errors };
++}
++module.exports = { compile, run };
++if (require.main === module) {
++    let input = '';
++    process.stdin.setEncoding('utf8');
++    process.stdin.on('data', data => { input += data; if (input.length > 8000000) process.exit(2); });
++    process.stdin.on('end', () => { try { process.stdout.write(JSON.stringify(run(JSON.parse(input)))); } catch { process.exitCode = 2; } });
++}
+diff --git a/tools/homer_images.py b/tools/homer_images.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..43bf189593d4247706e1a550b6ca9f2d11e6e479
+--- /dev/null
++++ b/tools/homer_images.py
+@@ -0,0 +1,277 @@
++"""Private, durable image tasks. Provider work never holds the billing lock."""
++import base64
++import io
++import ipaddress
++import json
++import socket
++import threading
++import time
++import uuid
++from urllib.parse import urlparse
++from urllib.request import Request, build_opener, HTTPRedirectHandler
++
++KEY = 'homer_image_providers_v1'
++MAX_BYTES = 16 * 1024 * 1024
++_services = {}
++_services_lock = threading.Lock()
++
++
++class ImageError(ValueError):
++    def __init__(self, message, status=400):
++        super().__init__(message)
++        self.status = status
++
++
++def endpoint(value):
++    url = str(value or '').strip().rstrip('/')
++    p = urlparse(url)
++    if p.scheme != 'https' or not p.hostname or p.username or p.password or p.query or p.fragment:
++        raise ImageError('API 地址必须为不含账号和查询参数的 HTTPS 地址')
++    if p.port not in (None, 443):
++        raise ImageError('API 地址仅支持 HTTPS 标准端口')
++    addresses = socket.getaddrinfo(p.hostname, 443, type=socket.SOCK_STREAM)
++    if not addresses or any(not ipaddress.ip_address(a[4][0]).is_global for a in addresses):
++        raise ImageError('不允许连接本机或内网地址')
++    return url
++
++
++class NoRedirect(HTTPRedirectHandler):
++    def redirect_request(self, *args, **kwargs):
++        raise ImageError('图片服务重定向被拒绝', 502)
++
++
++def verified_image(raw):
++    # Installed through requirements-images.txt. Decode/re-encode to strip metadata
++    # and reject HTML, SVG, truncated files and decompression bombs.
++    from PIL import Image
++    if not raw or len(raw) > MAX_BYTES:
++        raise ImageError('图片大小无效', 502)
++    with Image.open(io.BytesIO(raw)) as img:
++        if img.format not in ('PNG', 'JPEG', 'WEBP') or img.width * img.height > 20_000_000:
++            raise ImageError('图片格式或尺寸无效', 502)
++        img.load()
++        out = io.BytesIO()
++        img.convert('RGB').save(out, format='JPEG', quality=92)
++        if out.tell() > MAX_BYTES:
++            raise ImageError('图片过大', 502)
++        return out.getvalue(), 'image/jpeg'
++
++
++def generate(prompt, config):
++    base = endpoint(config['base_url'])
++    url = base if base.endswith('/images/generations') else base + '/images/generations'
++    payload = dict(model=config['model'], prompt=prompt, n=1, size=config['size'])
++    if config.get('quality'):
++        payload['quality'] = config['quality']
++    req = Request(url, data=json.dumps(payload).encode(), method='POST', headers={
++        'Authorization': 'Bearer ' + config['api_key'], 'Content-Type': 'application/json', 'Accept': 'application/json'})
++    opener = build_opener(NoRedirect())
++    with opener.open(req, timeout=120) as response:
++        raw = response.read(MAX_BYTES * 2 + 1)
++    if len(raw) > MAX_BYTES * 2:
++        raise ImageError('图片响应过大', 502)
++    data = json.loads(raw)
++    if data.get('error') or not isinstance(data.get('data'), list) or not data['data']:
++        raise ImageError('图片服务未返回图片', 502)
++    item = data['data'][0]
++    if item.get('b64_json'):
++        blob = base64.b64decode(item['b64_json'], validate=True)
++    else:
++        image_url = str(item.get('url') or '')
++        # Signed CDN URLs may have a query; validate origin separately and never
++        # forward the model API credential to the returned image host.
++        parsed = urlparse(image_url)
++        endpoint(parsed._replace(query='', fragment='').geturl())
++        with opener.open(Request(image_url, headers={'Accept': 'image/*'}), timeout=45) as response:
++            blob = response.read(MAX_BYTES + 1)
++    return verified_image(blob)
++
++
++def service(store):
++    with _services_lock:
++        if store not in _services:
++            _services[store] = ImageService(store)
++        return _services[store]
++
++
++class ImageService:
++    def __init__(self, store, generator=generate):
++        self.store, self.generator = store, generator
++        self.slots = threading.BoundedSemaphore(4)
++        with store.lock:
++            store.conn.execute('''CREATE TABLE IF NOT EXISTS homer_image_tasks(
++                id TEXT PRIMARY KEY, user_id TEXT NOT NULL, conversation_id TEXT NOT NULL,
++                message_id TEXT NOT NULL, request_id TEXT NOT NULL, provider_id TEXT NOT NULL,
++                provider_name TEXT NOT NULL, prompt TEXT NOT NULL, cost INTEGER NOT NULL,
++                status TEXT NOT NULL, error TEXT NOT NULL DEFAULT '', image BLOB, mime TEXT,
++                created_at INTEGER NOT NULL, UNIQUE(user_id, request_id))''')
++            store.conn.execute('CREATE INDEX IF NOT EXISTS idx_homer_images_history ON homer_image_tasks(user_id,conversation_id,created_at DESC)')
++            store.conn.execute("UPDATE homer_image_tasks SET status='failed',error='服务已重启，本次未扣积分，请重新生成' WHERE status='running'")
++            store.conn.commit()
++
++    def providers(self, admin=False, secrets=False):
++        saved = self.store.get_api_settings_raw()
++        raw = saved.get(KEY)
++        if raw is None:
++            old = self.store.image_model_settings(include_secret=True)
++            rows = [dict(old, id='legacy-image', cost_points=0)] if old.get('base_url') else []
++        else:
++            rows = json.loads(raw) if raw else []
++        if secrets:
++            return rows
++        if admin:
++            return [{**{k: v for k, v in r.items() if k != 'api_key'}, 'has_api_key': bool(r.get('api_key'))} for r in rows]
++        return [{k: r.get(k) for k in ('id', 'name', 'memo', 'cost_points')} for r in rows if r.get('enabled') and r.get('api_key')]
++
++    def save_providers(self, rows, actor):
++        if not isinstance(rows, list) or len(rows) > 100:
++            raise ImageError('模型列表无效，最多100项')
++        existing = {r['id']: r for r in self.providers(secrets=True)}
++        clean, ids = [], set()
++        for r in rows:
++            if not isinstance(r, dict):
++                raise ImageError('模型配置无效')
++            rid = str(r.get('id') or uuid.uuid4().hex)[:80]
++            if rid in ids:
++                raise ImageError('模型标识重复')
++            ids.add(rid)
++            key = str(r.get('api_key') or existing.get(rid, {}).get('api_key') or '').strip()
++            if r.get('clear_api_key'):
++                key = ''
++            name, model = str(r.get('name') or '').strip()[:120], str(r.get('model') or '').strip()[:160]
++            if not name or not model:
++                raise ImageError('请填写展示名称和模型标识')
++            try:
++                cost = int(r.get('cost_points', 0))
++            except (TypeError, ValueError):
++                raise ImageError('积分必须为整数')
++            if cost < 0 or cost > 1000000:
++                raise ImageError('积分超出范围')
++            base = endpoint(r.get('base_url'))
++            if r.get('enabled') and not key:
++                raise ImageError('启用前请配置密钥')
++            clean.append(dict(id=rid, name=name, model=model, base_url=base, api_key=key,
++                              enabled=bool(r.get('enabled')), cost_points=cost,
++                              size=str(r.get('size') or '1024x1024')[:40], quality=str(r.get('quality') or '')[:40],
++                              memo=str(r.get('memo') or '')[:200]))
++        s = self.store
++        with s.lock:
++            try:
++                s.conn.execute('INSERT INTO api_settings(key,value,updated_at) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at',
++                               (KEY, json.dumps(clean), int(time.time()*1000)))
++                s.conn.execute('INSERT INTO user_events(user_id,event_type,summary,payload_json,created_at) VALUES(?,?,?,?,?)',
++                               (actor, 'image_model_settings', '更新生图模型', json.dumps({'count': len(clean)}), int(time.time()*1000)))
++                s.conn.commit()
++            except Exception:
++                s.conn.rollback()
++                raise
++        return self.providers(admin=True)
++
++    def history(self, user, conversation):
++        if not self.store.get_conversation(conversation, user):
++            raise ImageError('会话不存在', 404)
++        with self.store.lock:
++            return [dict(r) for r in self.store.conn.execute('''SELECT t.id,t.message_id,t.provider_name,t.cost,t.status,t.error,t.created_at
++                FROM homer_image_tasks t JOIN messages m ON m.id=t.message_id AND m.user_id=t.user_id
++                WHERE t.user_id=? AND t.conversation_id=? ORDER BY t.created_at DESC LIMIT 100''', (user, conversation))]
++
++    def image(self, user, task):
++        with self.store.lock:
++            row = self.store.conn.execute('''SELECT t.image,t.mime FROM homer_image_tasks t JOIN messages m ON m.id=t.message_id AND m.user_id=t.user_id
++                JOIN conversations c ON c.id=t.conversation_id AND c.user_id=t.user_id
++                WHERE t.id=? AND t.user_id=? AND t.status='succeeded' ''', (task, user)).fetchone()
++            if not row:
++                raise ImageError('图片不存在', 404)
++            return {'data_url': 'data:' + row['mime'] + ';base64,' + base64.b64encode(row['image']).decode()}
++
++    def create(self, user, body):
++        if not isinstance(body, dict):
++            raise ImageError('请求无效')
++        prompt = str(body.get('text') or '').strip()
++        request_id = str(body.get('request_id') or '')
++        conv, msg = str(body.get('conversation_id') or ''), str(body.get('message_id') or '')
++        if not prompt or len(prompt.encode()) > 12000 or not 8 <= len(request_id) <= 100:
++            raise ImageError('请输入图片内容（最多12000 UTF-8字节）')
++        s = self.store
++        with s.lock:
++            previous = s.conn.execute('SELECT * FROM homer_image_tasks WHERE user_id=? AND request_id=?', (user, request_id)).fetchone()
++            if previous:
++                if (previous['conversation_id'],previous['message_id'],previous['prompt'],previous['provider_id']) != (conv,msg,prompt,str(body.get('provider_id') or '')):
++                    raise ImageError('重复请求内容不一致', 409)
++                return {'id': previous['id'], 'status': previous['status']}
++            message = s.get_message(msg, user)
++            if not message or message['conversation_id'] != conv or not s.get_conversation(conv, user):
++                raise ImageError('目标消息尚未保存或已删除，请稍后重试', 404)
++            provider = next((r for r in self.providers(secrets=True) if r['id'] == body.get('provider_id') and r.get('enabled') and r.get('api_key')), None)
++            if not provider:
++                raise ImageError('该生图模型已停用，请重新选择', 409)
++            cost = int(provider.get('cost_points') or 0)
++            if 'expected_cost' in body and body['expected_cost'] != cost:
++                raise ImageError('模型积分已调整，请关闭弹窗重新选择并确认费用', 409)
++            if cost:
++                try: s.require_credit_points(user, cost)
++                except ValueError: raise ImageError('积分不足，请选择其他模型或补充积分', 402)
++            if s.conn.execute("SELECT 1 FROM homer_image_tasks WHERE user_id=? AND status='running'", (user,)).fetchone():
++                raise ImageError('已有图片正在生成，请等待完成', 429)
++            if not self.slots.acquire(blocking=False):
++                raise ImageError('生图服务繁忙，请稍后重试', 429)
++            task = uuid.uuid4().hex
++            try:
++                s.conn.execute('''INSERT INTO homer_image_tasks(id,user_id,conversation_id,message_id,request_id,provider_id,provider_name,prompt,cost,status,created_at)
++                    VALUES(?,?,?,?,?,?,?,?,?,'running',?)''', (task,user,conv,msg,request_id,provider['id'],provider['name'],prompt,cost,int(time.time()*1000)))
++                s.conn.commit()
++                threading.Thread(target=self.run, args=(task,user,msg,prompt,dict(provider)), daemon=True).start()
++            except Exception:
++                s.conn.rollback()
++                s.conn.execute("UPDATE homer_image_tasks SET status='failed',error='任务未能启动，本次未扣积分' WHERE id=?", (task,))
++                s.conn.commit()
++                self.slots.release()
++                raise
++            return {'id': task, 'status': 'running'}
++
++    def run(self, task, user, message, prompt, config):
++        s = self.store
++        try:
++            blob, mime = self.generator(prompt, config)
++            with s.lock:
++                try:
++                    row = s.conn.execute('SELECT * FROM homer_image_tasks WHERE id=?', (task,)).fetchone()
++                    if row['status'] != 'running': return
++                    if not s.get_message(message, user) or not s.get_conversation(row['conversation_id'], user):
++                        raise ImageError('目标消息已删除，本次未扣积分')
++                    if row['cost']:
++                        s._spend_credit_points_locked(user, row['cost'])
++                    s.conn.execute("UPDATE homer_image_tasks SET status='succeeded',image=?,mime=? WHERE id=?", (blob,mime,task))
++                    s.conn.execute('INSERT INTO user_events(user_id,event_type,summary,payload_json,created_at) VALUES(?,?,?,?,?)',
++                        (user,'image_generation_cost','图片生成',json.dumps({'task_id':task,'points_spent':row['cost']}),int(time.time()*1000)))
++                    s.conn.commit()
++                except Exception:
++                    s.conn.rollback()
++                    raise
++        except Exception:
++            # Never return/log upstream payloads, prompts or credentials.
++            with s.lock:
++                s.conn.execute("UPDATE homer_image_tasks SET status='failed',error='[HM-I502] 图片未能生成或积分不足，本次未扣积分。请检查余额或更换模型重试。' WHERE id=? AND status='running'", (task,))
++                s.conn.commit()
++        finally:
++            self.slots.release()
++
++
++def route(store, method, path, query, body, user):
++    if not user:
++        raise ImageError('请先登录', 401)
++    svc = service(store)
++    if path == 'admin/api/image-models':
++        if not user['is_admin']:
++            raise ImageError('仅管理员可配置生图模型', 403)
++        if method == 'GET': return {'list': svc.providers(admin=True)}
++        if method == 'POST': return {'list': svc.save_providers(body.get('list') if isinstance(body,dict) else None, user['id'])}
++    if path == 'console/api/web/images/providers' and method == 'GET':
++        return {'list': svc.providers()}
++    if path == 'console/api/web/images/tasks' and method == 'POST':
++        return svc.create(user['id'], body)
++    if path == 'console/api/web/images/history' and method == 'GET':
++        return {'list': svc.history(user['id'], (query.get('conversation_id') or [''])[0])}
++    if path.startswith('console/api/web/images/content/') and method == 'GET':
++        return svc.image(user['id'], path.rsplit('/',1)[-1])
++    raise ImageError('接口不存在', 404)
+diff --git a/tools/requirements-images.txt b/tools/requirements-images.txt
+new file mode 100644
+index 0000000000000000000000000000000000000000..34d2a5d51cd40267c7e8c41d9f36cc83afbba334
+--- /dev/null
++++ b/tools/requirements-images.txt
+@@ -0,0 +1,2 @@
++# Required by homer_images.py for bounded decoding and metadata removal.
++Pillow>=11.3,<13

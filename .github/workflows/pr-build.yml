@@ -55,7 +55,7 @@ jobs:
 
       - name: 会话生成与失败模型回归
         env:
-          HOMER_REGEX_WORKER: ${{ github.workspace }}/server-patches/cumulative-r32/homer_regex.cjs
+          HOMER_REGEX_WORKER: ${{ github.workspace }}/server-patches/cumulative-r33/homer_regex.cjs
         run: >-
           node --test tools/tests/mobile-r28-session.test.mjs
           tools/tests/mobile-r29-generation.test.mjs
