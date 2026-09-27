@@ -2,7 +2,7 @@
 
 ## 本次累计交接优先级
 
-R25–R31 累计交接以 [docs/mobile-r31-submission.md](docs/mobile-r31-submission.md) 为准，替代未合并旧 PR #13。只应用当前唯一 Web 累计补丁和 `server-patches/cumulative-r31/backend.patch`；以下历史文档引用的 R25/R26/R27/R29/R30 补丁不再作为独立交接任务。Android PR 合并不等于 Python/Node 服务端已部署。
+R25–R32 累计交接以 [docs/mobile-r32-plan.md](docs/mobile-r32-plan.md) 为准，替代旧 PR #14（其内包含 #13）。只应用当前唯一 Web 累计补丁和 `server-patches/cumulative-r32/backend.patch`；R31 及更早文档中的补丁路径仅供历史追溯，不再单独应用。Android PR 合并不等于 Python/Node 服务端已部署。
 
 写给我自己。贡献者那边看 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
