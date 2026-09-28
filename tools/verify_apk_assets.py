@@ -20,6 +20,8 @@ from __future__ import annotations
 import argparse
 import sys
 import zipfile
+import json
+import hashlib
 from pathlib import Path
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -59,6 +61,16 @@ def main() -> int:
         if lib_size < 100_000:
             die(f"{lib} 只有 {lib_size} 字节，webpack 产物不该这么小")
 
+    with zipfile.ZipFile(args.apk) as apk:
+        compat = json.loads(apk.read('assets/client/webview-compat-manifest.json'))
+        digest = lambda data: hashlib.sha256(data).hexdigest()
+        for tool, expected_hash in compat['tool'].items():
+            if digest((ROOT / 'tools/webview-compat' / tool).read_bytes()) != expected_hash:
+                die(f'兼容构建工具已变更，需重新打包：{tool}')
+        for name, record in compat['files'].items():
+            if digest(apk.read('assets/client/' + name)) != record['output']:
+                die(f'编译后的资源哈希不匹配：{name}')
+
     web_root = ROOT / "frontend"
     if not web_root.is_dir():
         die("仓库根没有 frontend/，先跑 python tools/bootstrap.py")
@@ -77,6 +89,25 @@ def main() -> int:
         (expected if packable(rel) else skipped).append(rel.as_posix())
 
     missing = [rel for rel in expected if f"assets/client/web/{rel}" not in names]
+    # Presence alone accepts stale assets with the same filenames. Compare
+    # actual bytes so a successful build cannot silently ship an older UI.
+    with zipfile.ZipFile(args.apk) as apk:
+        def matches(name: str, source: bytes) -> bool:
+            record = compat['files'].get(name)
+            if record:
+                return record.get('input') == digest(source)
+            return apk.read('assets/client/' + name) == source
+        stale = [rel for rel in expected if rel not in missing
+                 and not matches('web/' + rel, (web_root / rel).read_bytes())]
+        runtime_root = ROOT / 'sillytavern-runtime/public'
+        runtime_stale = []
+        for path in runtime_root.rglob('*'):
+            if not path.is_file(): continue
+            rel = path.relative_to(runtime_root)
+            if not packable(rel) or rel.as_posix() == 'lib.js' or 'st-yuzi-phone' in rel.parts: continue
+            entry = 'assets/client/runtime/' + rel.as_posix()
+            if entry not in names or not matches('runtime/' + rel.as_posix(), path.read_bytes()):
+                runtime_stale.append(rel.as_posix())
 
     print(f"APK           {args.apk.name}  {args.apk.stat().st_size / 1048576:.1f} MB")
     print(f"资源清单条目   {len(index)}")
@@ -91,7 +122,12 @@ def main() -> int:
             print(f"  ... 另有 {len(missing) - 20} 个")
         die("有前端文件没进 APK。运行时会 404，页面白屏。")
 
-    print("\n通过：前端与运行时资源都在包里。")
+    if stale or runtime_stale:
+        for rel in stale[:10]: print(f"  内容不同 frontend/{rel}")
+        for rel in runtime_stale[:10]: print(f"  缺失或内容不同 runtime/{rel}")
+        die("APK 资源与当前源码不一致，必须重新打包。")
+
+    print("\n通过：资源齐全；原始资源逐字节一致，兼容编译资源的源码和产物双哈希一致。")
     return 0
 
 

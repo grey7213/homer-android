@@ -1,0 +1,10 @@
+{
+  "name": "homer-webview-compat",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "core-js-bundle": "3.50.0",
+    "dialog-polyfill": "0.5.6",
+    "esbuild": "0.28.2"
+  }
+}

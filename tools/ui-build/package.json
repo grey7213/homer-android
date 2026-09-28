@@ -1,0 +1,1 @@
+{"private":true,"description":"Reproducible mobile utility stylesheet, matching the previous browser compiler","devDependencies":{"tailwindcss":"3.4.17"},"scripts":{"build":"tailwindcss -c tailwind.config.cjs -i input.css -o ../../frontend/assets/css/utilities.css --minify"}}

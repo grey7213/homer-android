@@ -50,7 +50,7 @@
       messages.append(empty);
       historyLast.textContent = '还没有本机会话';
     } else {
-      historyLast.textContent = String(list.at(-1)?.text || '本机最近会话').slice(0, 42);
+      historyLast.textContent = String(list[list.length - 1]?.text || '本机最近会话').slice(0, 42);
     }
     requestAnimationFrame(() => { messages.scrollTop = messages.scrollHeight; });
   }

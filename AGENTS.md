@@ -5,7 +5,7 @@
 - Windows builds require an ASCII path, JDK 17+, SDK 35+, Node 20+. Use Android Studio JBR and `E:\Android\Sdk`.
 - Assemble the pinned web tree with `python tools/bootstrap.py`; apply pending patches with `python tools/apply_web_patches.py --strict`. For production build inputs, use verified main-workspace web files.
 - Verify with Gradle `testDebugUnitTest lintDebug assembleDebug`, device tests when available, and `python tools/verify_apk_assets.py`. UI changes require rendered/device checks.
-- Preserve package `org.nebula.horizon.composeai` and the established release certificate. APKs, credentials, keystores and temporary evidence never enter Git. Evidence belongs under ignored `output/`.
+- R28: use independent package `app.huomeng.homer` (the former `org.nebula.horizon.composeai` collides with Wind with a different certificate). Preserve the established Homer release certificate. Never uninstall the old package or pretend a different applicationId can read its private data. APKs, credentials, keystores and temporary evidence never enter Git. Evidence belongs under ignored `output/`.
 - Main is protected; review PR code and its `build` result before merging. Push verified source commits and release APKs through `grey7213/homer-android-apk` Releases plus the existing website publisher.
 - Java bridge calls must retain the injected receiver: `window.HomerNative.method(...)`.
 - `PatchManager` data patches override bundled web assets; an APK release must account for old slots as well as update the published data patch when needed.
@@ -14,6 +14,17 @@
 - PR #8 (`7ddba11`) deliberately dropped the community web patch, which also deleted group chat. Cold start restores the last trusted `/app/` page and falls back to `/app/explore.html`; do not point the default home at a page whose backend is not deployed. The community server side still has no `social_*` tables in production.
 
 ## Verified pitfalls
+
+- R32: test failed generation against actual balance components and fee events, including HTTP-200 error bodies, partial streams and final write failure. A disabled-looking send button alone is insufficient: gate click/Enter and programmatic generation, distinguish auth/balance errors, and verify failure → reopen → switch model → successful generation. Binding an existing local chat mirror must preserve its original integrity header; never generate a new identity on every reopen or bypass the integrity check to hide the conflict. Client tests do not replace deploying the Python billing changes.
+
+- User execution preference: after a cause is confirmed and an in-scope fix is actionable, implement and verify in the same work session. Do not end with another explanation of the same cause or promise to start. Keep updates short. Persist unfinished acceptance gates across handoffs; do not submit or hand off an APK as fixed while a gate still fails.
+
+- R31: failed cold-entry acceptance blocks APK handoff even if warmed entry and generation pass. Measure click-to-painted as well as internal ready, using fresh browser contexts without waiting for prewarm; report sample count and do not call a browser proxy an Android device test. Never publish an intermediate optimization as a completed fix. Lazy-loaded editors must pass real open/edit/save/reopen tests, not just asset existence or successful startup.
+
+- R30: new conversation entry points must reuse an initialized engine rather than add a nonce iframe. Functional chat tests do not measure startup: record cold initialization, actual click-to-ready, tab revisit and role switch separately. A hidden loading overlay is not a speed fix. Preview-only optimizations must not disable ordinary-chat persistence, permission checks, card scripts or per-generation preset refresh.
+
+- R29: never treat a preset-debug launcher as the requested full admin conversation workspace. Verify edits through the actual right drawer and final provider payload; preview drafts require both signed preview claims and current administrator status. Do not write previews to normal histories. APK-only releases cannot deploy new Python/Node routes.
+- R29: never await a shared debounce timer inside the generation recovery chain if the next generation clears that timer. That leaves an unresolved Promise and wedges subsequent recovery. Keep the chain settleable; test failure → rollback → new generation. Quiet extension generations must not overwrite chat-reply diagnostics.
 
 - Acceptance regression gate: a visible local chat snapshot is not a ready conversation. Test native process restart as well as webpage navigation, and time the actual Memory Books home against real messages. If full startup still stalls, do not label the package "instant" or hide the wait as a fix. Preserve separate cold-start and ready-menu measurements.
 - Resource updates: mutable JS/CSS/JSON URLs are not immutable content hashes. Revalidate bundled text locally; invalidate HTTP resource cache on APK replacement without clearing login cookies, WebStorage or conversation databases. Test an upgrade with existing login and history, not only a clean installation.

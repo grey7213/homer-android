@@ -1,5 +1,9 @@
 # 维护者操作手册
 
+## 本次累计交接优先级
+
+R25–R33 累计交接以 [docs/mobile-r33-submission.md](docs/mobile-r33-submission.md) 为准，替代旧 PR #15（其内包含 #14/#13）。只应用当前唯一 Web 累计补丁和 `server-patches/cumulative-r33/backend.patch`；旧文档和旧后端目录仅供历史追溯，不叠加应用。新增生图依赖需执行 `python -m pip install -r tools/requirements-images.txt`。Android PR 合并不等于 Python/Node 服务端已部署。
+
 写给我自己。贡献者那边看 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ## 三个仓库的关系
@@ -101,6 +105,12 @@ Java 改动正常读 diff。重点看：
 - 有没有夹带 `local.properties`、APK、签名文件
 
 ## 出正式包
+
+### R28 构建与安装身份变更
+
+R28 之后必须在完整的 homer-android 工作区构建，不能只拷贝 `android-app/` 到旧打包目录。Gradle 还需要本仓库的 `tools/webview-compat/`（包括锁文件）；先在该目录执行 `npm ci`，或通过 `tools/bootstrap.py` 装配。只拷原生目录会漏掉兼容编译步骤。最终同时跑 `tools/verify_apk_assets.py`，它会验证编译前源码哈希、包内产物哈希及兼容工具版本。
+
+正式 applicationId 已改为 `app.huomeng.homer`，当前 R28.1 版本 277 / 1.16.1；旧 ID 与风月同名但证书不同，无法共存。正式证书仍沿用惑梦原证书，不要临时换证书，不要拿 debug 签名发布。发布器与官网 release.json 需支持新包名；旧安装不能直接覆盖升级，应保留旧安装，先确认云端/导出数据再由用户安装独立新包。迁移和验收边界见 `docs/mobile-r28-analysis.md`。
 
 补丁落地到主仓库、Java 改动合进 homer-android 之后：
 

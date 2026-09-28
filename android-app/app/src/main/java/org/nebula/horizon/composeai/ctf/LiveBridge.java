@@ -1,15 +1,18 @@
 package org.nebula.horizon.composeai.ctf;
 
 import android.webkit.JavascriptInterface;
+import android.webkit.WebView;
 
 /** Minimal, non-sensitive controls available to the trusted live WebView. */
 public final class LiveBridge {
     private final HomerActivity activity;
     private final HomerCacheDatabase database;
+    private final WebView owner;
 
-    LiveBridge(HomerActivity activity, HomerCacheDatabase database) {
+    LiveBridge(HomerActivity activity, HomerCacheDatabase database, WebView owner) {
         this.activity = activity;
         this.database = database;
+        this.owner = owner;
     }
 
     @JavascriptInterface
@@ -22,6 +25,16 @@ public final class LiveBridge {
 
     @JavascriptInterface
     public boolean isDebugBuild() { return BuildConfig.DEBUG; }
+
+    /** Capability negotiation: old clients must keep their existing web fallback. */
+    @JavascriptInterface
+    public boolean supportsSharedConversationHost() { return true; }
+
+    @JavascriptInterface
+    public void prepareAdminConversation(String appId) {
+        if (appId == null || appId.isBlank() || appId.length() > 160) return;
+        activity.runOnUiThread(() -> activity.prepareAdminConversation(appId));
+    }
 
     @JavascriptInterface
     public void setAppTheme(String mode) {
@@ -55,7 +68,7 @@ public final class LiveBridge {
     @JavascriptInterface
     public void notifyShellReady(String documentUrl) {
         final String safeUrl = documentUrl == null ? "" : documentUrl.trim();
-        activity.runOnUiThread(() -> activity.onLiveShellReady(safeUrl));
+        activity.runOnUiThread(() -> activity.onLiveShellReady(owner, safeUrl));
     }
 
     @JavascriptInterface

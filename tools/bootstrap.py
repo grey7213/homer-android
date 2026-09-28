@@ -263,6 +263,7 @@ def main() -> int:
     link_into_root(base)
     if not args.skip_npm:
         install_runtime_deps(tools["npm"])
+        run([tools["npm"], "ci", "--no-audit", "--no-fund"], cwd=ROOT / "tools/webview-compat")
     ensure_local_properties()
 
     say("\n装配完成。构建：")

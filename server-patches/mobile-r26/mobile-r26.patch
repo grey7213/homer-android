@@ -1,0 +1,342 @@
+--- a/tools/ai_fengyue_local_server.py
++++ b/tools/ai_fengyue_local_server.py
+@@ -9995,22 +9995,22 @@
+     def public_model_presets(self) -> dict:
+         presets, default_id = self.llm_presets(include_secrets=False)
+         visible: list[dict] = []
+-        seen_models: set[str] = set()
++        seen_models: set[tuple[str, str]] = set()
+         for p in presets:
+             if not p.get("enabled"):
+                 continue
+             models = split_model_names(p.get("models") or p.get("model")) or [p.get("model") or ""]
+             default_model = str(p.get("model") or "") if str(p.get("model") or "") in models else models[0]
+             for model in models:
+-                if not model or model in seen_models:
++                if not model or (p["id"], model) in seen_models:
+                     continue
+-                seen_models.add(model)
++                seen_models.add((p["id"], model))
+                 model_config = model_config_for_preset(p, model)
+                 pricing = normalize_model_pricing(model_config.get("pricing"))
+                 points_cost = model_charge_points(pricing)
+                 visible.append({
+                     "id": model_selection_id(p["id"], model) if len(split_model_names(p.get("models") or p.get("model"))) > 1 else p["id"],
+-                    "preset_id": p["id"],
++                    "preset_id": p["id"], "group_id": p["id"], "group_name": str(p.get("name") or "站点模型"), "preset_name": str(p.get("name") or "站点模型"),
+                     "name": model_config.get("display_name") or p.get("name") or p.get("model") or p["id"],
+                     "protocol": p.get("protocol") or "openai",
+                     "model": model,
+@@ -10026,7 +10026,7 @@
+             model = p.get("model") or ""
+             model_config = model_config_for_preset(p, model)
+             pricing = normalize_model_pricing(model_config.get("pricing"))
+-            visible = [{"id": p["id"], "preset_id": p["id"], "name": model_config.get("display_name") or p.get("name") or model or p["id"], "protocol": p.get("protocol") or "openai", "model": model, "enabled": True, "is_default": True, "points_cost": model_charge_points(pricing), "pricing": pricing, "price_label": model_price_label(pricing), "preset_id_bound": model_config.get("preset_id") or ""}]
++            visible = [{"id": p["id"], "preset_id": p["id"], "group_id": p["id"], "group_name": str(p.get("name") or "站点模型"), "preset_name": str(p.get("name") or "站点模型"), "name": model_config.get("display_name") or p.get("name") or model or p["id"], "protocol": p.get("protocol") or "openai", "model": model, "enabled": True, "is_default": True, "points_cost": model_charge_points(pricing), "pricing": pricing, "price_label": model_price_label(pricing), "preset_id_bound": model_config.get("preset_id") or ""}]
+             default_id = p["id"]
+         else:
+             default_id = next((p["id"] for p in visible if p.get("is_default")), visible[0]["id"] if visible else default_id)
+@@ -12118,7 +12118,10 @@
+             template_context=template_context,
+             phase="generate",
+         )
+-        text = apply_regex_scripts(text, card or {})
++        # Persist source, never display-regex output. The SillyTavern runtime
++        # owns display processing; a second pass can inject an HTML document
++        # into its own trigger and expose the remaining source as Markdown.
++        text = apply_regex_scripts(text, card or {}, source_only=True)
+         key = _dedupe_text_key(text)
+         if text and key and key not in {_dedupe_text_key(g) for g in greetings}:
+             greetings.append(text)
+@@ -12189,6 +12192,7 @@
+     regex_scripts = extra.get("regex_scripts")
+     if not isinstance(regex_scripts, list):
+         regex_scripts = []
++    regex_scripts = recover_legacy_regex_replacements(regex_scripts, extra)
+     media_assets = extra.get("media_assets") if isinstance(extra.get("media_assets"), list) else []
+     card_experience = extra.get("card_experience") if isinstance(extra.get("card_experience"), dict) else {}
+     card_prompt_preset = normalize_card_prompt_preset(extra.get("card_prompt_preset"))
+@@ -12565,7 +12569,7 @@
+             ext = {}
+         meta = ext.get("homer_import_meta") if isinstance(ext.get("homer_import_meta"), dict) else {}
+         if statusbar_val.strip():
+-            meta["statusbar"] = statusbar_val.strip()[:REGEX_REPLACE_MAX_CHARS]
++            meta["statusbar"] = checked_regex_replacement(statusbar_val.strip())
+         if isinstance(page_depth_val, (int, float)):
+             meta["pageDepth"] = int(page_depth_val)
+         ext["homer_import_meta"] = meta
+@@ -14429,7 +14433,7 @@
+     raw["id"] = str(raw.get("id") or f"regex-{index + 1}")[:160]
+     raw["scriptName"] = str(raw.get("scriptName") or raw.get("name") or f"Regex {index + 1}")[:200]
+     raw["findRegex"] = str(raw.get("findRegex") if raw.get("findRegex") is not None else raw.get("find") or raw.get("pattern") or "")[:12000]
+-    raw["replaceString"] = str(raw.get("replaceString") if raw.get("replaceString") is not None else raw.get("replace") or raw.get("replacement") or "")[:REGEX_REPLACE_MAX_CHARS]
++    raw["replaceString"] = checked_regex_replacement(raw.get("replaceString") if raw.get("replaceString") is not None else raw.get("replace") or raw.get("replacement") or "")
+     raw["trimStrings"] = list(raw.get("trimStrings") or [])[:100] if isinstance(raw.get("trimStrings"), list) else []
+     placement = raw.get("placement")
+     if not isinstance(placement, list):
+@@ -14544,7 +14548,63 @@
+     return text, ""
+ 
+ 
+-REGEX_REPLACE_MAX_CHARS = 240000
++REGEX_REPLACE_MAX_BYTES = 8 * 1024 * 1024
++
++
++def checked_regex_replacement(value: object) -> str:
++    text = str(value if value is not None else "")
++    if len(text.encode("utf-8")) > REGEX_REPLACE_MAX_BYTES:
++        raise ValueError("界面模板（正则）单条替换内容不能超过 8 MiB；未保存，请缩小文件后重试")
++    return text
++
++
++def recover_legacy_regex_replacements(rules: list, extra: dict) -> list:
++    """Repair only the provable old 240000-character truncation, without a DB migration.
++
++    The retained original card is the same version, not a newer creator resource.
++    Never replace edited text, change flags/order, resurrect deleted rules, or
++    choose between conflicting source candidates.
++    """
++    if not any(isinstance(r, dict) and len(str(r.get("replace", ""))) == 240000 for r in rules):
++        return rules
++    candidates = []
++    snapshot = extra.get("sillytavern_card")
++    roots = [extra]
++    if isinstance(snapshot, dict):
++        roots.append(snapshot)
++        if isinstance(snapshot.get("data"), dict):
++            roots.append(snapshot["data"])
++    for root in roots:
++        extensions = root.get("extensions")
++        if isinstance(extensions, dict):
++            for key in ("regex_scripts", "TavernHelper_scripts", "tavern_helper_scripts"):
++                if isinstance(extensions.get(key), list):
++                    candidates.extend(extensions[key])
++        if root is not extra and isinstance(root.get("regex_scripts"), list):
++            candidates.extend(root["regex_scripts"])
++    by_key = {}
++    for index, candidate in enumerate(candidates):
++        if not isinstance(candidate, dict):
++            continue
++        try:
++            normalized = normalize_regex_scripts([dict(candidate, id=candidate.get("id") or f"regex-{index + 1}")])
++        except ValueError:
++            continue
++        if not normalized:
++            continue
++        candidate = normalized[0]
++        key = (candidate["id"], candidate["find"], candidate["flags"])
++        by_key.setdefault(key, set()).add(candidate["replace"])
++    restored = []
++    for rule in rules:
++        if not isinstance(rule, dict):
++            restored.append(rule)
++            continue
++        text = str(rule.get("replace", ""))
++        matches = {value for value in by_key.get((rule.get("id"), rule.get("find"), rule.get("flags", "")), ())
++                   if len(text) == 240000 and len(value) > len(text) and value.startswith(text)}
++        restored.append(dict(rule, replace=matches.pop()) if len(matches) == 1 else rule)
++    return restored
+ 
+ 
+ def normalize_regex_scripts(value: object) -> list:
+@@ -14571,7 +14631,7 @@
+             "id": str(raw.get("id") or f"regex-{idx + 1}")[:80],
+             "name": str(raw.get("name") or raw.get("scriptName") or f"Regex {idx + 1}")[:80],
+             "find": find[:1000],
+-            "replace": replace[:REGEX_REPLACE_MAX_CHARS],
++            "replace": checked_regex_replacement(replace),
+             # Preserve JavaScript flags for the native SillyTavern projection.
+             # The Python renderer still consumes only i/m/s where applicable.
+             "flags": "".join(dict.fromkeys(ch for ch in flags if ch in "gimsuy"))[:6],
+@@ -14627,14 +14687,14 @@
+         "id": str(raw.get("id") or f"regex-{index + 1}")[:80],
+         "scriptName": str(raw.get("name") or raw.get("scriptName") or f"Regex {index + 1}")[:80],
+         "findRegex": find_regex[:1100],
+-        "replaceString": str(
++        "replaceString": checked_regex_replacement(
+             raw.get("replace")
+             if raw.get("replace") is not None
+             else raw.get("replacement")
+             if raw.get("replacement") is not None
+             else raw.get("replaceString")
+             or ""
+-        )[:REGEX_REPLACE_MAX_CHARS],
++        ),
+         "trimStrings": list(raw.get("trimStrings") or []) if isinstance(raw.get("trimStrings"), list) else [],
+         "placement": placement or [1, 2],
+         "disabled": not enabled,
+@@ -16516,9 +16576,18 @@
+     return "".join(out)
+ 
+ 
+-def apply_regex_scripts(text: str, app: dict) -> str:
++def apply_regex_scripts(text: str, app: dict, *, source_only: bool = False) -> str:
+     value = str(text or "")
+     for script in enabled_regex_scripts(app):
++        if source_only:
++            # Follow native source-stage semantics. Display-only rules render
++            # in the client, prompt-only rules belong to model input. Keep
++            # source-transforming assistant rules working for ordinary cards.
++            if script.get("markdownOnly") or script.get("promptOnly"):
++                continue
++            placements = script.get("placement") or [2]
++            if 2 not in placements:
++                continue
+         replacement = str(script.get("replace") or "")
+         appends_document = bool(
+             re.search(r"<!doctype\s+html|<html[\s>]", replacement, flags=re.IGNORECASE)
+@@ -16587,9 +16656,7 @@
+         try:
+             pattern = re.compile(find, flags=flags)
+             replacement = str(script.get("replaceString") or "")
+-            value = pattern.sub(lambda match: expand_silly_regex_replacement(replacement, match), value)
+-            if len(value) > REGEX_REPLACE_MAX_CHARS:
+-                value = value[:REGEX_REPLACE_MAX_CHARS]
++            value = checked_regex_replacement(pattern.sub(lambda match: expand_silly_regex_replacement(replacement, match), value))
+         except (re.error, ValueError, OverflowError) as exc:
+             log(f"global regex script skipped for {preset.get('id')}: {exc}")
+     return value
+--- a/tools/community_workshop.py
++++ b/tools/community_workshop.py
+@@ -10,13 +10,13 @@
+ from card_version_workshop import ContentVersionStore
+ 
+ 
+-WORK_TYPES = {"mod", "ui_template", "preset"}
++WORK_TYPES = {"mod", "ui_template", "preset", "regex"}
+ MAX_WORKS_PER_USER = 100
+ MAX_VERSIONS_PER_WORK = 100
+ MIN_VERSION_INTERVAL_MS = 10_000
+ MAX_STRUCTURED_ENTRIES = 400
+-MAX_ENTRY_JSON_BYTES = 32 * 1024
+-MAX_CONTENT_JSON_BYTES = 512 * 1024
++MAX_ENTRY_JSON_BYTES = 8 * 1024 * 1024
++MAX_CONTENT_JSON_BYTES = 8 * 1024 * 1024
+ MAX_UI_DEMO_BYTES = 200 * 1024
+ 
+ 
+@@ -133,7 +133,7 @@
+ 
+ def _entry_titles(work_type: str, content) -> list[str]:
+     if isinstance(content, dict):
+-        values = content.get("entries") or content.get("prompts") or content.get("blocks") or []
++        values = content.get("entries") or content.get("prompts") or content.get("blocks") or content.get("regex_scripts") or []
+         if isinstance(values, dict):
+             values = list(values.values())
+     else:
+@@ -142,7 +142,7 @@
+     for item in values[:200]:
+         if not isinstance(item, dict):
+             continue
+-        name = item.get("name") or item.get("title") or item.get("comment") or item.get("identifier")
++        name = item.get("scriptName") or item.get("name") or item.get("title") or item.get("comment") or item.get("identifier")
+         if not name and work_type == "mod":
+             keys = item.get("keys") or item.get("key") or []
+             name = keys[0] if isinstance(keys, list) and keys else ""
+@@ -156,7 +156,7 @@
+         return content
+     if not isinstance(content, dict):
+         return []
+-    for key in ("entries", "prompts", "blocks"):
++    for key in ("entries", "prompts", "blocks", "regex_scripts"):
+         value = content.get(key)
+         if isinstance(value, dict):
+             return list(value.values())
+@@ -166,7 +166,7 @@
+ 
+ 
+ def _validate_work_payload(work_type: str, content, demo_html: str = "") -> None:
+-    if work_type in {"mod", "preset"}:
++    if work_type in {"mod", "preset", "regex"} or (work_type == "ui_template" and isinstance(content, dict) and "regex_scripts" in content):
+         entries = _content_entries(content)
+         if not entries:
+             raise ValueError("content entries are required")
+@@ -175,6 +175,8 @@
+         for entry in entries:
+             if not isinstance(entry, dict):
+                 raise ValueError("content entries must be objects")
++            if work_type in {"regex", "ui_template"} and not isinstance(entry.get("findRegex", entry.get("find")), str):
++                raise ValueError("regex pattern is required")
+             if len(json.dumps(entry, ensure_ascii=False, separators=(",", ":")).encode("utf-8")) > MAX_ENTRY_JSON_BYTES:
+                 raise ValueError("content entry is too large")
+     raw_content = json.dumps(content, ensure_ascii=False, separators=(",", ":")) if content is not None else "null"
+@@ -236,9 +238,9 @@
+             "current_version_id": row.get("current_version_id") or "",
+             "created_at": int(row.get("created_at") or 0), "updated_at": int(row.get("updated_at") or 0),
+         }
+-        if row.get("work_type") in {"mod", "preset"}:
++        if row.get("work_type") in {"mod", "preset", "regex"}:
+             out["entry_count"] = len(_entry_titles(str(row.get("work_type")), content))
+-        if detail and row.get("work_type") in {"mod", "preset"}:
++        if detail and row.get("work_type") in {"mod", "preset", "regex"}:
+             out["entry_titles"] = _entry_titles(str(row.get("work_type")), content)
+         if detail and row.get("work_type") == "ui_template":
+             out["demo_html"] = row.get("demo_html") or ""
+@@ -251,7 +253,9 @@
+ 
+     def list_works(self, work_type: str, scope: str, user_id: str, search: str = "", limit: int = 60):
+         where, args = [], []
+-        if work_type in WORK_TYPES:
++        if work_type in {"ui_template", "regex"}:
++            where.append("work_type in ('ui_template','regex')")
++        elif work_type in WORK_TYPES:
+             where.append("work_type=?"); args.append(work_type)
+         if scope == "mine":
+             where.append("owner_user_id=?"); args.append(user_id)
+--- a/tools/card_extra_workshop.py
++++ b/tools/card_extra_workshop.py
+@@ -89,10 +89,10 @@
+     ui_versions = []
+     for index, work_id in enumerate(ui_ids):
+         row = store.get_work(work_id)
+-        if not row or row.get("work_type") != "ui_template" or not store.can_use_work(user_id, row):
++        if not row or row.get("work_type") not in {"ui_template", "regex"} or not store.can_use_work(user_id, row):
+             raise ValueError("selected UI template is not available or favorited")
+         version_id = requested_ui_versions[index] if index < len(requested_ui_versions) else str(row.get("current_version_id") or "")
+-        if not store.versions.get_version(version_id, "ui_template", work_id):
++        if not store.versions.get_version(version_id, row["work_type"], work_id):
+             raise ValueError("selected UI template version is invalid")
+         ui_versions.append(version_id)
+     return {
+--- a/tools/chat_mod_workshop.py
++++ b/tools/chat_mod_workshop.py
+@@ -172,16 +172,27 @@
+     template_experience: dict = {}
+     template_legacy: dict = {}
+     applied_ui: list[dict] = []
++    template_regex: list[dict] = []
+     for index, work_id_raw in enumerate(ui_ids):
+         work_id = str(work_id_raw or "")
+         version_id = str(ui_versions[index] or "") if index < len(ui_versions) else ""
+         if not work_id or not version_id:
+             continue
+-        snapshot = community.versions.snapshot(version_id, "ui_template", work_id)
++        work = community.get_work(work_id)
++        if not work or work.get("work_type") not in {"ui_template", "regex"}:
++            continue
++        snapshot = community.versions.snapshot(version_id, work["work_type"], work_id)
+         if not snapshot:
+             continue
+         content = _snapshot_content(snapshot)
+         source = content.get("ui_template") if isinstance(content.get("ui_template"), dict) else content
++        rules = source.get("regex_scripts", [])
++        for rule_index, raw_rule in enumerate(rules if isinstance(rules, list) else []):
++            if not isinstance(raw_rule, dict) or not isinstance(raw_rule.get("findRegex"), str):
++                continue
++            rule = dict(raw_rule)
++            rule["id"] = f"work-regex:{work_id}:{version_id}:{rule_index}"
++            template_regex.append(rule)
+         experience = source.get("card_experience") if isinstance(source.get("card_experience"), dict) else {}
+         legacy = source.get("legacy_rp_hub") if isinstance(source.get("legacy_rp_hub"), dict) else {}
+         template_experience = _deep_merge(template_experience, experience)
+@@ -193,6 +204,10 @@
+         extras["card_experience"] = _deep_merge(template_experience, own_experience)
+     if template_legacy:
+         extras["legacy_rp_hub"] = _deep_merge(template_legacy, own_legacy)
++    if template_regex:
++        # Idempotent hydration: keep author rules, replace only our own projection.
++        authored = [rule for rule in extras.get("regex_scripts", []) if isinstance(rule, dict) and not str(rule.get("id", "")).startswith("work-regex:")]
++        extras["regex_scripts"] = template_regex + authored
+     if applied_ui:
+         extras["_applied_ui_template_versions"] = applied_ui
+     app["extra_settings"] = extras

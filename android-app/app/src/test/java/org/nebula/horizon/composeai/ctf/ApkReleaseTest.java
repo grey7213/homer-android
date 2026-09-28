@@ -42,6 +42,13 @@ public class ApkReleaseTest {
     @Test public void rejectsWrongPackage() throws Exception {
         JSONObject value = feed(); file(value).put("package", "some.other.app"); rejects(value);
     }
+    @Test public void independentIdentityNeverAcceptsWindOrLegacyHomerUpdate() throws Exception {
+        JSONObject value = feed();
+        assertThrows(Exception.class, () -> ApkRelease.parse(value.toString(), BASE, "app.huomeng.homer", false));
+        file(value).put("package", "app.huomeng.homer");
+        download(value).put("package", "app.huomeng.homer");
+        assertEquals("app.huomeng.homer", ApkRelease.parse(value.toString(), BASE, "app.huomeng.homer", false).packageName);
+    }
     @Test public void rejectsForeignOrigin() throws Exception {
         JSONObject value = feed(); download(value).put("url", "https://example.com/download/app.apk"); rejects(value);
     }

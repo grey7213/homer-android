@@ -53,6 +53,18 @@ jobs:
       - name: 落地 PR 内的 web 补丁
         run: python3 tools/apply_web_patches.py --strict
 
+      - name: 会话生成与失败模型回归
+        env:
+          HOMER_REGEX_WORKER: ${{ github.workspace }}/server-patches/cumulative-r33/homer_regex.cjs
+        run: >-
+          node --test tools/tests/mobile-r28-session.test.mjs
+          tools/tests/mobile-r29-generation.test.mjs
+          tools/tests/mobile-r30-admin.test.mjs
+          tools/tests/mobile-r31-autocomplete.test.mjs
+          tools/tests/mobile-r31-shared-host.test.mjs
+          tools/tests/mobile-r32-model-gate.test.mjs
+          tools/tests/mobile-r32-chat-header.test.mjs
+
       - name: 单测 + assembleDebug
         working-directory: android-app
         run: ./gradlew --no-daemon testDebugUnitTest assembleDebug
