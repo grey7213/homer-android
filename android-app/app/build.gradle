@@ -111,9 +111,7 @@ android {
     compileSdk 35
 
     defaultConfig {
-        // The former ID belongs to Wind as well, with a different certificate.
-        // Keep our signing key, but give Homer its own install/update identity.
-        applicationId "app.huomeng.homer"
+        applicationId "org.nebula.horizon.composeai"
         minSdk 26
         targetSdk 35
         versionCode 281
