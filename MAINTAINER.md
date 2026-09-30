@@ -106,11 +106,13 @@ Java 改动正常读 diff。重点看：
 
 ## 出正式包
 
-### R28 构建与安装身份变更
+### R28 之后的构建要求与安装身份
 
 R28 之后必须在完整的 homer-android 工作区构建，不能只拷贝 `android-app/` 到旧打包目录。Gradle 还需要本仓库的 `tools/webview-compat/`（包括锁文件）；先在该目录执行 `npm ci`，或通过 `tools/bootstrap.py` 装配。只拷原生目录会漏掉兼容编译步骤。最终同时跑 `tools/verify_apk_assets.py`，它会验证编译前源码哈希、包内产物哈希及兼容工具版本。
 
-正式 applicationId 已改为 `app.huomeng.homer`，当前 R28.1 版本 277 / 1.16.1；旧 ID 与风月同名但证书不同，无法共存。正式证书仍沿用惑梦原证书，不要临时换证书，不要拿 debug 签名发布。发布器与官网 release.json 需支持新包名；旧安装不能直接覆盖升级，应保留旧安装，先确认云端/导出数据再由用户安装独立新包。迁移和验收边界见 `docs/mobile-r28-analysis.md`。
+正式 applicationId 仍是 `org.nebula.horizon.composeai`，281 / 1.17.3 继续沿用，275 老用户可以直接应用内覆盖升级。正式证书仍沿用惑梦原证书，不要临时换证书，不要拿 debug 签名发布。
+
+风月与惑梦共用这个 ID 但证书不同，一台设备装不下两个 —— 这是**已知未决项**，本轮刻意没解决。R28 曾把正式 ID 改成 `app.huomeng.homer`，那个方向会让全部已安装用户断掉应用内升级，而且 `tools/publish_homer_apk.py` 会直接 `SystemExit`：线上 `release.json` 的 canonical 是旧 ID，反向包名变更是硬闸门。真要迁移，需要官网独立的新应用下载入口、用户公告、以及有意识地调整发布器的包名闸门，三件配齐才能动，不是改一行 `applicationId` 的事。迁移和验收边界见 `docs/mobile-r28-analysis.md`；`docs/mobile-r28-analysis.md`、`mobile-r29-delivery.md`、`mobile-r30-delivery.md`、`mobile-r31-plan.md` 里写的 `app.huomeng.homer.debug` 是当时那批 debug 包的真实身份，属历史记录，不要按它改正式包。
 
 补丁落地到主仓库、Java 改动合进 homer-android 之后：
 
