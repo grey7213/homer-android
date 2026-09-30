@@ -1,0 +1,211 @@
+# 基线 commit: 02069118baa83354f3e01a6d0021562111211373
+# Apply after the R25-R33 cumulative patch; fixes workshop account cache isolation.
+
+diff --git a/frontend/app/assets/js/hub-pages.js b/frontend/app/assets/js/hub-pages.js
+index 51ed84a9981452ccbf3d4cd433db9da682b9c530..06349f0377faf9142b0db9391525924563bf3aa0 100644
+--- a/frontend/app/assets/js/hub-pages.js
++++ b/frontend/app/assets/js/hub-pages.js
+@@ -1,7 +1,7 @@
+ import { confirmAction, showMessage } from '/assets/js/dialogs.js?v=20260917-r8';
+-import { api, requireAuth, getCachedUser, setCachedUser, clearAuth, ApiError } from '/app/assets/js/app-core.js?v=20260917-r8';
++import { api, requireAuth, isLoggedIn, getCachedUser, setCachedUser, clearAuth, ApiError } from '/app/assets/js/app-core.js?v=20260917-r8';
+ import { injectLayout, loadPublicSiteSettings } from '/app/assets/js/layout.js?v=20260917-r8';
+-import { readPageCache, writePageCache } from './page-cache.js';
++import { readPageCache, writePageCache, clearPageCacheScope } from './page-cache.js?v=20261001-workshop-auth';
+ import { messagePreview } from '/assets/js/message-preview.js';
+ 
+ async function loadUser(ctx) {
+@@ -265,49 +265,131 @@ export function historiesPage() {
+ }
+ 
+ export function workshopPage() {
++  // Keep promises outside Alpine's reactive proxy. Re-entry invalidates pending work.
++  let refreshPromise = null;
++  let refreshEpoch = 0;
++  let refreshQueued = false;
++  let destroyed = false;
++  const cacheScope = 'workshop-v2';
++  const identity = user => String(user?.id || user?.user_id || '');
+   return {
+     user: null, points: 0, stats: null, myApps: [], myTotal: 0, siteSettings: null, ready: false,
+     refreshing: false, appsLoaded: false, refreshError: '',
+     async init() {
+       injectLayout('workshop');
+       if (!requireAuth()) return;
+-      this.user = getCachedUser();
+-      const cached = readPageCache('workshop', this.user);
+-      if (cached) {
+-        this.stats = cached.stats || null;
+-        this.myApps = cached.list || [];
+-        this.myTotal = cached.total ?? this.myApps.length;
+-        this.appsLoaded = Array.isArray(cached.list);
+-      }
++      // Old entries may already contain another account's private works.
++      clearPageCacheScope('workshop');
+       // Local navigation and new-card tools do not depend on server statistics.
+       this.ready = true;
+       this._onVisible = () => { void this.refreshWorkshop(); };
+-      window.addEventListener('homer:page-visible', this._onVisible);
+-      await Promise.allSettled([loadSiteSettings(this), this.refreshWorkshop(), (async () => {
+-        const previousOwner = String(this.user?.id || this.user?.user_id || '');
+-        if (!await loadUser(this)) return;
+-        if (previousOwner !== String(this.user?.id || this.user?.user_id || '')) {
+-          this.myApps = []; this.myTotal = 0; this.appsLoaded = false; this.stats = null;
++      this._onAccountCleared = () => {
++        ++refreshEpoch;
++        refreshQueued = false;
++        this.user = null;
++        this.points = 0;
++        this.clearWorkshop();
++      };
++      this._onStorage = event => {
++        if (event.key === null || ['ai_xingyue_user', 'ai_xingyue_logged_in'].includes(event.key)) {
++          this._onVisible();
+         }
+-      })()]);
++      };
++      window.addEventListener('homer:page-visible', this._onVisible);
++      window.addEventListener('pageshow', this._onVisible);
++      window.addEventListener('homer-account-cleared', this._onAccountCleared);
++      window.addEventListener('storage', this._onStorage);
++      await Promise.allSettled([loadSiteSettings(this), this.refreshWorkshop()]);
+     },
+-    destroy() { window.removeEventListener('homer:page-visible', this._onVisible); },
+-    async refreshWorkshop() {
+-      if (this.refreshing) return;
+-      const owner = getCachedUser();
++    destroy() {
++      destroyed = true;
++      ++refreshEpoch;
++      window.removeEventListener('homer:page-visible', this._onVisible);
++      window.removeEventListener('pageshow', this._onVisible);
++      window.removeEventListener('homer-account-cleared', this._onAccountCleared);
++      window.removeEventListener('storage', this._onStorage);
++    },
++    clearWorkshop() {
++      this.myApps = []; this.myTotal = 0; this.appsLoaded = false; this.stats = null;
++    },
++    refreshWorkshop() {
++      if (destroyed) return Promise.resolve();
++      ++refreshEpoch;
++      this.clearWorkshop();
++      // Android may announce page visibility while a logout is still settling.
++      if (!isLoggedIn()) {
++        refreshQueued = false;
++        this.user = null;
++        this.points = 0;
++        return Promise.resolve();
++      }
++      if (refreshPromise) {
++        refreshQueued = true;
++        return refreshPromise;
++      }
++      if (!requireAuth()) return Promise.resolve();
+       this.refreshing = true;
+       this.refreshError = '';
+-      await Promise.allSettled([
+-        api.homeStats().then(s => { this.stats = s?.data || null; }),
+-        api.myApps({ page: 1, page_size: 8 }).then(m => {
+-          if (String(owner?.id || owner?.user_id || '') !== String(getCachedUser()?.id || getCachedUser()?.user_id || '')) return;
+-          this.myApps = m?.data?.list || m?.data?.apps || [];
+-          this.myTotal = m?.data?.total ?? this.myApps.length;
+-          this.appsLoaded = true;
+-          writePageCache('workshop', owner, { stats: this.stats, list: this.myApps, total: this.myTotal });
+-        }).catch(() => { this.refreshError = '作品列表未能刷新，请重试；新建和导入仍可使用。'; }),
+-      ]);
+-      this.refreshing = false;
++      refreshPromise = (async () => {
++        do {
++          refreshQueued = false;
++          if (!isLoggedIn()) break;
++          const epoch = refreshEpoch;
++          const startingOwner = identity(getCachedUser());
++          const current = () => !destroyed && epoch === refreshEpoch && isLoggedIn();
++          try {
++            const response = await api.profile();
++            if (!current()) continue;
++            if (identity(getCachedUser()) !== startingOwner) {
++              refreshQueued = true;
++              continue;
++            }
++            const owner = response?.data || response;
++            if (!identity(owner)) throw new Error('invalid profile');
++            this.user = owner;
++            setCachedUser(owner);
++            const sameOwner = () => current() && identity(owner) === identity(getCachedUser());
++            // Display only cache whose owner has just been confirmed by the server.
++            const cached = readPageCache(cacheScope, owner);
++            if (Array.isArray(cached?.list)) {
++              this.myApps = cached.list;
++              this.myTotal = cached.total ?? cached.list.length;
++              this.stats = cached.stats || null;
++              this.appsLoaded = true;
++            }
++            const [stats, apps, points] = await Promise.allSettled([
++              api.homeStats(), api.myApps({ page: 1, page_size: 8 }), api.points(),
++            ]);
++            if (!sameOwner()) {
++              if (current()) { this.clearWorkshop(); refreshQueued = true; }
++              continue;
++            }
++            this.refreshError = '';
++            if (stats.status === 'fulfilled') this.stats = stats.value?.data || null;
++            if (points.status === 'fulfilled') {
++              this.points = parseInt(points.value?.points || points.value?.data?.points || 0, 10);
++            }
++            if (apps.status === 'fulfilled') {
++              const data = apps.value?.data || apps.value;
++              this.myApps = data?.list || data?.apps || [];
++              this.myTotal = data?.total ?? this.myApps.length;
++              this.appsLoaded = true;
++              writePageCache(cacheScope, owner, { stats: this.stats, list: this.myApps, total: this.myTotal });
++            } else {
++              this.refreshError = '作品列表未能刷新，请重试；新建和导入仍可使用。';
++            }
++          } catch {
++            if (current()) {
++              this.clearWorkshop();
++              this.refreshError = '暂时无法确认账号，请重试；新建和导入仍可使用。';
++            }
++          }
++        } while (refreshQueued && !destroyed);
++      })().finally(() => {
++        refreshPromise = null;
++        this.refreshing = false;
++      });
++      return refreshPromise;
+     },
+     get publicCount() {
+       return this.myApps.filter((a) => a?.is_public !== false).length;
+diff --git a/frontend/app/assets/js/page-cache.js b/frontend/app/assets/js/page-cache.js
+index 2af7feeff67a51eb30b4fe5276537626f3d92d56..6bc3dea3f63220fffbf5acf5477737f8885396ad 100644
+--- a/frontend/app/assets/js/page-cache.js
++++ b/frontend/app/assets/js/page-cache.js
+@@ -44,3 +44,14 @@ export function clearPageCache(scope, user) {
+   try { localStorage.removeItem(key); } catch { /* storage can be unavailable */ }
+ }
+ 
++export function clearPageCacheScope(scope) {
++  const cleanScope = String(scope || '').replace(/[^a-z0-9_.-]/gi, '').slice(0, 80);
++  if (!cleanScope) return;
++  const prefix = `${CACHE_PREFIX}.${cleanScope}.`;
++  try {
++    for (const key of Object.keys(localStorage)) {
++      if (key.startsWith(prefix)) localStorage.removeItem(key);
++    }
++  } catch { /* storage can be unavailable */ }
++}
++
+diff --git a/frontend/app/workshop.html b/frontend/app/workshop.html
+index 2385009f982bed4521ace5e8a66f5dde9eccc6bb..c99e9621c8366532d2a7b9b72fa931ea27cdc788 100644
+--- a/frontend/app/workshop.html
++++ b/frontend/app/workshop.html
+@@ -8,7 +8,7 @@
+   <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
+   <link rel="stylesheet" href="/assets/css/utilities.css?v=20260925-r25">
+   <link rel="stylesheet" href="/app/assets/css/app.css?v=20260917-r8">
+-  <script type="module" src="/app/assets/js/hub-pages.js?v=20260917-r8"></script>
++  <script type="module" src="/app/assets/js/hub-pages.js?v=20261001-workshop-auth"></script>
+   <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
+   <style>
+     .ws-create-mask { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 18px; background: rgba(7, 8, 15, .66); backdrop-filter: blur(8px); }
