@@ -59,6 +59,34 @@ public final class SafeUrls {
         }
     }
 
+    /**
+     * A same-origin document Blob belongs to the renderer, not to the network
+     * asset loader. Only permit it inside an already trusted live page; it must
+     * never replace that page or become a generally trusted bridge/API origin.
+     */
+    static boolean isTrustedFrameBlobNavigation(String baseUrl, String candidate,
+                                               boolean mainFrame, String currentTopUrl) {
+        if (mainFrame || !isTrustedNavigation(baseUrl, currentTopUrl)) return false;
+        try {
+            URI blob = new URI(candidate);
+            if (!"blob".equalsIgnoreCase(blob.getScheme()) || blob.getRawFragment() != null) return false;
+            URI source = new URI(blob.getRawSchemeSpecificPart());
+            String scheme = source.getScheme();
+            if (!("https".equalsIgnoreCase(scheme) || "http".equalsIgnoreCase(scheme))
+                    || source.isOpaque() || source.getRawQuery() != null
+                    || source.getRawFragment() != null || source.getRawUserInfo() != null
+                    || !isTrustedNavigation(baseUrl, source.toString())) return false;
+            // URL.createObjectURL emits one opaque UUID after the creator origin.
+            // No relative path, extra segment, encoded separator or query is a
+            // renderer-created document Blob supported by this exception.
+            String path = source.getRawPath();
+            return path != null && path.matches(
+                    "/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
+        } catch (URISyntaxException | RuntimeException error) {
+            return false;
+        }
+    }
+
     public static URI resolveSameOrigin(String baseUrl, String candidate) {
         URI base = requireTrustedBase(baseUrl);
         URI resolved = base.resolve(candidate);

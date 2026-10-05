@@ -38,15 +38,18 @@ def die(message: str) -> None:
     raise SystemExit(1)
 
 
-def git(*args: str, check: bool = True) -> str:
+def git(*args: str, check: bool = True, preserve_newlines: bool = False) -> str:
     result = subprocess.run(
-        ["git", *args], cwd=TREE, check=False, text=True,
-        encoding="utf-8", errors="replace",
+        ["git", *args], cwd=TREE, check=False,
         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
     )
+    stdout = result.stdout.decode('utf-8', errors='strict' if preserve_newlines else 'replace')
+    stderr = result.stderr.decode('utf-8', errors='replace')
     if check and result.returncode != 0:
-        die(f"git {' '.join(args)} 失败：\n{((result.stderr or '') + (result.stdout or '')).strip()[-800:]}")
-    return result.stdout or ""
+        die(f"git {' '.join(args)} 失败：\n{(stderr + stdout).strip()[-800:]}")
+    # Diff payloads may intentionally contain CRLF source bytes. Universal
+    # newline decoding corrupts these while leaving the full-index SHA intact.
+    return stdout if preserve_newlines else stdout.replace('\r\n', '\n')
 
 
 def slug(text: str) -> str:
@@ -84,7 +87,10 @@ def main() -> int:
 
     if untracked:
         # intent-to-add：让 git diff 把新增文件也算进来，但不真的暂存内容。
-        git("add", "-N", "--", *untracked)
+        # Windows CreateProcess has a command-line length limit. Large vendor
+        # source/map updates must still include every new file in the patch.
+        for start in range(0, len(untracked), 40):
+            git("add", "-N", "--", *untracked[start:start + 40])
         stat = git("diff", "--stat", diff_base, "--", *WEB_PATHS).strip()
     print("web 端改动：")
     for line in stat.splitlines():
@@ -100,7 +106,7 @@ def main() -> int:
         return 0
 
     # --binary 保住图片这类改动；full-index 让 git apply -3 能查到 blob 做三方合并。
-    patch = git("diff", "--binary", "--full-index", diff_base, "--", *WEB_PATHS)
+    patch = git("diff", "--binary", "--full-index", diff_base, "--", *WEB_PATHS, preserve_newlines=True)
     if not patch.strip():
         die("git diff 是空的，但前面看到有改动 —— 检查一下是不是都被 .gitignore 挡了")
 
@@ -122,7 +128,10 @@ def main() -> int:
         f"# 冲突会明确报出来。不要用整目录覆盖代替这一步。\n"
         f"\n"
     )
-    out.write_text(header + patch, encoding="utf-8", newline="\n")
+    # Path.write_text(newline=...) requires Python 3.10; the configured local
+    # runtime may be older. File.open supports the same exact LF output there.
+    with out.open("w", encoding="utf-8", newline="\n") as output:
+        output.write(header + patch)
 
     print(f"\n补丁已写到 {out.relative_to(ROOT)}（{out.stat().st_size / 1024:.1f} KB）")
     print("把它一起提交进 PR。原生壳的改动照常提交 android-app/ 就行。")

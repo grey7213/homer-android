@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 const source = fs.readFileSync(new URL('../../sillytavern-runtime/public/script.js', import.meta.url), 'utf8');
 const start = source.indexOf('export async function bindCharacterChatWithoutLoad(');
-const fn = source.slice(start, source.indexOf('////////// OPTIMZED MAIN API', start)).replace('export ', '');
+const fn = source.slice(start, source.indexOf('////////// OPTIMZED MAIN API', start)).replace(/^export /gm, '');
 function fixture(header = {}, ok = true) {
     const calls = [];
     const scope = { characters: [{ name: 'Card', avatar: 'card.png' }], this_chid: 0,
@@ -12,6 +12,8 @@ function fixture(header = {}, ok = true) {
         waitUntilCondition: async () => {}, clearChat: async () => {},
         uuidv4: () => 'new-id', $: () => ({ val() {} }),
         getRequestHeaders: () => ({}), getCurrentChatId: () => 'chat', loadItemizedPrompts: async () => {},
+        prepareItemizedPrompts: chatId => ({ chatId, pending: Promise.resolve() }),
+        applyPreparedItemizedPrompts: async preparation => scope.loadItemizedPrompts(preparation.chatId),
         fetch: async (url, options) => { calls.push({ url, body: JSON.parse(options.body) }); return { ok, json: async () => header }; },
     };
     vm.createContext(scope); vm.runInContext(fn, scope);

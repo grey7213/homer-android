@@ -84,6 +84,16 @@ public final class HomerCacheDatabase extends SQLiteOpenHelper {
                 + "ON conversation_cache(updated_at DESC)");
     }
 
+    /** Non-sensitive startup hint only; never proves that the server session is valid. */
+    public synchronized String readAccountScope() {
+        try (Cursor cursor = getReadableDatabase().rawQuery(
+                "SELECT account_scope FROM app_state WHERE id=1", null)) {
+            return cursor.moveToFirst() ? safeIdentifier(cursor.getString(0), 160) : "";
+        } catch (RuntimeException unavailable) {
+            return "";
+        }
+    }
+
     public synchronized String readSnapshot() {
         try (Cursor cursor = getReadableDatabase().rawQuery(
                 "SELECT snapshot_json FROM app_state WHERE id = 1", null)) {
@@ -245,7 +255,10 @@ public final class HomerCacheDatabase extends SQLiteOpenHelper {
             clean.put("role", role);
             clean.put("content", content);
             clean.put("text", content);
+            clean.put("display_text", content);
             clean.put("created_at", Math.max(0, message.optLong("created_at", 0)));
+            clean.put("hidden", message.optBoolean("hidden", false));
+            clean.put("collapsed", message.optBoolean("collapsed", false));
             cleanMessages.put(clean);
         }
         return cleanMessages;

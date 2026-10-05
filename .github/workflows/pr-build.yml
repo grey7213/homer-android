@@ -53,21 +53,22 @@ jobs:
       - name: 落地 PR 内的 web 补丁
         run: python3 tools/apply_web_patches.py --strict
 
-      - name: 会话生成与失败模型回归
+      - name: 会话、渲染与交互回归
         env:
           HOMER_REGEX_WORKER: ${{ github.workspace }}/server-patches/cumulative-r33/homer_regex.cjs
         run: >-
-          node --test tools/tests/mobile-r28-session.test.mjs
-          tools/tests/mobile-r29-generation.test.mjs
-          tools/tests/mobile-r30-admin.test.mjs
-          tools/tests/mobile-r31-autocomplete.test.mjs
-          tools/tests/mobile-r31-shared-host.test.mjs
-          tools/tests/mobile-r32-model-gate.test.mjs
-          tools/tests/mobile-r32-chat-header.test.mjs
+          node --experimental-vm-modules --test --test-concurrency=1
+          tools/tests/*.test.mjs tools/tests/*.test.cjs
+
+      - name: 服务端交接契约
+        run: |
+          python3 -m unittest discover -s tools/tests -p test_r41_server_export.py
+          python3 -m unittest discover -s tools/tests -p test_homer_session_cards.py
+          python3 -m unittest discover -s tools -p test_export_web_patch.py
 
       - name: 单测 + assembleDebug
         working-directory: android-app
-        run: ./gradlew --no-daemon testDebugUnitTest assembleDebug
+        run: ./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug
 
       - name: 校验前端资源真的进了 APK
         run: python3 tools/verify_apk_assets.py

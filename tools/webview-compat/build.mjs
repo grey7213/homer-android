@@ -3,12 +3,13 @@ import {readFile, writeFile, readdir, mkdir} from 'node:fs/promises';
 import {resolve, relative, join, dirname} from 'node:path';
 import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
+import {bundleRuntimeCore, bundleQuickReply, coreBundleEnabled, quickReplyBundleEnabled} from './runtime-core-bundle.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(process.argv[2]);
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const manifest = {target: 'chrome89', tool: {}, files: {}};
-for (const name of ['build.mjs', 'compat-entry.js', 'package-lock.json']) {
+for (const name of ['build.mjs', 'runtime-core-bundle.mjs', 'compat-entry.js', 'package-lock.json']) {
     manifest.tool[name] = hash(await readFile(join(here, name)));
 }
 const tag = '<script src="/assets/homer-webview-compat.js"></script>';
@@ -49,6 +50,16 @@ async function walk(dir) {
     }
 }
 await walk(root);
+if (coreBundleEnabled({argv: process.argv.slice(3)})) {
+    await bundleRuntimeCore({runtimeRoot: join(root, 'runtime'), manifest});
+    if (quickReplyBundleEnabled({argv: process.argv.slice(3)})) {
+        await bundleQuickReply({runtimeRoot: join(root, 'runtime'), manifest});
+    } else {
+        manifest.extension_bundles = {quick_reply: {enabled: false, reason: 'build rollback switch'}};
+    }
+} else {
+    manifest.core_bundle = {enabled: false, reason: 'build rollback switch'};
+}
 const dest = join(root, 'web/assets/homer-webview-compat.js');
 await mkdir(dirname(dest), {recursive: true});
 await build({entryPoints: [join(here, 'compat-entry.js')], outfile: dest,

@@ -1,0 +1,8 @@
+{
+  "bundle_sha256": "6ba7a97bce86eac359a872f618afe129a33034a94bedb08e9e854b8bdfaa6250",
+  "functions": {
+    "Bk": "function Bk(e){return[`html>`,`<head>`,`<body`].some(t=>e.includes(t))}",
+    "EI": "function EI(e,t){return _(e.toArray()).map(e=>({message_id:Number($(e).attr(`mesid`)),reload_memo:t,elements:$(e).find(`pre`).filter((e,t)=>Bk($(t).text())).filter((e,t)=>!MF().settings.render.allow_streaming||$(t).closest(`.mes_text, .TH-streaming`).length===0).map((e,t)=>{let n=$(t),r=n.parent(`div.TH-render`);return r.length>0?r[0]:(n.wrap(`<div class=\"TH-render\">`),n.parent(`div.TH-render`)[0])}).toArray()})).filter(({elements:e})=>e.length>0).value()}",
+    "Q1": "function Q1(e,t,n){let r=e.parent(`div.TH-render`);if(r.children(`div.TH-collapse-code-block-button`).length>0||n&&e.closest(`.mes_text, .TH-streaming`).length>0)return;let i=Bk(e.text());if(t===`frontend_only`&&!i)return;r.length===0&&e.wrap(`<div class=\"TH-render\">`);let a=e.parent(`div.TH-render`),o=$(`<div class=\"TH-collapse-code-block-button\">`).text(i?`显示前端代码块`:`显示代码块`).on(`click`,function(){e.is(`:visible`)?(e.addClass(`hidden!`),$(this).text(i?`显示前端代码块`:`显示代码块`)):(e.removeClass(`hidden!`),$(this).text(i?`隐藏前端代码块`:`隐藏代码块`))}).prependTo(a);a.children(`iframe`).length>0&&o.addClass(`hidden!`),e.addClass(`hidden!`)}"
+  }
+}

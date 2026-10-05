@@ -26,6 +26,10 @@ public final class LiveBridge {
     @JavascriptInterface
     public boolean isDebugBuild() { return BuildConfig.DEBUG; }
 
+    /** Pure UTF-8 digest only; an empty result requests the existing web fallback. */
+    @JavascriptInterface
+    public String sha256Utf8(String value) { return HomerUtf8Sha256.digest(value); }
+
     /** Capability negotiation: old clients must keep their existing web fallback. */
     @JavascriptInterface
     public boolean supportsSharedConversationHost() { return true; }
@@ -34,6 +38,15 @@ public final class LiveBridge {
     public void prepareAdminConversation(String appId) {
         if (appId == null || appId.isBlank() || appId.length() > 160) return;
         activity.runOnUiThread(() -> activity.prepareAdminConversation(appId));
+    }
+
+    /** Only the owning, current history document may request bounded read-only preparation. */
+    @JavascriptInterface
+    public void prepareHistoryConversations(String documentUrl, String accountOwner, String targetsJson) {
+        final Object documentToken = activity.historyPreparationDocumentToken(owner);
+        final long expiresAt = System.currentTimeMillis() + HistoryConversationPreparation.TTL_MS;
+        activity.runOnUiThread(() -> activity.prepareHistoryConversations(owner, documentToken,
+                documentUrl, accountOwner, targetsJson, expiresAt));
     }
 
     @JavascriptInterface
@@ -56,7 +69,7 @@ public final class LiveBridge {
         if (database.setAccountScope(owner)) {
             activity.runOnUiThread(activity::discardInactiveAccountPages);
         }
-        activity.runOnUiThread(() -> activity.onAccountAvailable(owner != null && !owner.trim().isEmpty()));
+        activity.runOnUiThread(() -> activity.onAccountAvailable(owner));
     }
 
     @JavascriptInterface
@@ -68,7 +81,24 @@ public final class LiveBridge {
     @JavascriptInterface
     public void notifyShellReady(String documentUrl) {
         final String safeUrl = documentUrl == null ? "" : documentUrl.trim();
-        activity.runOnUiThread(() -> activity.onLiveShellReady(owner, safeUrl));
+        final Object documentToken = activity.historyPreparationDocumentToken(owner);
+        activity.runOnUiThread(() -> activity.onLiveShellReady(owner, safeUrl, documentToken));
+    }
+
+    /** Preparation completion is lifecycle correlation, not account authorization. */
+    @JavascriptInterface
+    public void notifyDialoguePreparationStarted(String documentUrl, String accountOwner, String engineToken) {
+        activity.runOnUiThread(() -> activity.onDialoguePreparationStarted(owner, documentUrl, accountOwner, engineToken));
+    }
+
+    @JavascriptInterface
+    public void notifyDialogueCoreReady(String documentUrl, String accountOwner, String engineToken) {
+        activity.runOnUiThread(() -> activity.onDialoguePreparationFinished(owner, documentUrl, accountOwner, engineToken));
+    }
+
+    @JavascriptInterface
+    public void notifyDialoguePreparationStopped(String documentUrl, String accountOwner, String engineToken) {
+        activity.runOnUiThread(() -> activity.onDialoguePreparationFinished(owner, documentUrl, accountOwner, engineToken));
     }
 
     @JavascriptInterface

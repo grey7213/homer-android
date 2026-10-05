@@ -8,25 +8,25 @@ import org.junit.Test;
 
 public final class PersistentPageNavigationTest {
     @Test
-    public void restoresTheLastPageInsteadOfForcingCommunity() {
-        assertEquals("https://example.test/app/chat.html?conversation_id=c1",
-                HomerActivity.startupUrl("https://example.test/",
-                        "https://example.test/app/chat.html?conversation_id=c1"));
-        assertEquals("https://example.test/app/community.html",
-                HomerActivity.startupUrl("https://example.test/",
-                        "https://example.test/app/community.html"));
+    public void launcherOpensCommunityRegardlessOfPreviouslyVisitedPage() {
+        for (String previous : new String[]{"chat.html?conversation_id=c1", "explore.html",
+                "me.html", "workshop.html", "histories.html", "community.html"}) {
+            assertEquals("https://example.test/app/community.html",
+                    HomerActivity.startupUrl("https://example.test/", "https://example.test/app/" + previous));
+        }
     }
 
     @Test
-    public void fallsBackToDeployAwareCommunityEntryForUntrustedOrNonAppTargets() {
-        assertEquals("https://example.test/app/",
+    public void launcherNeverUsesUntrustedOrNonAppStoredTargets() {
+        assertEquals("https://example.test/app/community.html",
                 HomerActivity.startupUrl("https://example.test/", null));
-        assertEquals("https://example.test/app/",
+        assertEquals("https://example.test/app/community.html",
                 HomerActivity.startupUrl("https://example.test/", ""));
-        assertEquals("https://example.test/app/",
+        assertEquals("https://example.test/app/community.html",
                 HomerActivity.startupUrl("https://example.test/", "https://evil.test/app/me.html"));
-        assertEquals("https://example.test/app/",
+        assertEquals("https://example.test/app/community.html",
                 HomerActivity.startupUrl("https://example.test/", "https://example.test/dashboard.html"));
+        assertEquals("https://example.test/app/community.html", HomerActivity.startupUrl("https://example.test", ""));
     }
 
     @Test

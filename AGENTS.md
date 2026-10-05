@@ -16,6 +16,8 @@
 
 ## Verified pitfalls
 
+- R353 delivery: export every accepted cumulative module and real source map, apply the complete partitioned patch set on a clean pinned tree, then rebuild and hash-check the APK. Preserve upstream workshop account isolation. Never decode a Git diff using universal-newline conversion: authored CRLF can be lost even though full-index IDs are retained. Verify platform-stable TS/map parity and non-target bundle bytes; fixture seams must tolerate new module imports without weakening product assertions.
+
 - R32: test failed generation against actual balance components and fee events, including HTTP-200 error bodies, partial streams and final write failure. A disabled-looking send button alone is insufficient: gate click/Enter and programmatic generation, distinguish auth/balance errors, and verify failure → reopen → switch model → successful generation. Binding an existing local chat mirror must preserve its original integrity header; never generate a new identity on every reopen or bypass the integrity check to hide the conflict. Client tests do not replace deploying the Python billing changes.
 
 - User execution preference: after a cause is confirmed and an in-scope fix is actionable, implement and verify in the same work session. Do not end with another explanation of the same cause or promise to start. Keep updates short. Persist unfinished acceptance gates across handoffs; do not submit or hand off an APK as fixed while a gate still fails.

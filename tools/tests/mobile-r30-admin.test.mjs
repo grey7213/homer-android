@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import fs from 'node:fs';
+import { sessionVM } from './helpers/bridge-session-vm.mjs';
 const source=fs.readFileSync(new URL('../../frontend/assets/js/admin-dialogue.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/,'').replace('export function','function');
 function fixture(native=false){
  const listeners=[],sent=[],timers=new Map(); let id=0;
@@ -53,8 +54,9 @@ test('admin selected-card startup reads single-flight and retry after rejection'
  const text=fs.readFileSync(new URL('../../sillytavern-runtime/public/scripts/extensions/homer-bridge/index.js',import.meta.url),'utf8');
  const fn=text.slice(text.indexOf('function prepareAdminLaunch('),text.indexOf('let initialized = false;'));
  let reads=0,configs=0,rejectNext=false;
- const scope={adminPreviewRequested:true,preparedAdminLaunch:null,Date,payloadList:x=>x.list||[],fetchSession:async id=>{reads++;if(rejectNext){rejectNext=false;throw Error('offline')};return{launch:{app_id:id}}},requestJson:async(url)=>{if(url.endsWith('/models'))return{default_id:'m',list:[{id:'m'}]};configs++;return{revision:configs}}};
- vm.createContext(scope);vm.runInContext(fn,scope);
+ const scope=sessionVM(text,{adminPreviewRequested:true,Date,payloadList:x=>x.list||[],requestJson:async(url)=>{if(url.endsWith('/models'))return{default_id:'m',list:[{id:'m'}]};configs++;return{revision:configs}}});
+ scope.fetchSession=async id=>{reads++;if(rejectNext){rejectNext=false;throw Error('offline')};return{user:{id:'unit-session-owner',is_admin:true},launch:{app_id:id}}};
+ vm.runInContext(fn,scope);
  const first=scope.prepareAdminLaunch('a');assert.equal(scope.prepareAdminLaunch('a'),first);
  const result=await first;assert.equal(reads,1);assert.equal(configs,1);assert.equal(result.adminStartupData.config.revision,1);
  rejectNext=true;await assert.rejects(scope.prepareAdminLaunch('b'),/offline/);
@@ -67,8 +69,37 @@ test('cancel reset preserves current frame and does not bind or generate',async(
 test('normal native chats still preserve prompt logs; only ephemeral tests skip',()=>{
  const native=fs.readFileSync(new URL('../../sillytavern-runtime/public/script.js',import.meta.url),'utf8');
  assert.match(native,/async function clearChat\(\{ clearData = false, preserveItemizedPrompts = true \} = \{\}\)/);
- assert.match(native,/bindCharacterChatWithoutLoad\(file_name, \{ ephemeral = false \} = \{\}\)/);
+ assert.match(native,/bindCharacterChatWithoutLoad\(file_name, \{ ephemeral = false, skipClear = false, preparedMirror = null, preparedHeader = null \} = \{\}\)/);
  assert.match(native,/preserveItemizedPrompts: !ephemeral/);
+});
+
+test('actual normal mirror binder preserves itemized prompts and loads only stored metadata',async()=>{
+ const native=fs.readFileSync(new URL('../../sillytavern-runtime/public/script.js',import.meta.url),'utf8');
+ const start=native.indexOf('export async function bindCharacterChatWithoutLoad(');
+ const end=native.indexOf('////////// OPTIMZED MAIN API CHANGE FUNCTION',start);
+ assert.ok(start>=0&&end>start);
+ const clears=[],reads=[],prompts=[],selected=[];
+ const scope={characters:[{name:'Test',avatar:'test-avatar',chat:'old-chat'}],this_chid:0,isChatSaving:false,
+  debounce_timeout:{extended:100},chat_metadata:{},name2:'',waitUntilCondition:async predicate=>assert.equal(predicate(),true),
+  clearChat:async options=>clears.push(options),uuidv4:()=> 'test-integrity',
+  $:()=>({val:value=>selected.push(value)}),getRequestHeaders:()=>({}),getCurrentChatId:()=>scope.characters[0].chat,
+  loadItemizedPrompts:async value=>prompts.push(value),
+  prepareItemizedPrompts:chatId=>({chatId,pending:Promise.resolve()}),
+  applyPreparedItemizedPrompts:async preparation=>scope.loadItemizedPrompts(preparation.chatId),
+  fetch:async(path,options)=>{reads.push({path,options});return{ok:true,json:async()=>({chat_metadata:{integrity:'existing-integrity',test_setting:1}})}}};
+ vm.createContext(scope);vm.runInContext(native.slice(start,end).replace(/^export /gm,''),scope);
+ await scope.bindCharacterChatWithoutLoad('saved-chat');
+ assert.equal(JSON.stringify(clears),JSON.stringify([{clearData:true,preserveItemizedPrompts:true}]));
+ assert.deepEqual(prompts,['saved-chat']);assert.deepEqual(selected,['saved-chat']);assert.equal(reads.length,1);
+ assert.equal(reads[0].path,'/api/chats/get');assert.equal(JSON.parse(reads[0].options.body).metadata_only,true);
+ assert.equal(scope.chat_metadata.integrity,'existing-integrity');assert.equal(scope.chat_metadata.test_setting,1);
+ clears.length=reads.length=prompts.length=0;
+ await scope.bindCharacterChatWithoutLoad('preview-chat',{ephemeral:true});
+ assert.equal(JSON.stringify(clears),JSON.stringify([{clearData:true,preserveItemizedPrompts:false}]));
+ assert.equal(reads.length,0);assert.equal(prompts.length,0);
+ clears.length=0;
+ await scope.bindCharacterChatWithoutLoad('activated-chat',{skipClear:true});
+ assert.equal(clears.length,0);assert.equal(reads.length,1);assert.deepEqual(prompts,['activated-chat']);
 });
 test('late token refresh cannot mutate a newly switched preview',async()=>{
  const bridge=fs.readFileSync(new URL('../../sillytavern-runtime/public/scripts/extensions/homer-bridge/index.js',import.meta.url),'utf8');

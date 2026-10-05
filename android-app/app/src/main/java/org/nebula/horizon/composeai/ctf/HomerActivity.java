@@ -55,10 +55,103 @@ public final class HomerActivity extends Activity {
     private volatile String appVisitId = java.util.UUID.randomUUID().toString();
     private boolean handlingWebBack;
     private boolean accountAvailable;
+    private String availableAccountOwner = "";
+    private boolean activityViewsResumed;
 
-    void onAccountAvailable(boolean available) {
-        accountAvailable = available;
-        if (available) scheduleDialoguePreparation();
+    void setWebViewVisibility(WebView view, int visibility) {
+        if (view == null) return;
+        if (visibility != View.VISIBLE && pendingHistoryPreparation != null
+                && pendingHistoryPreparation.source == view) pendingHistoryPreparation = null;
+        if (activityViewsResumed && (visibility == View.VISIBLE || isPreparingDialogueHost(view))) {
+            // Resume this view before revealing it. Never pause global timers:
+            // the hidden dialogue host still needs its JavaScript bootstrap.
+            view.onResume();
+            view.setVisibility(visibility);
+            notifyPageVisibility(view, visibility == View.VISIBLE);
+        } else {
+            notifyPageVisibility(view, false);
+            view.setVisibility(visibility);
+            view.onPause();
+        }
+    }
+
+    private void notifyPageVisibility(WebView view, boolean visible) {
+        // WebView.onPause() alone does not reliably stop a page's RAF/audio.
+        // No account data is transmitted and existing dialogue listeners stay untouched.
+        view.evaluateJavascript("window.dispatchEvent(new CustomEvent('homer-native-visibility',"
+                + "{detail:{visible:" + visible + "}}));", null);
+    }
+
+    private Set<WebView> retainedWebViews() {
+        Set<WebView> views = new HashSet<>(persistentPages.values());
+        if (liveView != null) views.add(liveView);
+        if (snapshotView != null) views.add(snapshotView);
+        return views;
+    }
+
+    void onAccountAvailable(String owner) {
+        String next = preparationOwner(owner);
+        boolean identityChanged = !availableAccountOwner.equals(next) || next.isEmpty();
+        if (identityChanged) {
+            pendingHistoryPreparation = null;
+            // Also reject an off-thread bridge callback captured before logout
+            // and a subsequent login to the same account/document (ABA).
+            liveDocumentTokens.replaceAll((view, token) -> new Object());
+            Set<WebView> preparing = new HashSet<>(preparingDialogueOwners.keySet());
+            preparingDialogueOwners.clear();
+            preparingDialogueEngines.clear();
+            for (WebView view : preparing) setWebViewVisibility(view, view.getVisibility());
+        }
+        availableAccountOwner = next;
+        accountAvailable = !next.isEmpty();
+        if (accountAvailable) scheduleDialoguePreparation();
+    }
+
+    private static String preparationOwner(String owner) {
+        String next = owner == null ? "" : owner.trim();
+        return next.substring(0, Math.min(160, next.length()));
+    }
+
+    void restoreDialoguePreparationHint(String owner) {
+        // This is only the identity last persisted by the existing profile
+        // bridge. It starts an empty capability page sooner, not an account
+        // login, role, stored chat, generation, or authorization decision.
+        availableAccountOwner = preparationOwner(owner);
+        accountAvailable = !availableAccountOwner.isEmpty();
+    }
+
+    private boolean isPreparingDialogueHost(WebView view) {
+        return accountAvailable && !startupFailed && !availableAccountOwner.isEmpty()
+                && view == persistentPages.get("chat")
+                && availableAccountOwner.equals(preparingDialogueOwners.get(view));
+    }
+
+    private boolean acceptsDialoguePreparation(WebView view, String documentUrl, String owner) {
+        return accountAvailable && !startupFailed && !isFinishing() && !isDestroyed()
+                && view == persistentPages.get("chat")
+                && availableAccountOwner.equals(owner)
+                && HomerChatNavigation.sameDocument(documentUrl, view.getUrl())
+                && SafeUrls.isTrustedNavigation(BuildConfig.SERVER_BASE_URL, documentUrl)
+                && StartupPresentation.isConversationUrl(documentUrl);
+    }
+
+    void onDialoguePreparationStarted(WebView view, String documentUrl, String owner, String engineToken) {
+        if (!acceptsDialoguePreparation(view, documentUrl, owner)
+                || engineToken == null || !engineToken.matches("[A-Za-z0-9._:-]{1,160}")) return;
+        preparingDialogueOwners.put(view, owner);
+        preparingDialogueEngines.put(view, engineToken);
+        setWebViewVisibility(view, view.getVisibility());
+    }
+
+    void onDialoguePreparationFinished(WebView view, String documentUrl, String owner, String engineToken) {
+        if (!acceptsDialoguePreparation(view, documentUrl, owner)
+                || !owner.equals(preparingDialogueOwners.get(view))
+                || engineToken == null || !engineToken.equals(preparingDialogueEngines.get(view))) return;
+        preparingDialogueOwners.remove(view);
+        preparingDialogueEngines.remove(view);
+        // Do not expose the preparing page or globally pause WebView timers.
+        // Only an inactive owner is paused; an actual visible chat stays active.
+        setWebViewVisibility(view, view.getVisibility());
     }
 
     private void scheduleDialoguePreparation() {
@@ -70,15 +163,17 @@ public final class HomerActivity extends Activity {
             if (!java.util.Arrays.asList("explore", "community", "workshop", "histories", "me", "admin").contains(activePersistentPage)) return;
             WebView prepared = new WebView(this);
             configureLiveView(prepared);
-            prepared.setVisibility(View.INVISIBLE);
             persistentPages.put("chat", prepared);
             preparedDialogueHosts.add(prepared);
+            preparingDialogueOwners.put(prepared, availableAccountOwner);
+            setWebViewVisibility(prepared, View.INVISIBLE);
             root.addView(prepared, 0, matchParent());
             prepared.loadUrl(BuildConfig.SERVER_BASE_URL.replaceAll("/$", "") + "/app/chat.html?prewarm=1");
         });
     }
 
     void prepareAdminConversation(String appId) {
+        pendingHistoryPreparation = null;
         // Only asks the retained host to perform authenticated read-only work.
         // The server, not this bridge or the URL flag, grants preview access.
         WebView prepared = persistentPages.get("chat");
@@ -89,6 +184,73 @@ public final class HomerActivity extends Activity {
         }
         prepared.evaluateJavascript("window.dispatchEvent(new CustomEvent('homer:prepare-admin-preview',"
                 + "{detail:{app_id:" + JSONObject.quote(appId) + "}}))", null);
+    }
+
+    Object historyPreparationDocumentToken(WebView source) {
+        return source == null ? null : liveDocumentTokens.get(source);
+    }
+
+    void prepareHistoryConversations(WebView source, Object documentToken, String documentUrl,
+            String owner, String targetsJson, long expiresAt) {
+        HistoryConversationPreparation batch = HistoryConversationPreparation.parse(
+                owner, targetsJson, expiresAt, System.currentTimeMillis());
+        WebView destination = persistentPages.get("chat");
+        if (batch == null || documentToken == null || destination == null) return;
+        PendingHistoryPreparation pending = new PendingHistoryPreparation(source, documentToken, documentUrl,
+                destination, liveDocumentTokens.get(destination), destination.getUrl(), batch);
+        if (!acceptsHistoryPreparation(pending)) return;
+        pendingHistoryPreparation = pending;
+        drainHistoryPreparation();
+    }
+
+    private boolean acceptsHistoryPreparation(PendingHistoryPreparation pending) {
+        return !startupFailed && !isFinishing() && !isDestroyed() && accountAvailable
+                && pending.batch.current(availableAccountOwner, System.currentTimeMillis())
+                && pending.source == liveView && pending.source == persistentPages.get("histories")
+                && "histories".equals(activePersistentPage)
+                && pending.sourceToken == liveDocumentTokens.get(pending.source)
+                && HistoryConversationPreparation.validHistorySource(BuildConfig.SERVER_BASE_URL,
+                        pending.sourceUrl, pending.source.getUrl())
+                && pending.destination != liveView && pending.destination == persistentPages.get("chat")
+                && pending.destinationToken != null
+                && pending.destinationToken == liveDocumentTokens.get(pending.destination)
+                && HomerChatNavigation.sameDocument(pending.destinationUrl, pending.destination.getUrl())
+                && HistoryConversationPreparation.emptyPreparedDestination(BuildConfig.SERVER_BASE_URL, pending.destinationUrl)
+                && preparedDialogueHosts.contains(pending.destination)
+                && !pendingConversationNavigations.containsKey(pending.destination)
+                && !pendingAdminPreparation.containsKey(pending.destination);
+    }
+
+    private void drainHistoryPreparation() {
+        PendingHistoryPreparation pending = pendingHistoryPreparation;
+        if (pending == null) return;
+        if (!acceptsHistoryPreparation(pending)) { pendingHistoryPreparation = null; return; }
+        if (!readyConversationHosts.contains(pending.destination)) return;
+        pendingHistoryPreparation = null;
+        pending.destination.evaluateJavascript(pending.batch.eventScript(), null);
+    }
+
+    void resetLiveDocumentToken(WebView view) {
+        invalidateHistoryPreparation(view);
+        liveDocumentTokens.put(view, new Object());
+    }
+
+    private void invalidateHistoryPreparation(WebView view) {
+        if (pendingHistoryPreparation != null && (pendingHistoryPreparation.source == view
+                || pendingHistoryPreparation.destination == view)) pendingHistoryPreparation = null;
+    }
+
+    private static final class PendingHistoryPreparation {
+        final WebView source, destination;
+        final Object sourceToken, destinationToken;
+        final String sourceUrl, destinationUrl;
+        final HistoryConversationPreparation batch;
+        PendingHistoryPreparation(WebView source, Object sourceToken, String sourceUrl, WebView destination,
+                Object destinationToken, String destinationUrl, HistoryConversationPreparation batch) {
+            this.source = source; this.sourceToken = sourceToken; this.sourceUrl = sourceUrl;
+            this.destination = destination; this.destinationToken = destinationToken;
+            this.destinationUrl = destinationUrl; this.batch = batch;
+        }
     }
 
     private static final String CLOSE_WEB_OVERLAY_SCRIPT = """
@@ -121,12 +283,21 @@ public final class HomerActivity extends Activity {
 
     @Override protected void onResume() {
         super.onResume();
+        activityViewsResumed = true;
+        for (WebView view : retainedWebViews()) {
+            setWebViewVisibility(view, view.getVisibility());
+        }
         if (apkUpdates != null) apkUpdates.onResume();
         if (!startupFailed && liveView != null) liveView.evaluateJavascript(
                 "window.dispatchEvent(new Event('homer:app-enter'))", null);
     }
 
     @Override protected void onPause() {
+        activityViewsResumed = false;
+        for (WebView view : retainedWebViews()) {
+            notifyPageVisibility(view, false);
+            view.onPause();
+        }
         if (apkUpdates != null) apkUpdates.onPause();
         super.onPause();
     }
@@ -141,15 +312,49 @@ public final class HomerActivity extends Activity {
             (() => {
               try {
                 const frame = document.querySelector('#dialogue-frame');
+                const dialogue = location.pathname === '/app/chat.html';
+                const runtimeReady = !dialogue || document.body.classList.contains('is-ready');
                 let runtimeDocument = null;
                 try { runtimeDocument = frame && frame.contentDocument; } catch (_) {}
-                let nodes = runtimeDocument
+                // Readiness polls run every 300ms. Do not force layout of all
+                // message/card DOM while the engine is still initializing.
+                let nodes = !runtimeReady ? [] : runtimeDocument
                   ? [...runtimeDocument.querySelectorAll('#chat .mes')]
                   : [...document.querySelectorAll('#preview-messages .preview-message')];
+                const styles = new WeakMap();
+                const isNonBody = node => {
+                  if (node.matches('script,style,template,noscript,button,input,textarea,select,'
+                      + '[hidden],[aria-hidden="true"],.homer-message-actions,.tav-action-bar')) return true;
+                  let style = styles.get(node);
+                  if (!style) {
+                    const owner = node.ownerDocument.defaultView;
+                    style = owner && owner.getComputedStyle(node);
+                    styles.set(node, style);
+                  }
+                  return !style || style.display === 'none' || style.visibility === 'hidden'
+                    || style.visibility === 'collapse';
+                };
+                const safeBodyText = content => {
+                  // An interactive card is a live document, not a string to
+                  // cache. Never replace it with its embedded source text.
+                  if (!content || isNonBody(content)
+                      || content.querySelector('iframe,object,embed,canvas,video,audio')) return '';
+                  const walker = content.ownerDocument.createTreeWalker(content, 5, {
+                    acceptNode: node => node.nodeType === 1 && isNonBody(node) ? 2 : 1,
+                  });
+                  let text = '', node;
+                  while ((node = walker.nextNode())) {
+                    if (node.nodeType === 3) text += node.textContent;
+                    else if (node.matches('br,p,div,li,blockquote,pre,h1,h2,h3,h4,h5,h6')
+                        && text && !text.endsWith('\\n')) text += '\\n';
+                    if (text.length >= 6000) break;
+                  }
+                  return text.trim().slice(0, 6000);
+                };
                 const messages = [];
                 for (const node of nodes.slice(-80)) {
                   const textNode = node.querySelector?.('.mes_text') || node;
-                  const text = String(textNode.innerText || textNode.textContent || '').trim().slice(0, 6000);
+                  const text = safeBodyText(textNode);
                   if (!text) continue;
                   const isUser = node.getAttribute?.('is_user') === 'true'
                     || node.classList?.contains('is-user');
@@ -158,14 +363,13 @@ public final class HomerActivity extends Activity {
                 const titleNode = document.querySelector('#preview-title');
                 const title = String(titleNode?.textContent || document.title || '角色对话')
                   .replace(/\s*[·|-]\s*惑梦\s*$/, '').trim().slice(0, 120);
-                const dialogue = location.pathname === '/app/chat.html';
                 const usableDocument = Boolean(document.body && document.body.childElementCount);
                 const shellReady = dialogue
                   ? document.documentElement?.dataset?.homerShellReady === 'true'
                   : document.readyState === 'complete' && usableDocument;
                 return JSON.stringify({
                   ready: dialogue
-                    ? document.body.classList.contains('is-ready')
+                    ? runtimeReady
                     : document.readyState === 'complete' && usableDocument,
                   shellReady,
                   dialogue,
@@ -186,8 +390,15 @@ public final class HomerActivity extends Activity {
     private final Map<String, WebView> persistentPages = new HashMap<>();
     private final Set<WebView> preparedDialogueHosts = new HashSet<>();
     private final Set<WebView> readyConversationHosts = new HashSet<>();
+    private final Map<WebView, String> preparingDialogueOwners = new HashMap<>();
+    private final Map<WebView, String> preparingDialogueEngines = new HashMap<>();
     private final Map<WebView, String> pendingConversationNavigations = new HashMap<>();
+    private final Map<WebView, HomerChatNavigation> conversationNavigationGuards = new HashMap<>();
     private final Map<WebView, String> pendingAdminPreparation = new HashMap<>();
+    // JavascriptInterface calls arrive off the UI thread. Capture only an opaque
+    // document identity there; all page, account and destination checks stay on UI.
+    private final Map<WebView, Object> liveDocumentTokens = new java.util.concurrent.ConcurrentHashMap<>();
+    private PendingHistoryPreparation pendingHistoryPreparation;
     private final ArrayDeque<String> persistentPageHistory = new ArrayDeque<>();
     private String activePersistentPage = "";
     private HomerCacheDatabase cacheDatabase;
@@ -219,6 +430,7 @@ public final class HomerActivity extends Activity {
         getWindow().setNavigationBarColor(0xFFF5F3F7);
 
         cacheDatabase = new HomerCacheDatabase(this);
+        restoreDialoguePreparationHint(cacheDatabase.readAccountScope());
         patchManager = new PatchManager(this);
         patchManager.recoverInterruptedUpdate();
         clientAssetStore = new ClientAssetStore(this, patchManager);
@@ -255,6 +467,11 @@ public final class HomerActivity extends Activity {
                 bottom = current.getSystemWindowInsetBottom();
                 left = current.getSystemWindowInsetLeft();
             }
+            // System-bar appearance changes can dispatch the same insets on
+            // every tab switch. Only a real bar/keyboard/rotation change needs
+            // to touch the root layout and all retained document styles.
+            if (nativeSafeTop == top && nativeSafeRight == right
+                    && nativeSafeBottom == bottom && nativeSafeLeft == left) return insets;
             nativeSafeTop = top;
             nativeSafeRight = right;
             nativeSafeBottom = bottom;
@@ -338,10 +555,16 @@ public final class HomerActivity extends Activity {
     private boolean handleRendererExit(WebView view) {
         // Android calls this for every WebView sharing the failed renderer.
         // Only dispose of the supplied view, never clear persistent user data.
+        invalidateHistoryPreparation(view);
+        liveDocumentTokens.remove(view);
         persistentPages.values().removeAll(java.util.Collections.singleton(view));
         preparedDialogueHosts.remove(view);
         readyConversationHosts.remove(view);
+        preparingDialogueOwners.remove(view);
+        preparingDialogueEngines.remove(view);
         pendingConversationNavigations.remove(view);
+        HomerChatNavigation disposedNavigation = conversationNavigationGuards.remove(view);
+        if (disposedNavigation != null) disposedNavigation.invalidate();
         pendingAdminPreparation.remove(view);
         if (view == liveView) liveView = null;
         if (view == snapshotView) snapshotView = null;
@@ -426,6 +649,7 @@ public final class HomerActivity extends Activity {
 
     @SuppressLint("SetJavaScriptEnabled")
     private void configureLiveView(WebView view) {
+        resetLiveDocumentToken(view);
         WebSettings settings = view.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
@@ -539,9 +763,13 @@ public final class HomerActivity extends Activity {
         liveStartedAt = System.currentTimeMillis();
         liveReadyHandled = false;
         liveView.setAlpha(1f);
-        liveView.setVisibility(View.VISIBLE);
+        setWebViewVisibility(liveView, View.VISIBLE);
         String target = startupUrl(BuildConfig.SERVER_BASE_URL, cacheDatabase.readLastUrl());
         registerInitialPersistentPage(target);
+        // Start the empty retained host on this first native turn, before the
+        // visible page imports api.js or completes its profile/UI requests.
+        // Expired cookies and owner changes still follow normal server auth.
+        scheduleDialoguePreparation();
         // Follow the lightweight chatroom pattern used by Fengyue: when the
         // last page was a conversation, expose the local snapshot immediately
         // while the full live runtime warms in the background. The live page
@@ -549,7 +777,7 @@ public final class HomerActivity extends Activity {
         boolean conversationTarget = StartupPresentation.isConversationUrl(target);
         prepareSnapshotForTarget(target);
         liveRevealed = !conversationTarget;
-        snapshotView.setVisibility(conversationTarget ? View.VISIBLE : View.GONE);
+        setWebViewVisibility(snapshotView, conversationTarget ? View.VISIBLE : View.GONE);
         snapshotView.setAlpha(1f);
         liveView.loadUrl(target);
         updateSnapshotConnectionState(isOnline(), true);
@@ -608,7 +836,10 @@ public final class HomerActivity extends Activity {
     }
 
     private boolean switchLiveConversation(WebView view, String target) {
+        pendingHistoryPreparation = null;
         String current = view.getUrl();
+        HomerChatNavigation navigation = conversationNavigationGuards.computeIfAbsent(view, ignored -> new HomerChatNavigation());
+        long request = navigation.begin();
         if (preparedDialogueHosts.contains(view) && !readyConversationHosts.contains(view)) {
             // A tap before chat.js installs its listener is queued, not treated
             // as an old bundle requiring loadUrl (which would reboot the engine).
@@ -619,9 +850,12 @@ public final class HomerActivity extends Activity {
         String script = "!window.dispatchEvent(new CustomEvent('homer:navigate-conversation',"
                 + "{cancelable:true,detail:{url:" + JSONObject.quote(target) + "}}))";
         view.evaluateJavascript(script, handled -> {
-            if (view != liveView) return;
+            // Retained hosts can receive a newer target while an old JS
+            // callback is pending. Never let its fallback reopen the old card.
+            if (startupFailed || isFinishing() || isDestroyed()
+                    || !navigation.accepts(request, view == liveView, current, target, view.getUrl())) return;
             if ("true".equals(handled)) {
-                snapshotView.setVisibility(View.GONE);
+                setWebViewVisibility(snapshotView, View.GONE);
                 liveRevealed = true;
                 cacheDatabase.saveLastUrl(view.getUrl());
             } else {
@@ -643,6 +877,7 @@ public final class HomerActivity extends Activity {
     private boolean switchPersistentPage(String target) {
         String key = persistentPageKey(target);
         if (key.isEmpty()) return false;
+        if (!"histories".equals(key)) pendingHistoryPreparation = null;
         if (activePersistentPage.isEmpty() && persistentPages.isEmpty()) {
             persistentPages.put(key, liveView);
             activePersistentPage = key;
@@ -665,7 +900,10 @@ public final class HomerActivity extends Activity {
             root.addView(targetView, 0, matchParent());
         }
 
-        if (previous != null) previous.setVisibility(View.GONE);
+        // Retain measured geometry as well as the document. GONE invalidates
+        // the root layout on each tab switch; INVISIBLE neither draws nor
+        // receives input, and setWebViewVisibility still pauses its lifecycle.
+        setWebViewVisibility(previous, View.INVISIBLE);
         if (!previousKey.isEmpty()) {
             persistentPageHistory.remove(previousKey);
             persistentPageHistory.addLast(previousKey);
@@ -676,30 +914,33 @@ public final class HomerActivity extends Activity {
         String currentTarget = liveView.getUrl();
         boolean targetChanged = shouldLoadPersistentTarget(currentTarget, target);
         liveView.setAlpha(1f);
-        liveView.setVisibility(View.VISIBLE);
+        setWebViewVisibility(liveView, View.VISIBLE);
         if (targetChanged) {
             boolean conversationTarget = StartupPresentation.isConversationUrl(target);
             prepareSnapshotForTarget(target);
-            snapshotView.setVisibility(conversationTarget ? View.VISIBLE : View.GONE);
+            setWebViewVisibility(snapshotView, conversationTarget ? View.VISIBLE : View.GONE);
             liveRevealed = !conversationTarget;
             liveReadyHandled = false;
             snapshotView.setAlpha(1f);
             if (!switchLiveConversation(liveView, target)) liveView.loadUrl(target);
         } else {
-            snapshotView.setVisibility(View.GONE);
+            setWebViewVisibility(snapshotView, View.GONE);
             liveRevealed = true;
             liveReadyHandled = true;
-            cacheDatabase.saveLastUrl(currentTarget);
             liveView.evaluateJavascript("window.dispatchEvent(new Event('homer:page-visible'))", null);
         }
-        applyNativeInsetsToWebViews();
+        // Insets are installed at document completion and native inset changes.
+        // A retained tab has no new document/insets. Do not enqueue JS in all
+        // hidden views or synchronously persist a launcher route on this path.
         return true;
     }
 
     void discardInactiveAccountPages() {
+        pendingHistoryPreparation = null;
         Set<WebView> stale = new HashSet<>(persistentPages.values());
         stale.remove(liveView);
         for (WebView view : stale) {
+            liveDocumentTokens.remove(view);
             view.stopLoading();
             root.removeView(view);
             view.destroy();
@@ -708,12 +949,25 @@ public final class HomerActivity extends Activity {
         persistentPageHistory.clear();
         preparedDialogueHosts.clear();
         readyConversationHosts.clear();
+        preparingDialogueOwners.clear();
+        preparingDialogueEngines.clear();
         pendingConversationNavigations.clear();
+        for (HomerChatNavigation navigation : conversationNavigationGuards.values()) navigation.invalidate();
+        conversationNavigationGuards.clear();
         pendingAdminPreparation.clear();
         activePersistentPage = "";
+        // Keep only the current non-conversation routing surface registered.
+        // A stale account's chat/prepared host is never retained as user B's.
+        String visibleUrl = liveView == null ? null : liveView.getUrl();
+        String visibleKey = persistentPageKey(visibleUrl);
+        if (!visibleKey.isEmpty() && !"chat".equals(visibleKey)
+                && SafeUrls.isTrustedNavigation(BuildConfig.SERVER_BASE_URL, visibleUrl)) {
+            persistentPages.put(visibleKey, liveView);
+            activePersistentPage = visibleKey;
+        }
         snapshotLoaded = false;
         snapshotConversationId = "";
-        snapshotView.setVisibility(View.GONE);
+        setWebViewVisibility(snapshotView, View.GONE);
     }
 
     private boolean restorePreviousPersistentPage() {
@@ -721,19 +975,16 @@ public final class HomerActivity extends Activity {
             String key = persistentPageHistory.removeLast();
             WebView target = persistentPages.get(key);
             if (target == null || key.equals(activePersistentPage)) continue;
-            if (liveView != null) liveView.setVisibility(View.GONE);
+            setWebViewVisibility(liveView, View.INVISIBLE);
             liveView = target;
             activePersistentPage = key;
         applySystemBars();
             liveView.setAlpha(1f);
-            liveView.setVisibility(View.VISIBLE);
-            snapshotView.setVisibility(View.GONE);
+            setWebViewVisibility(liveView, View.VISIBLE);
+            setWebViewVisibility(snapshotView, View.GONE);
             liveRevealed = true;
             liveReadyHandled = true;
-            String url = liveView.getUrl();
-            if (url != null) cacheDatabase.saveLastUrl(url);
             liveView.evaluateJavascript("window.dispatchEvent(new Event('homer:page-visible'))", null);
-            applyNativeInsetsToWebViews();
             return true;
         }
         return false;
@@ -742,7 +993,7 @@ public final class HomerActivity extends Activity {
     void reloadLivePage() {
         liveReadyHandled = false;
         liveView.setAlpha(1f);
-        liveView.setVisibility(View.VISIBLE);
+        setWebViewVisibility(liveView, View.VISIBLE);
         liveStartedAt = System.currentTimeMillis();
         if (liveView.getUrl() == null) {
             startLivePage();
@@ -751,7 +1002,7 @@ public final class HomerActivity extends Activity {
         boolean conversationTarget = StartupPresentation.isConversationUrl(liveView.getUrl());
         prepareSnapshotForTarget(liveView.getUrl());
         liveRevealed = !conversationTarget;
-        snapshotView.setVisibility(conversationTarget ? View.VISIBLE : View.GONE);
+        setWebViewVisibility(snapshotView, conversationTarget ? View.VISIBLE : View.GONE);
         snapshotView.setAlpha(1f);
         liveView.reload();
         updateSnapshotConnectionState(isOnline(), true);
@@ -792,22 +1043,12 @@ public final class HomerActivity extends Activity {
     }
 
     /**
-     * Cold start restores the last page the user visited. A stored conversation
-     * keeps its instant local snapshot; a first/untrusted launch uses the app
-     * entry, which opens community when the deployed backend reports it ready.
+     * Launcher entry is always community. The stored route and conversation
+     * snapshots are preserved, but are not a launcher destination. Activity
+     * resume and explicit in-app navigation do not call this startup policy.
      */
     static String startupUrl(String serverBaseUrl, String stored) {
-        if (SafeUrls.isTrustedNavigation(serverBaseUrl, stored)) {
-            try {
-                URI candidate = URI.create(stored);
-                if (candidate.getPath() != null && candidate.getPath().startsWith("/app/")) {
-                    return stored;
-                }
-            } catch (RuntimeException ignored) {
-                // Fall through to the default app entry.
-            }
-        }
-        return serverBaseUrl + "app/";
+        return serverBaseUrl.replaceAll("/+$", "") + "/app/community.html";
     }
 
     private void pollLiveReady() {
@@ -851,15 +1092,20 @@ public final class HomerActivity extends Activity {
         return new JSONArray("[" + raw + "]").getString(0);
     }
 
-    void onLiveShellReady(WebView owner, String documentUrl) {
+    void onLiveShellReady(WebView owner, String documentUrl, Object documentToken) {
+        // Capture precedes the UI post in LiveBridge: an old same-URL ready ACK
+        // cannot ready a replacement document or drain its new preparation.
+        if (documentToken == null || documentToken != liveDocumentTokens.get(owner)) return;
+        if (!HomerChatNavigation.sameDocument(documentUrl, owner.getUrl())) return;
         if (!SafeUrls.isTrustedNavigation(BuildConfig.SERVER_BASE_URL, documentUrl)
                 || !StartupPresentation.isConversationUrl(documentUrl)) return;
         if (owner != liveView && owner != persistentPages.get("chat")) return;
         readyConversationHosts.add(owner);
-        String preparedCard = pendingAdminPreparation.remove(owner);
-        if (preparedCard != null) prepareAdminConversation(preparedCard);
         String queuedTarget = pendingConversationNavigations.remove(owner);
+        String preparedCard = pendingAdminPreparation.remove(owner);
         if (queuedTarget != null) switchLiveConversation(owner, queuedTarget);
+        else if (preparedCard != null) prepareAdminConversation(preparedCard);
+        else drainHistoryPreparation();
         // A hidden prewarm completion must not reveal or mark the visible page.
         if (owner == liveView) revealLiveShell();
     }
@@ -869,8 +1115,8 @@ public final class HomerActivity extends Activity {
         if (liveRevealed && snapshotView.getVisibility() == View.GONE) return;
         liveRevealed = true;
         liveView.setAlpha(1f);
-        liveView.setVisibility(View.VISIBLE);
-        snapshotView.setVisibility(View.GONE);
+        setWebViewVisibility(liveView, View.VISIBLE);
+        setWebViewVisibility(snapshotView, View.GONE);
         snapshotView.setAlpha(1f);
         updateSnapshotConnectionState(isOnline(), false);
         checkForPatchUpdate();
@@ -897,7 +1143,7 @@ public final class HomerActivity extends Activity {
         snapshotView.animate().cancel();
         liveReadyHandled = false;
         liveView.setAlpha(0f);
-        snapshotView.setVisibility(View.VISIBLE);
+        setWebViewVisibility(snapshotView, View.VISIBLE);
         snapshotView.setAlpha(1f);
         updateSnapshotConnectionState(false, false);
     }
@@ -1019,6 +1265,12 @@ public final class HomerActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        pendingHistoryPreparation = null;
+        liveDocumentTokens.clear();
+        accountAvailable = false;
+        availableAccountOwner = "";
+        preparingDialogueOwners.clear();
+        preparingDialogueEngines.clear();
         if (apkUpdates != null) apkUpdates.close();
         handler.removeCallbacksAndMessages(null);
         if (pendingPermissionRequest != null) pendingPermissionRequest.deny();
@@ -1046,6 +1298,8 @@ public final class HomerActivity extends Activity {
         public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
             Uri target = request.getUrl();
             String value = target.toString();
+            if (SafeUrls.isTrustedFrameBlobNavigation(BuildConfig.SERVER_BASE_URL,
+                    value, request.isForMainFrame(), view.getUrl())) return false;
             if (SafeUrls.isTrustedNavigation(BuildConfig.SERVER_BASE_URL, value)) {
                 if (request.isForMainFrame() && view == liveView && switchPersistentPage(value)) return true;
                 return false;
@@ -1059,20 +1313,31 @@ public final class HomerActivity extends Activity {
 
         @Override
         public void onPageStarted(WebView view, String url, Bitmap favicon) {
+            resetLiveDocumentToken(view);
+            conversationNavigationGuards.computeIfAbsent(view, ignored -> new HomerChatNavigation()).invalidate();
             readyConversationHosts.remove(view);
+            // A document reload invalidates the prior engine ACK even when its
+            // URL is unchanged. New host code must announce its fresh token.
+            preparingDialogueEngines.remove(view);
+            if (!SafeUrls.isTrustedNavigation(BuildConfig.SERVER_BASE_URL, url)
+                    || !StartupPresentation.isConversationUrl(url)) {
+                preparingDialogueOwners.remove(view);
+                setWebViewVisibility(view, view.getVisibility());
+            }
             if (startupFailed || view != liveView) return;
             liveStartedAt = System.currentTimeMillis();
             liveReadyHandled = false;
             boolean conversationTarget = StartupPresentation.isConversationUrl(url);
             prepareSnapshotForTarget(url);
             liveRevealed = !conversationTarget;
-            snapshotView.setVisibility(conversationTarget ? View.VISIBLE : View.GONE);
+            setWebViewVisibility(snapshotView, conversationTarget ? View.VISIBLE : View.GONE);
             snapshotView.setAlpha(1f);
         }
 
         @Override
         public void onPageFinished(WebView view, String url) {
             if (startupFailed || view != liveView) return;
+            if (!HomerChatNavigation.sameDocument(url, view.getUrl())) return;
             if (!SafeUrls.isTrustedNavigation(BuildConfig.SERVER_BASE_URL, url)) return;
             applySystemBars();
             applyNativeInsetsToWebViews();

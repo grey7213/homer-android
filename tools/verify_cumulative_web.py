@@ -20,7 +20,7 @@ def run(args, cwd=None):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--patch', type=Path, required=True)
+    parser.add_argument('--patch', type=Path, nargs='+', required=True)
     parser.add_argument('--destination', type=Path, required=True)
     a = parser.parse_args()
     dest = a.destination.resolve()
@@ -34,7 +34,8 @@ def main():
     # necessarily share alternates in that case, so explicitly fetch the pin.
     run(['git', 'fetch', '--depth=1', str(source), pin], dest)
     run(['git', 'checkout', '--detach', pin], dest)
-    run(['git', 'apply', '-3', '--index', str(a.patch.resolve())], dest)
+    for patch in a.patch:
+        run(['git', 'apply', '-3', '--index', str(patch.resolve())], dest)
     entries = run(['git', 'ls-files', '-s', '-z'], dest).split(b'\0')
     mismatch = []
     count = 0
@@ -50,14 +51,15 @@ def main():
             mismatch.append(path + ': missing from active source')
             continue
         data = actual.read_bytes()
-        if b'\0' not in data[:8000]:
+        attributes = run(['git', 'check-attr', 'text', '--', path], dest).decode('utf-8').strip()
+        if b'\0' not in data[:8000] and not attributes.endswith(': unset'):
             data = data.replace(b'\r\n', b'\n')
         calculated = hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest()
         if calculated != blob.decode():
             mismatch.append(path)
         count += 1
     assert not mismatch, mismatch
-    report = {'pin': pin, 'patch': a.patch.name, 'files_compared': count, 'mismatches': mismatch}
+    report = {'pin': pin, 'patches': [p.name for p in a.patch], 'files_compared': count, 'mismatches': mismatch}
     (dest.parent / 'web-verification.json').write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
     print(json.dumps(report))
 

@@ -95,6 +95,16 @@ test('disabled EJS code blocks keep bundled template delimiters literal, not exe
  const protectedBlock='&lt;% __append(`'+scope.escapeForTemplateLiteral(raw)+'`) %&gt;';
  assert.equal(ejsScope.module.exports.render(protectedBlock,{}, {openDelimiter:'&lt;',closeDelimiter:'&gt;'}),raw);
  const dist=await readFile(new URL('dist/index.js',base),'utf8');
- const match=dist.match(/function Af\(e\)\{return ([\s\S]*?)\}/);assert(match,'Bundled escape helper must match audited source baseline');
- const compiled=vm.runInNewContext('(e)=>'+match[1]);assert.equal(compiled(raw),scope.escapeForTemplateLiteral(raw));
+ // The minifier may rename its symbols on every rebuild. Locate the actual
+ // four replace-call escape helper by structure, then verify the complete
+ // source/bundle behavior, including the EJS delimiter scanner round trip.
+ const helperPattern=String.raw`function\s+[\w$]+\(([\w$]+)\)\{return\s+(\1(?:\.replace\(\/(?:\\.|[^/\\\r\n])+\/[gimuys]*,(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')\)){4})\}`;
+ const candidates=[...dist.matchAll(new RegExp(helperPattern,'g'))].filter(match=>match[2].includes('.replace(/%/g,'));
+ assert.equal(candidates.length,1,'Exactly one bundled literal escape helper must match the audited replace-chain structure');
+ const match=candidates[0],compiled=vm.runInNewContext('('+match[1]+')=>'+match[2]);
+ for(const input of [raw,'','100% <%= prompt %> ${doNotExecute} ` \\','多行\n%> <% &lt;% &gt; 😀']){
+  assert.equal(compiled(input),scope.escapeForTemplateLiteral(input));
+  const bundledBlock='&lt;% __append(`'+compiled(input)+'`) %&gt;';
+  assert.equal(ejsScope.module.exports.render(bundledBlock,{}, {openDelimiter:'&lt;',closeDelimiter:'&gt;'}),input);
+ }
 });
