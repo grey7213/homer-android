@@ -218,7 +218,7 @@ test('export-star omits ambiguity, retains same-origin exports and terminates cy
         'scripts/a.js': `export {shared} from './common.js';export const conflict=1;`,
         'scripts/b.js': `export {shared} from './common.js';export const conflict=2;`,
         'scripts/common.js': 'export const shared={};',
-        'scripts/cycle-a.js': `export * from './cycle-b.js';export function alpha(){return 'alpha'}`, 
+        'scripts/cycle-a.js': `export * from './cycle-b.js';export function alpha(){return 'alpha'}`,
         'scripts/cycle-b.js': `export * from './cycle-a.js';export function beta(){return 'beta'}`,
     });
     const result = await bundleRuntimeCore({ runtimeRoot: root });
