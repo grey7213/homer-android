@@ -1,5 +1,7 @@
 # Homer Android working notes
 
+- Current release: 1.18.0 / 353 (2026-10-07), PR #19 merged at `5e80a63`. Pixel 6 verified real generation, retained-frame history switching, signed 282→353 upgrade with login/history intact, and in-app latest-version check. Production is `160.202.46.157` / `ser0YeymdcIz0pT`; use the existing SSH key and updated main-workspace publisher. See `specs/pr19-review-20261007.md`.
+
 - Native source of truth: this repository's `android-app/`. Web source of truth: `E:\酒馆开发` (`grey7213/AIXingYue`). Never overwrite either tree with a contributor's full copy; apply and inspect patches against their pinned baseline.
 - Read `MAINTAINER.md`, `CONTRIBUTING.md`, and the relevant `specs/` before changing release behavior.
 - Windows builds require an ASCII path, JDK 17+, SDK 35+, Node 20+. Use Android Studio JBR and `E:\Android\Sdk`.

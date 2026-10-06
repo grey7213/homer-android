@@ -2,7 +2,7 @@
 
 ## 本次累计交接优先级
 
-R25–R33 累计交接以 [docs/mobile-r33-submission.md](docs/mobile-r33-submission.md) 为准，替代旧 PR #15（其内包含 #14/#13）。只应用当前唯一 Web 累计补丁和 `server-patches/cumulative-r33/backend.patch`；旧文档和旧后端目录仅供历史追溯，不叠加应用。新增生图依赖需执行 `python -m pip install -r tools/requirements-images.txt`。Android PR 合并不等于 Python/Node 服务端已部署。
+R353 当前交接以 `specs/pr19-review-20261007.md` 为准：五段 `20261006-r353-*-of-05.patch` 加其后的维护者注册修复补丁全部应用到固定基线。R41 服务端包替代 R33；已部署 R33 的生产只应用经核对的增量，不能重复叠加累计补丁。2026-10-07 正式 353 已上线；后续仍分别处理 APK、Web 和 Python/Node 服务端。
 
 写给我自己。贡献者那边看 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
