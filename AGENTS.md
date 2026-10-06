@@ -16,6 +16,8 @@
 
 ## Verified pitfalls
 
+- PR #19: asset enumeration cannot detect a module deleted from both source and APK. `card-experience-runtime.mjs` still imports Spine, so retain `spine-portrait.mjs`, `spine-webgl.js` and its license; `verify_apk_assets.py` checks these independently. On Windows, source-map content comparisons normalize only CRLF/LF and VM fixtures accept `\r?\n`; do not remove the content or mapping checks. R353 has five cumulative segments followed by the maintainer registration patch.
+
 - R353 delivery: export every accepted cumulative module and real source map, apply the complete partitioned patch set on a clean pinned tree, then rebuild and hash-check the APK. Preserve upstream workshop account isolation. Never decode a Git diff using universal-newline conversion: authored CRLF can be lost even though full-index IDs are retained. Verify platform-stable TS/map parity and non-target bundle bytes; fixture seams must tolerate new module imports without weakening product assertions.
 
 - R32: test failed generation against actual balance components and fee events, including HTTP-200 error bodies, partial streams and final write failure. A disabled-looking send button alone is insufficient: gate click/Enter and programmatic generation, distinguish auth/balance errors, and verify failure → reopen → switch model → successful generation. Binding an existing local chat mirror must preserve its original integrity header; never generate a new identity on every reopen or bypass the integrity check to hide the conflict. Client tests do not replace deploying the Python billing changes.

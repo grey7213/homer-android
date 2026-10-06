@@ -265,6 +265,6 @@ test('normal webpack bundle embeds the exact current handler source, including t
     const sourceMap = JSON.parse(fs.readFileSync(new URL('dist/index.js.map', plugin), 'utf8'));
     const index = sourceMap.sources.findIndex(value => value.endsWith('src/modules/handler.ts'));
     assert.ok(index >= 0, 'Webpack sourcemap contains the actual handler');
-    assert.equal(sourceMap.sourcesContent[index], handlerSource, 'Source and distributed plugin must be built together');
+    assert.equal(sourceMap.sourcesContent[index].replaceAll('\r\n', '\n'), handlerSource.replaceAll('\r\n', '\n'), 'Source and distributed plugin must be built together');
     assert.ok(handlerSource.includes("if (finalMarkupChanged && newContent?.includes('<pre>') && isDryRun)"));
 });

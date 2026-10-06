@@ -60,7 +60,7 @@ const all = (node, predicate) => nodesOf(node, predicate);
 const property = (node, name) => node.type === 'MemberExpression' && node.property.name === name;
 
 test('actual current shipping map embeds exact TS and traces both guards and literal token scanners', () => {
-    assert.equal(map.sourcesContent[sourceIndex], source);
+    assert.equal(map.sourcesContent[sourceIndex].replaceAll('\r\n', '\n'), source.replaceAll('\r\n', '\n'));
     check(all(positions.unescape, node => property(node, 'includes'))[0].object, "if (!html.includes('&lt;%'))", 'html');
     check(all(positions.wrap, node => property(node, 'some'))[0].object, 'if (!openTags.some', 'openTags');
     check(all(positions.unescape, node => node.type === 'Literal' && node.regex?.pattern === '&lt;%|%&gt;')[0], 'const tokens = /&lt;%|%&gt;/g;', '/&lt;%');

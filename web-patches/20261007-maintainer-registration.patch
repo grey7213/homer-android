@@ -1,0 +1,138 @@
+# 基线 commit: 02069118baa83354f3e01a6d0021562111211373
+# Apply after the five R353 patches: preserve October registration feedback.
+diff --git a/frontend/app/assets/js/login.js b/frontend/app/assets/js/login.js
+index ebe6e3674438f05d89baf2c08df1aa4d9e29afa3..bb7ab01c26eabb262fc17b1407f3a78d080cda4f 100644
+--- a/frontend/app/assets/js/login.js
++++ b/frontend/app/assets/js/login.js
+@@ -59,6 +59,8 @@ function loginPage() {
+     view: 'login',
+     loading: false,
+     loginError: '',
++    registerError: '',
++    registerEmailExists: false,
+     localServer: location.hostname.endsWith('.trycloudflare.com') || (location.protocol === 'http:' && /^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(location.hostname)),
+     serverAddress: location.origin,
+     toast: null,
+@@ -120,6 +122,37 @@ function loginPage() {
+       this.view = 'reset';
+     },
+ 
++    clearRegisterFeedback() {
++      this.registerError = '';
++      this.registerEmailExists = false;
++      this.registerForm.code = '';
++      this.codeCountdown = 0;
++      if (this.countdownTimer) clearInterval(this.countdownTimer);
++      if (this.toastTimer) clearTimeout(this.toastTimer);
++      this.toast = null;
++    },
++
++    showRegisterError(err) {
++      this.registerEmailExists = err.payload?.error_code === 'email_already_registered'
++        || (Number(err.code) === 409 && /email already registered|邮箱.*已注册/i.test(err.message || ''));
++      if (this.registerEmailExists) {
++        this.codeCountdown = 0;
++        if (this.countdownTimer) clearInterval(this.countdownTimer);
++      }
++      this.registerError = this.registerEmailExists
++        ? '该邮箱已注册，请直接登录；忘记密码可通过「找回密码」重置。'
++        : (err.message || this.authText('register_failed_text', '注册失败，请重试'));
++      this.showToast(this.registerError, 'error');
++    },
++
++    useRegisteredEmail(view) {
++      const email = this.registerForm.email.trim();
++      if (view === 'reset') this.resetForm.email = email;
++      else this.loginForm.email = email;
++      this.loginError = '';
++      this.view = view;
++    },
++
+     async doLogin() {
+       if (this.loading) return;
+       sessionProbe?.abort();
+@@ -144,23 +177,28 @@ function loginPage() {
+     },
+ 
+     async sendCode() {
++      if (this.sendingCode || this.codeCountdown > 0) return;
+       const email = this.registerForm.email.trim();
++      this.registerError = '';
++      this.registerEmailExists = false;
+       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+-        this.showToast(this.authText('invalid_email_text', '请输入正确的邮箱地址'), 'error');
++        this.showRegisterError(new Error(this.authText('invalid_email_text', '请输入正确的邮箱地址')));
+         return;
+       }
+       this.sendingCode = true;
+       try {
+         const response = await api.sendEmailCode(email);
++        if (email.toLowerCase() !== this.registerForm.email.trim().toLowerCase()) return;
+         const retryAfter = Number(response?.data?.retry_after || 60);
+         this.showToast(this.authText('code_sent_text', '验证码请求已提交，通常 10–60 秒到达；若未看到，请检查垃圾邮件、广告邮件或 QQ 邮箱拦截。重复发送仍使用同一个验证码。'), 'success');
+         this.codeCountdown = retryAfter;
++        if (this.countdownTimer) clearInterval(this.countdownTimer);
+         this.countdownTimer = setInterval(() => {
+           this.codeCountdown--;
+           if (this.codeCountdown <= 0) clearInterval(this.countdownTimer);
+         }, 1000);
+       } catch (err) {
+-        this.showToast(err.message || this.authText('send_failed_text', '发送失败'), 'error');
++        if (email.toLowerCase() === this.registerForm.email.trim().toLowerCase()) this.showRegisterError(err);
+       } finally { this.sendingCode = false; }
+     },
+ 
+@@ -186,10 +224,14 @@ function loginPage() {
+     },
+ 
+     async doRegister() {
++      if (this.loading) return;
++      const email = this.registerForm.email.trim();
++      this.registerError = '';
++      this.registerEmailExists = false;
+       this.loading = true;
+       try {
+         const r = await api.register(
+-          this.registerForm.email.trim(),
++          email,
+           this.registerForm.password,
+           this.registerForm.code.trim(),
+           this.registerForm.name.trim()
+@@ -200,7 +242,7 @@ function loginPage() {
+         this.showToast(this.authText('register_success_text', '注册成功，欢迎来到 惑梦（Homer）'), 'success');
+         setTimeout(() => this.goNext(), 700);
+       } catch (err) {
+-        this.showToast(err.message || this.authText('register_failed_text', '注册失败'), 'error');
++        if (email.toLowerCase() === this.registerForm.email.trim().toLowerCase()) this.showRegisterError(err);
+       } finally { this.loading = false; }
+     },
+ 
+diff --git a/frontend/app/login.html b/frontend/app/login.html
+index 0b64711ae69c423e2b54a4ab802b62f67211dad8..ad3c0cfbb3a91fe5ea0804546dde4f56a9b95baa 100644
+--- a/frontend/app/login.html
++++ b/frontend/app/login.html
+@@ -8,7 +8,7 @@
+   <link rel="icon" href="/favicon.ico?v=20260901-persistent-pages">
+   <link rel="stylesheet" href="/assets/css/utilities.css?v=20260925-r25">
+   <link rel="stylesheet" href="/app/assets/css/app.css?v=20260917-r8">
+-  <script type="module" src="/app/assets/js/login.js?v=20260917-r8"></script>
++  <script type="module" src="/app/assets/js/login.js?v=20261002-register-feedback-v2"></script>
+   <script defer src="/app/assets/vendor/alpine-3.14.1.min.js?v=3.14.1"></script>
+   <script type="module" src="/app/assets/js/apk-updates.js?v=20260917-r8"></script>
+   <link rel="stylesheet" href="/assets/css/app-design.css?v=20260917-r8">
+@@ -69,7 +69,14 @@
+         <form @submit.prevent="doRegister" class="space-y-4">
+           <div>
+             <label class="xy-label" x-text="authText('email_label', '邮箱')">邮箱</label>
+-            <input type="email" x-model="registerForm.email" class="xy-input" :placeholder="authText('email_placeholder', 'you@example.com')" required>
++            <input type="email" x-model="registerForm.email" @input="clearRegisterFeedback()" class="xy-input" :placeholder="authText('email_placeholder', 'you@example.com')" :aria-invalid="registerEmailExists ? 'true' : 'false'" aria-describedby="register-feedback" required>
++          </div>
++          <div id="register-feedback" x-show="registerError" role="alert" aria-live="polite" class="text-sm leading-relaxed" style="padding:12px 14px;border:1px solid var(--ui-line,#e7dfe8);border-radius:12px;background:var(--ui-panel-soft,#f7f3f8);color:var(--ui-text,#24262b);overflow-wrap:anywhere;">
++            <p x-text="registerError"></p>
++            <div x-show="registerEmailExists" class="flex flex-wrap gap-3 mt-2">
++              <button type="button" class="xy-link" @click="useRegisteredEmail('login')">去登录</button>
++              <button type="button" class="xy-link" @click="useRegisteredEmail('reset')">找回密码</button>
++            </div>
+           </div>
+           <div>
+             <label class="xy-label" x-text="authText('code_label', '验证码')">验证码</label>

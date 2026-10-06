@@ -152,7 +152,7 @@ test('the loaded bundle source map is rebuilt from this exact source, not a logg
     const map = JSON.parse(fs.readFileSync(new URL('dist/index.js.map', extensionRoot), 'utf8'));
     const index = map.sources.findIndex(name => name.endsWith('/src/utils/prompts.ts'));
     assert.ok(index >= 0);
-    assert.equal(map.sourcesContent[index], source);
+    assert.equal(map.sourcesContent[index].replaceAll('\r\n', '\n'), source.replaceAll('\r\n', '\n'));
     assert.match(sourceFunction, /getTokenCountAsync\(prompts\)\.then/);
     assert.match(bundleFunction, /\.catch\(/);
 });

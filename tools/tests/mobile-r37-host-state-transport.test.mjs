@@ -232,7 +232,7 @@ test('actual existing admin host accepts the additive ready capability without c
         window: { addEventListener: (type, callback) => { if (type === 'message') listeners.push(callback); } },
         document: { querySelector: () => ({ contentWindow: frame }) },
         clearTimeout() {}, performance: { mark() {} } });
-    vm.runInContext(admin.replace(/^import .*\n/, '').replace('export function adminDialogue(', 'function adminDialogue('), legacy);
+    vm.runInContext(admin.replace(/^import .*\r?\n/, '').replace('export function adminDialogue(', 'function adminDialogue('), legacy);
     const controller = legacy.adminDialogue(); controller.preparePreviewRuntime();
     controller.previewPendingCard = 'card-a'; controller.previewStarting = true;
     h.scope.notifyHostConversation();

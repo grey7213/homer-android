@@ -30,6 +30,11 @@ if hasattr(sys.stdout, "reconfigure"):
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_APK = ROOT / "android-app/app/build/outputs/apk/debug/app-debug.apk"
 SKIP_PARTS = {"node_modules", "__pycache__", ".git"}
+REQUIRED_CARD_ASSETS = (
+    'app/assets/js/spine-portrait.mjs',
+    'app/assets/vendor/spine-webgl.js',
+    'app/assets/vendor/SPINE-RUNTIMES-LICENSE.txt',
+)
 
 
 def die(message: str) -> None:
@@ -74,6 +79,11 @@ def main() -> int:
     web_root = ROOT / "frontend"
     if not web_root.is_dir():
         die("仓库根没有 frontend/，先跑 python tools/bootstrap.py")
+    # The card experience imports this module even for cards without Spine.
+    # Enumerating existing source files cannot detect an accidental deletion.
+    for rel in REQUIRED_CARD_ASSETS:
+        if not (web_root / rel).is_file() or f'assets/client/web/{rel}' not in names:
+            die(f'角色体验必需依赖缺失：frontend/{rel}')
 
     def packable(rel: Path) -> bool:
         # aapt 会丢掉 assets 里以点开头的目录和文件（.well-known/、.gitkeep 这类），

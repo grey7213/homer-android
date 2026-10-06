@@ -162,7 +162,7 @@ test('actual handler/evaluator match old side effects, writes and hook selection
 test('shipping sourcemap embeds the exact current handler and evaluator sources', () => {
     const map = JSON.parse(readFileSync(resolve(plugin, 'dist/index.js.map')));
     for (const [file, source] of [['src/modules/handler.ts', handlerSource], ['src/utils/evaluate.ts', evaluateSource]]) {
-        assert.equal(map.sourcesContent[map.sources.findIndex(name => name.endsWith(file))], source);
+        assert.equal(map.sourcesContent[map.sources.findIndex(name => name.endsWith(file))].replaceAll('\r\n', '\n'), source.replaceAll('\r\n', '\n'));
     }
 });
 
