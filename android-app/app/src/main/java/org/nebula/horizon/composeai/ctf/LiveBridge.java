@@ -26,6 +26,11 @@ public final class LiveBridge {
     @JavascriptInterface
     public boolean isDebugBuild() { return BuildConfig.DEBUG; }
 
+    @JavascriptInterface
+    public void downloadUserBackup() {
+        activity.runOnUiThread(() -> activity.downloadUserBackup(owner));
+    }
+
     /** Pure UTF-8 digest only; an empty result requests the existing web fallback. */
     @JavascriptInterface
     public String sha256Utf8(String value) { return HomerUtf8Sha256.digest(value); }

@@ -18,6 +18,8 @@
 
 ## Verified pitfalls
 
+- Local backup: WebView's existing DownloadListener ignores Blob URLs and external-browser downloads do not inherit the app Cookie. Use the fixed same-origin `/console/api/web/user-backup/download` through `HomerNative.downloadUserBackup()` on the active backup page, with DownloadManager and the current Cookie. Use a timestamped filename as the download title so DocumentsUI can distinguish backups. Pixel 6 API 33 verified actual ZIP save, system picker selection and import; see `specs/user-local-backup-20261007.md`.
+
 - PR #19: asset enumeration cannot detect a module deleted from both source and APK. `card-experience-runtime.mjs` still imports Spine, so retain `spine-portrait.mjs`, `spine-webgl.js` and its license; `verify_apk_assets.py` checks these independently. On Windows, source-map content comparisons normalize only CRLF/LF and VM fixtures accept `\r?\n`; do not remove the content or mapping checks. R353 has five cumulative segments followed by the maintainer registration patch.
 
 - R353 delivery: export every accepted cumulative module and real source map, apply the complete partitioned patch set on a clean pinned tree, then rebuild and hash-check the APK. Preserve upstream workshop account isolation. Never decode a Git diff using universal-newline conversion: authored CRLF can be lost even though full-index IDs are retained. Verify platform-stable TS/map parity and non-target bundle bytes; fixture seams must tolerate new module imports without weakening product assertions.
