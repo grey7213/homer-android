@@ -142,7 +142,7 @@ function importerHarness({ sourceCard = card(), storedCard = sourceCard, owner =
     scope = vm.createContext({ console, characters, this_chid: undefined, selected_group: null, is_group_generating: false,
         is_send_press: false, isChatSaving: false, chat_metadata: {},
         session: { user: { id: owner } }, launch: { app_id: appId, conversation_id: 'fixture-conversation', card: plain(sourceCard), admin_preview: ephemeral },
-        reconcileStorageAccount: () => owner, storageAccountEpoch: 0,
+        reconcileStorageAccount: () => owner, storageAccountEpoch: 0, localRuntime: null,
         cardPreparations: { prepare(key, value) { scopes.push(key); return preparations.prepare(key, value); } },
         getContext: () => context, getCurrentChatId: () => context.chatId, pendingCardScriptCharacter: null,
         DOMPurify: { sanitize: value => value }, toastr: { error() {} }, getRequestHeaders: () => ({}),

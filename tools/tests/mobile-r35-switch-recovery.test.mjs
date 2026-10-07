@@ -21,9 +21,9 @@ function fixture(options = {}) {
     const oldMetadata = { integrity: 'old-integrity', persona: 'locked-persona.png',
         homer_bridge: { user_id: 'owner-a', app_id: 'card-a', conversation_id: 'conversation-a', runtime: 'dialogue' },
         custom_memory: { entries: ['kept'] } };
-    const previousSession = { user: { id: 'owner-a' }, launch: { app_id: 'card-a', conversation_id: 'conversation-a',
+    const previousSession = { user: { id: 'owner-a' }, launch: { app_id: 'card-a', conversation_id: 'conversation-a', bridge_token: 'synthetic-only',
         card: { toJSON() { throw Error('Source card must never be cloned for recovery'); } } } };
-    const nextSession = { user: { id: 'owner-a' }, launch: { app_id: 'card-b', conversation_id: 'conversation-b' } };
+    const nextSession = { user: { id: 'owner-a' }, launch: { app_id: 'card-b', conversation_id: 'conversation-b', bridge_token: 'synthetic-only' } };
     const classSet = new Set(), handlers = new Map();
     let mirrorFailures = options.mirrorFailure ? 1 : 0;
     const scope = {

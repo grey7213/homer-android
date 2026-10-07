@@ -179,7 +179,7 @@ function bridgeFixture() {
     const scope = JSON.stringify(['owner', 'card', 'target']), stamp = { version: 0 };
     Object.assign(c, {
         session: payload, launch: payload.launch, storageAccountEpoch: 1, requestedAppId: '', requestedConversationId: '',
-        adminPreviewRequested: false, adminBinding: false,
+        adminPreviewRequested: false, adminBinding: false, localRuntime: null,
         SESSION_CACHE_TTL_MS: 1000,
         reconcileStorageAccount: () => 'owner', sessionPrefetchCache: new Map(), sessionReadFences: new WeakMap(),
         storageAckStamps: new Map([[scope, stamp]]), storageAckKey: value => value,

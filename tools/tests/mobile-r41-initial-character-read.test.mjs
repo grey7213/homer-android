@@ -28,7 +28,7 @@ function fixture({ status = 200, gate = null, jsonGate = null, readFailure = nul
     const scope = {
         characters, session: { user: { id: owner } },
         launch: { app_id: app, conversation_id: 'synthetic-chat', card: { data: { name: 'Synthetic' } } },
-        storageAccountEpoch: 0, storageOwner: owner,
+        storageAccountEpoch: 0, storageOwner: owner, localRuntime: null,
         reconcileStorageAccount: () => scope.storageOwner,
         cardPreparations: { prepare: () => ({ signature: 'synthetic-signature' }) },
         cloneCardWithMarker: () => target(),

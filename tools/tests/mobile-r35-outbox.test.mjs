@@ -171,41 +171,49 @@ test('extension settings have independent revisions and cannot persist arbitrary
     assert.equal(JSON.stringify(indexedDB.dump('unit-outbox')).includes('forbidden-test-value'), false);
 });
 
-test('ACK row limit evicts only acknowledged snapshots, never pending', async () => {
+test('former ACK row limit retains all acknowledged snapshots as well as pending progress', async () => {
     const { outbox, indexedDB } = fixture();
     const pending = await outbox.prepare(snapshot('do not evict', scope('owner-b')));
     for (let i = 0; i < OUTBOX_ACK_MAX_ROWS + 2; i++) {
         const committed = await outbox.prepare(snapshot(String(i), scope('owner-a', 'card-a', 'conversation-' + i)));
         await outbox.cloudACK(committed, ack(String(i)));
     }
-    assert.equal(indexedDB.dump('unit-outbox').filter(row => row.pending === 0).length, OUTBOX_ACK_MAX_ROWS);
+    assert.equal(indexedDB.dump('unit-outbox').filter(row => row.pending === 0).length, OUTBOX_ACK_MAX_ROWS + 2);
+    for (let i = 0; i < OUTBOX_ACK_MAX_ROWS + 2; i++) {
+        const retained = await outbox.read(scope('owner-a', 'card-a', 'conversation-' + i));
+        assert.equal(retained.payload.messages[0].mes, String(i));
+        assert.equal(retained.pending, false);
+    }
     assert.equal((await outbox.read(pending.scope)).pending, true);
     assert.equal((await outbox.pending('owner-b')).length, 1);
 });
 
-test('evicted then recreated identical scope cannot accept a delayed ABA ACK', async () => {
+test('retained scope edited away and back cannot accept a delayed ABA ACK', async () => {
     const { outbox } = fixture(), original = await outbox.prepare(snapshot());
     await outbox.cloudACK(original, ack('original'));
     for (let i = 0; i < OUTBOX_ACK_MAX_ROWS; i++) {
         const committed = await outbox.prepare(snapshot(String(i), scope('owner-a', 'card-a', 'conversation-' + i)));
         await outbox.cloudACK(committed, ack(String(i)));
     }
-    assert.equal(await outbox.read(original.scope), null);
+    assert.equal((await outbox.read(original.scope)).commitId, original.commitId);
+    await outbox.prepare(snapshot('intervening edit'));
     const recreated = await outbox.prepare(snapshot());
-    assert.equal(recreated.revision, original.revision);
+    assert.equal(recreated.revision, original.revision + 2);
     assert.notEqual(recreated.commitId, original.commitId);
     assert.equal((await outbox.cloudACK(original, ack('late old response'))).applied, false);
     assert.equal((await outbox.read(original.scope)).pending, true);
 });
 
-test('UTF-8 ACK byte budget is enforced without deleting oversized pending data', async () => {
+test('former UTF-8 ACK byte budget retains complete phone history after cloud acknowledgement', async () => {
     const { outbox, indexedDB } = fixture();
     const bigText = '汉'.repeat(Math.ceil(OUTBOX_ACK_MAX_BYTES / 3));
     const pending = await outbox.prepare(snapshot(bigText));
     assert.ok(pending.bytes > OUTBOX_ACK_MAX_BYTES);
     assert.equal((await outbox.pending('owner-a')).length, 1);
     await outbox.cloudACK(pending, ack('safe minimal acknowledgement'));
-    assert.equal(await outbox.read(pending.scope), null);
+    const retained = await outbox.read(pending.scope);
+    assert.equal(retained.pending, false);
+    assert.equal(retained.payload.messages[0].mes, bigText);
     assert.ok(indexedDB.dump('unit-outbox').filter(row => row.pending === 0)
-        .reduce((sum, row) => sum + row.bytes + row.ackBytes, 0) <= OUTBOX_ACK_MAX_BYTES);
+        .reduce((sum, row) => sum + row.bytes + row.ackBytes, 0) > OUTBOX_ACK_MAX_BYTES);
 });

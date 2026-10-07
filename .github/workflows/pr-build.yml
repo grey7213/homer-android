@@ -64,6 +64,8 @@ jobs:
         run: |
           python3 -m unittest discover -s tools/tests -p test_r41_server_export.py
           python3 -m unittest discover -s tools/tests -p test_homer_session_cards.py
+          python3 -m unittest discover -s tools/tests -p test_homer_chat_storage.py
+          python3 -m unittest discover -s tools/tests -p test_r354_export.py
           python3 -m unittest discover -s tools -p test_export_web_patch.py
 
       - name: 单测 + assembleDebug

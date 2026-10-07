@@ -45,7 +45,7 @@ function harness({ firstTimer = 1, loading = false, reuseTimer = false } = {}) {
         tavoComposer: { refresh() {} }, syncHostOverlayState() {}, restoreScopeDraft() {},
         getContext: () => context, reconcileStorageAccount: () => owner,
         isGenerating: () => false, publicModel, conversationModelSettings: () => ({}),
-        acknowledgedPromptTickets: new WeakMap(), restoreAcknowledgedPromptStates,
+        acknowledgedPromptTickets: new WeakMap(), sessionReadFences: new WeakMap(), restoreAcknowledgedPromptStates,
         samePromptMessageSource, clearPromptMessageState,
         cloneJsonValue: plain, cloudMessageToDialogue: plain,
         restoreCanonicalGreeting, getRegexScripts: () => [], regex_placement: { AI_OUTPUT: 2 },
@@ -108,12 +108,12 @@ function harness({ firstTimer = 1, loading = false, reuseTimer = false } = {}) {
         domReads: () => domReads };
 }
 
-test('shipping loading transaction retains rendering and durable sync but sends only its final ready snapshot', async () => {
+test('shipping history load retains rendering without rewriting cloud and sends only its final ready snapshot', async () => {
     const h = harness({ loading: true }), original = plain(h.scope.launch.messages);
     await h.scope.loadCloudChat();
     assert.equal(h.timers.size, 0, 'chat-loaded display snapshot must wait for final ready');
     assert.equal(h.states().length, 0);
-    assert.deepEqual(h.effects, ['hold', 'persona-read', 'print', 'message-menu', 'chat-changed', 'chat-loaded', 'release', 'scroll', 'media', 'durable-sync:100']);
+    assert.deepEqual(h.effects, ['hold', 'persona-read', 'print', 'message-menu', 'chat-changed', 'chat-loaded', 'release', 'scroll', 'media']);
     assert.deepEqual(plain(h.context.chat), original);
     h.scope.notifyHostConversation('ready');
     assert.equal(h.timers.size, 1);
@@ -137,7 +137,7 @@ test('shipping ordinary cloud reloads continue to notify and never retain a load
     h.flush();
     assert.equal(h.states().length, 1);
     assert.equal(h.states()[0].data.reason, 'chat-loaded');
-    assert.ok(h.effects.includes('durable-sync:100'));
+    assert.ok(!h.effects.includes('durable-sync:100'), 'viewing an existing history is not a cloud mutation');
 });
 
 test('loading coalesces only chat-loaded; ordinary edits, swipes, generation and model feedback remain scheduled', () => {
