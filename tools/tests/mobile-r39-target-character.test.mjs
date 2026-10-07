@@ -53,7 +53,7 @@ function harness({ app = APP, readStatus = 200, returnedAvatar, importAvatar, re
         toastr: { error() {} }, t: strings => strings.join(''),
         session: { user: { id: OWNER, name: 'Synthetic owner' } },
         launch: { app_id: app, conversation_id: CONVERSATION, card },
-        storageAccountEpoch: 0, storageOwner: OWNER,
+        storageAccountEpoch: 0, storageOwner: OWNER, localRuntime: null,
         reconcileStorageAccount: () => scope.storageOwner,
         characters, cardPreparations, MODULE_ID: 'target-character-unit',
         getRequestHeaders: () => ({ 'Content-Type': 'application/json' }),

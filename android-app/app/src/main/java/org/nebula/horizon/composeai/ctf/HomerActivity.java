@@ -751,6 +751,48 @@ public final class HomerActivity extends Activity {
         if (hasFocus) applySystemBars();
     }
 
+    private long lastUserBackupDownload = 0;
+
+    void downloadUserBackup(WebView owner) {
+        if (owner == null || owner != liveView) return;
+        try {
+            URI page = URI.create(owner.getUrl());
+            URI base = URI.create(BuildConfig.SERVER_BASE_URL);
+            if (!base.getScheme().equals(page.getScheme())
+                    || !base.getRawAuthority().equals(page.getRawAuthority())
+                    || !"/app/backup.html".equals(page.getPath())) return;
+            if (android.os.Build.VERSION.SDK_INT < 29
+                    && checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, 6107);
+                return;
+            }
+            long now = System.currentTimeMillis();
+            if (now - lastUserBackupDownload < 5000) return;
+            String url = base.resolve("/console/api/web/user-backup/download").toString();
+            String cookies = CookieManager.getInstance().getCookie(url);
+            if (cookies == null || cookies.isBlank()) {
+                android.widget.Toast.makeText(this, "请先登录后下载备份", android.widget.Toast.LENGTH_LONG).show();
+                return;
+            }
+            String filename = "homer-backup-" + new java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.ROOT)
+                    .format(new java.util.Date()) + ".zip";
+            android.app.DownloadManager.Request request = new android.app.DownloadManager.Request(Uri.parse(url));
+            request.addRequestHeader("Cookie", cookies);
+            request.addRequestHeader("User-Agent", owner.getSettings().getUserAgentString());
+            request.setMimeType("application/zip");
+            request.setTitle(filename);
+            request.setDescription("惑梦个人备份");
+            request.setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+            request.setDestinationInExternalPublicDir(android.os.Environment.DIRECTORY_DOWNLOADS, filename);
+            android.app.DownloadManager manager = (android.app.DownloadManager) getSystemService(DOWNLOAD_SERVICE);
+            manager.enqueue(request);
+            lastUserBackupDownload = now;
+            android.widget.Toast.makeText(this, "备份已加入下载，完成后在下载文件夹查看", android.widget.Toast.LENGTH_LONG).show();
+        } catch (RuntimeException error) {
+            android.widget.Toast.makeText(this, "无法启动下载，请检查系统下载管理器或使用网页版", android.widget.Toast.LENGTH_LONG).show();
+        }
+    }
+
     private DownloadListener openExternalDownload() {
         return (url, userAgent, contentDisposition, mimeType, contentLength) -> {
             if (url == null || !url.startsWith("https://")) return;
@@ -1245,6 +1287,11 @@ public final class HomerActivity extends Activity {
             int[] grantResults
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == 6107) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) downloadUserBackup(liveView);
+            else android.widget.Toast.makeText(this, "未获得保存权限，备份没有下载", android.widget.Toast.LENGTH_LONG).show();
+            return;
+        }
         if (requestCode != WEB_PERMISSION_REQUEST || pendingPermissionRequest == null) return;
         List<String> granted = new ArrayList<>();
         for (String resource : pendingPermissionResources) {

@@ -1,0 +1,207 @@
+# homer-android web 补丁
+# 基线 commit: 02069118baa83354f3e01a6d0021562111211373
+# 说明: 在既有 R353 补丁之后增加用户本地备份与导入入口
+
+diff --git a/frontend/app/assets/css/backup.css b/frontend/app/assets/css/backup.css
+new file mode 100644
+index 0000000000000000000000000000000000000000..80ddf6ebcaacba78f14654c12ebe6489a1f28629
+--- /dev/null
++++ b/frontend/app/assets/css/backup.css
+@@ -0,0 +1,21 @@
++body{margin:0}.app-topbar a{text-decoration:none;color:inherit;white-space:nowrap}.app-topbar{gap:16px}
++.backup-content{max-width:760px;margin:0 auto;padding:24px 20px 96px;line-height:1.7}
++.backup-intro{font-size:16px;margin:0 0 16px;color:var(--text-secondary,#666)}
++.backup-card{padding:26px;margin:20px 0;border:1px solid var(--border-color,#e7e2ec);border-radius:20px;background:var(--bg-card,#fff)}
++.backup-card h2{font-size:23px;line-height:1.3;margin:6px 0 14px;font-weight:700}
++.backup-card p{margin:12px 0}.backup-eyebrow{font-size:12px;letter-spacing:.08em;color:var(--text-secondary,#756b7f)}
++.backup-note{font-size:13px;color:var(--text-secondary,#716979)}
++.backup-card .xy-btn{min-height:44px;padding:10px 20px;margin:8px 0;text-decoration:none}
++.backup-file{display:flex;flex-direction:column;gap:10px;font-weight:600;padding:18px;border:1px dashed #a798b6;border-radius:12px}
++.backup-file input{font:inherit;width:100%;min-width:0;font-size:14px}.backup-filename{overflow-wrap:anywhere;font-weight:600}
++.backup-counts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:16px 0}
++.backup-counts div{padding:10px 12px;background:rgba(128,100,159,.08);border-radius:10px}.backup-counts dt{font-size:12px;color:var(--text-secondary,#756b7f)}.backup-counts dd{font-size:24px;margin:0;font-weight:600}
++.backup-check{display:flex;align-items:flex-start;gap:10px;margin:18px 0}.backup-check input{margin-top:7px;width:16px;height:16px;flex-shrink:0}
++#backup-status:empty,#backup-result:empty,#backup-download-state:empty{display:none}
++.backup-error{color:#b52f44!important;background:rgba(196,57,80,.07);border-radius:10px;padding:12px;overflow-wrap:anywhere}
++.backup-success{color:#237142}.backup-card [hidden]{display:none!important}
++html.dark .backup-card,html[data-theme="dark"] .backup-card{background:#211e26;border-color:#3c3545;color:#efeaf5}
++html.dark .backup-note,html[data-theme="dark"] .backup-note{color:#bdb3c8}
++html.dark .backup-intro,html[data-theme="dark"] .backup-intro,html.dark .backup-counts dt,html[data-theme="dark"] .backup-counts dt,html.dark .backup-eyebrow,html[data-theme="dark"] .backup-eyebrow{color:#bdb3c8}
++html.dark .backup-success,html[data-theme="dark"] .backup-success{color:#8bdbad}
++@media(max-width:640px){.backup-content{padding:16px 14px 104px}.backup-card{padding:20px 16px;margin:14px 0;border-radius:16px}.backup-card .xy-btn{width:100%}.backup-counts{grid-template-columns:repeat(2,minmax(0,1fr))}.backup-card h2{font-size:21px}.app-topbar h1{font-size:18px}.app-topbar a{font-size:14px}}
+diff --git a/frontend/app/assets/js/backup.js b/frontend/app/assets/js/backup.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..60ffe60396ef32929ec6d1671945143f93dae2fd
+--- /dev/null
++++ b/frontend/app/assets/js/backup.js
+@@ -0,0 +1,100 @@
++import { api, getToken } from './app-core.js';
++import { injectLayout } from './layout.js?v=20260917-r8';
++
++injectLayout('me');
++const $ = id => document.getElementById(id);
++const base = '/console/api/web/user-backup/';
++let selected = null, busy = false, generation = 0, owner = '';
++function status(id, text, kind = '') {
++  $(id).textContent = text;
++  $(id).className = kind ? `backup-${kind}` : '';
++}
++function setBusy(value) {
++  busy = value;
++  $('backup-file').disabled = value || !owner;
++  $('backup-download').disabled = value || !owner;
++  $('backup-restore').disabled = value || !selected;
++}
++async function identity() {
++  const r = await api.profile();
++  const u = r?.data || r;
++  if (!u?.id) throw new Error('登录已失效，请重新登录');
++  if (owner && String(u.id) !== owner) throw new Error('账号已切换，请刷新页面后重新选择备份');
++  owner = String(u.id);
++}
++async function upload(action, file, persona = false) {
++  await identity();
++  const headers = { 'Content-Type': 'application/zip', 'X-Homer-Backup': '1' };
++  const token = getToken();
++  if (token) headers.Authorization = `Bearer ${token}`;
++  const r = await fetch(base + action + (persona ? '?persona=1' : ''), {method:'POST',headers,body:file,credentials:'include'});
++  const data = await r.json().catch(() => null);
++  if (!r.ok || data?.result === 'failure') throw new Error(data?.message || `操作失败（${r.status}）`);
++  return data.data;
++}
++$('backup-download').addEventListener('click', async () => {
++  if (busy) return;
++  setBusy(true);
++  status('backup-download-state', '正在准备备份…');
++  try {
++    await identity();
++    // Native 354+ handles this exact authenticated URL with DownloadManager.
++    // Browsers use Blob only after inspecting HTTP status, so failures are visible.
++    if (typeof window.HomerNative?.downloadUserBackup === 'function') {
++      window.HomerNative.downloadUserBackup();
++      status('backup-download-state', '已请求系统下载，请查看系统提示和下载通知。');
++    } else {
++      if (/HomerAndroid\//.test(navigator.userAgent)) throw new Error('请升级到 1.18.1 或更新客户端后下载，也可在手机浏览器登录网页版使用');
++      const headers = {};
++      const token = getToken(); if (token) headers.Authorization = `Bearer ${token}`;
++      const r = await fetch(base + 'download', {credentials:'include',headers});
++      if (!r.ok) { const e = await r.json().catch(() => null); throw new Error(e?.message || `下载失败（${r.status}）`); }
++      if (!(r.headers.get('content-type') || '').includes('application/zip')) throw new Error('服务器未返回有效备份');
++      const blob = await r.blob();
++      const filename = /filename="([^"]+)"/.exec(r.headers.get('content-disposition') || '')?.[1] || 'homer-backup.zip';
++      const url = URL.createObjectURL(blob);
++      const a = document.createElement('a'); a.href=url; a.download=filename; document.body.append(a); a.click(); a.remove();
++      setTimeout(() => URL.revokeObjectURL(url), 60_000);
++      status('backup-download-state', '备份已生成，请确认文件已保存到设备。');
++    }
++  } catch(e) { status('backup-download-state', e.message, 'error'); }
++  finally { setBusy(false); }
++});
++$('backup-file').addEventListener('change', async event => {
++  const file = event.target.files?.[0];
++  const serial = ++generation;
++  selected = null; $('backup-preview').hidden = true; $('backup-history').hidden = true;
++  status('backup-result', ''); $('backup-persona').checked=false;
++  if (!file) return;
++  if (file.size > 30*1024*1024 || !file.size) { status('backup-result','请选择不超过 30 MB 的备份文件','error'); return; }
++  setBusy(true); status('backup-result','正在校验备份，尚未写入任何内容…');
++  try {
++    const data = await upload('preview', file);
++    if (serial !== generation) return;
++    selected=file;
++    $('backup-filename').textContent=file.name;
++    const date = new Date(data.captured_at);
++    $('backup-time').textContent=Number.isFinite(date.valueOf()) ? `备份时间：${date.toLocaleString('zh-CN')}` : '备份时间未提供';
++    $('backup-counts').replaceChildren();
++    for (const [key,label] of [['roles','角色'],['versions','角色版本'],['conversations','会话'],['messages','消息'],['memories','记忆']]) {
++      const div=document.createElement('div'),dt=document.createElement('dt'),dd=document.createElement('dd');
++      dt.textContent=label; dd.textContent=Number(data[key] || 0).toLocaleString('zh-CN'); div.append(dt,dd); $('backup-counts').append(div);
++    }
++    $('backup-preview').hidden=false; status('backup-result','校验通过。确认后会创建私有副本。');
++  } catch(e) { status('backup-result',e.message,'error'); }
++  finally { setBusy(false); }
++});
++$('backup-restore').addEventListener('click', async () => {
++  if (busy || !selected) return;
++  setBusy(true); status('backup-result','正在导入，请保持页面打开…');
++  try {
++    const result=await upload('restore',selected,$('backup-persona').checked);
++    status('backup-result', result.already_imported ? '这份备份已导入，没有重复创建内容。' : `导入完成：${result.roles} 个角色、${result.versions} 个版本、${result.conversations} 段会话、${result.messages} 条消息。${result.persona_restored?'人设已恢复。':''}${result.unavailable_roles?`其中 ${result.unavailable_roles} 个原角色不可用，聊天已保存在私有存档角色下。`:''}`, 'success');
++    $('backup-history').hidden=false;
++    selected=null;
++  } catch(e) { status('backup-result',e.message,'error'); }
++  finally { setBusy(false); }
++});
++identity().then(() => { status('backup-status',''); setBusy(false); }).catch(e => {
++  status('backup-status',e.message + '。请返回设置确认登录。','error'); setBusy(false);
++});
+diff --git a/frontend/app/backup.html b/frontend/app/backup.html
+new file mode 100644
+index 0000000000000000000000000000000000000000..181ea87c4d3f804b5925ca5b880a965ed56e80c6
+--- /dev/null
++++ b/frontend/app/backup.html
+@@ -0,0 +1,52 @@
++<!DOCTYPE html>
++<html lang="zh-CN">
++<head>
++  <meta charset="UTF-8">
++  <meta name="viewport" content="width=device-width, initial-scale=1.0">
++  <script src="/assets/js/theme-bootstrap.js?v=20261001-r34"></script>
++  <title>本地备份 · 惑梦</title>
++  <link rel="stylesheet" href="/app/assets/css/app.css?v=20260917-r8">
++  <link rel="stylesheet" href="/assets/css/app-design.css?v=20260917-r8">
++  <link rel="stylesheet" href="/assets/css/surface-controls.css">
++  <link rel="stylesheet" href="/app/assets/css/backup.css?v=20261007-1">
++  <script type="module" src="/app/assets/js/backup.js?v=20261007-1"></script>
++</head>
++<body>
++  <div class="app-shell">
++    <aside class="app-sidebar" data-app-sidebar></aside>
++    <main class="app-main">
++      <header class="app-topbar"><a href="/app/me.html?panel=settings" aria-label="返回设置">‹ 返回设置</a><h1>本地备份</h1></header>
++      <div class="backup-content">
++        <p class="backup-intro">把自己的创作和聊天留一份在设备上。需要时，随时导入恢复。</p>
++        <p id="backup-status" role="status" aria-live="polite">正在确认登录状态…</p>
++        <section class="backup-card" aria-labelledby="download-heading">
++          <span class="backup-eyebrow">保存一份副本</span>
++          <h2 id="download-heading">下载我的备份</h2>
++          <p>包含人设、自己创作的角色与历史版本、云端聊天及候选回复，以及会话设置、变量和记忆。</p>
++          <button class="xy-btn xy-btn-primary" id="backup-download" disabled>下载备份 ZIP</button>
++          <p class="backup-note">独立图片、音频、Spine 文件保留链接引用；尚未同步的设备草稿不在包内。积分、支付、排名和账号权限不参与恢复。备份包含私人聊天，请保存在自己信任的位置。</p>
++          <p class="backup-note" id="backup-download-state"></p>
++        </section>
++        <section class="backup-card" aria-labelledby="restore-heading">
++          <span class="backup-eyebrow">从文件找回内容</span>
++          <h2 id="restore-heading">导入备份</h2>
++          <p>先预览备份内容，再恢复为当前账号的私有副本。现有角色和聊天会保留，相同内容的备份重复导入不会重复创建。</p>
++          <label class="backup-file">选择备份文件<input id="backup-file" type="file" accept=".zip,.json,application/zip,application/json" disabled></label>
++          <p class="backup-note">支持本页下载的惑梦备份 ZIP，或其中的 backup.json，文件不超过 30 MB。</p>
++          <div id="backup-preview" hidden>
++            <p id="backup-filename" class="backup-filename"></p>
++            <p id="backup-time"></p>
++            <dl id="backup-counts" class="backup-counts"></dl>
++            <label class="backup-check"><input id="backup-persona" type="checkbox">同时用备份中的人设替换当前人设</label>
++            <p class="backup-note">原角色已下架或无访问权限时，会保留聊天并创建存档角色；不会恢复他人的私有角色设定。</p>
++            <button class="xy-btn xy-btn-primary" id="backup-restore">确认导入私有副本</button>
++          </div>
++          <p id="backup-result" role="status" aria-live="polite"></p>
++          <a id="backup-history" class="xy-btn xy-btn-ghost" href="/app/histories.html" hidden>查看历史会话</a>
++        </section>
++      </div>
++    </main>
++    <nav class="app-bottom-nav" data-app-bottom-nav></nav>
++  </div>
++</body>
++</html>
+diff --git a/frontend/app/me.html b/frontend/app/me.html
+index 46e3692baf7fafa7b0b0ab8ada3db45184b87c87..2909fde2404cd30888bb9dbb5aea671dad36756b 100644
+--- a/frontend/app/me.html
++++ b/frontend/app/me.html
+@@ -86,6 +86,7 @@
+               <button class="xy-btn xy-btn-primary" @click="savePersona" :disabled="savingPersona">保存人设</button>
+             </section>
+             <nav class="profile-settings-routes" x-show="panel==='settings'"><a href="/app/me.html?panel=profile">个人资料 <span>›</span></a><a href="/app/me.html?panel=persona">我的人设 <span>›</span></a><a href="/app/me.html?panel=preferences">内容偏好 <span>›</span></a><button type="button" data-shell-action="theme">切换明暗模式 <span>◐</span></button><button type="button" @click="doLogout" class="profile-signout">退出登录</button></nav>
++            <nav class="profile-settings-routes" x-show="panel==='settings'"><a href="/app/backup.html">本地备份 <span>下载与导入 ›</span></a></nav>
+             <section class="profile-setting-section profile-account-info" x-show="panel==='settings'"><h3>账户信息</h3><p>注册时间：<span x-text="formatDate(user?.created_at)"></span></p><p>内部 ID：<code x-text="user?.id || '-'"></code></p><p>网页端与 APP 使用同一账号、积分和角色库。</p></section>
+           </div>
+         </details>

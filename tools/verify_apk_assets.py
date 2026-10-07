@@ -35,6 +35,12 @@ REQUIRED_CARD_ASSETS = (
     'app/assets/vendor/spine-webgl.js',
     'app/assets/vendor/SPINE-RUNTIMES-LICENSE.txt',
 )
+REQUIRED_STORAGE_ASSETS = (
+    'scripts/homer-chat-outbox.mjs',
+    'scripts/homer-local-session.mjs',
+    'scripts/homer-local-runtime.mjs',
+    'scripts/homer-cloud-sync.mjs',
+)
 
 
 def die(message: str) -> None:
@@ -110,6 +116,9 @@ def main() -> int:
         stale = [rel for rel in expected if rel not in missing
                  and not matches('web/' + rel, (web_root / rel).read_bytes())]
         runtime_root = ROOT / 'sillytavern-runtime/public'
+        for rel in REQUIRED_STORAGE_ASSETS:
+            if not (runtime_root / rel).is_file() or f'assets/client/runtime/{rel}' not in names:
+                die(f'本机会话保存必需依赖缺失：runtime/{rel}')
         runtime_stale = []
         for path in runtime_root.rglob('*'):
             if not path.is_file(): continue

@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
+import { emptyLocalSessions } from './helpers/bridge-session-vm.mjs';
+import { sanitizeRuntimeValue } from '../../sillytavern-runtime/public/scripts/homer-local-runtime.mjs';
 
 // Reuse the established recovery fixture without changing its file. Its
 // switch/recovery/activation functions are extracted from shipping source.
@@ -12,7 +14,7 @@ const recoveryFixtureSource = fs.readFileSync(new URL('./mobile-r35-switch-recov
 const fixtureStart = recoveryFixtureSource.indexOf('function section(');
 const fixtureEnd = recoveryFixtureSource.indexOf('async function switchTarget(h)', fixtureStart);
 assert.ok(fixtureStart >= 0 && fixtureEnd > fixtureStart, 'Existing recovery fixture boundaries are available');
-const fixtureContext = vm.createContext({ assert, vm, bridge, script, URL });
+const fixtureContext = vm.createContext({ assert, vm, bridge, script, URL, emptyLocalSessions, sanitizeRuntimeValue });
 vm.runInContext(recoveryFixtureSource.slice(fixtureStart, fixtureEnd), fixtureContext);
 
 function deferred() {
