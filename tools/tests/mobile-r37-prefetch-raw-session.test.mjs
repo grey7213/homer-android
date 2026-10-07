@@ -195,7 +195,7 @@ test('consume retains the original GET fence across a subsequent same-scope ACK 
     assert.equal(result.launch.local_pending, false);
 });
 
-test('cookie-only pending prefetch followed by a same-scope ACK refetches instead of accepting its null-fence old cloud', async t => {
+test('cookie-only pending prefetch followed by a same-scope ACK keeps complete phone history without another cloud read', async t => {
     const h = harness(t, { cookieOnly: true }), message = localMessage('complete cookie-only local reply');
     const committed = await h.prepare([message]);
     h.setRequest((_path, count) => cloudSession(count === 1 ? 'cloud before cookie-only ACK' : message.mes));
@@ -213,12 +213,13 @@ test('cookie-only pending prefetch followed by a same-scope ACK refetches instea
     const result = await h.take();
     assert.equal(result.launch.messages[0].content, message.mes,
         'A null-fence ACK change must not return the pre-ACK cloud body');
-    assert.equal(h.requests.length, 2, 'Refetch under the now-verified owner rather than inventing a zero fence');
-    assertCloudUnprojected(result, cloudSession(message.mes).launch.messages);
+    assert.equal(h.requests.length, 1, 'The now-verified phone archive does not need another cloud read');
+    assert.equal(result.launch.local_chat[0].mes, message.mes);
+    assert.equal(result.launch.local_pending, false);
     assert.equal(h.context.sessionPrefetchCache.size, 0);
 });
 
-test('cookie-only null-fence ACK during consume read delivery forces a fresh GET after that read settles', async t => {
+test('cookie-only null-fence ACK during consume read delivery cannot replace complete phone progress', async t => {
     const h = harness(t, { cookieOnly: true }), message = localMessage('reply acknowledged during consume read');
     const committed = await h.prepare([message]);
     h.setRequest((_path, count) => cloudSession(count === 1 ? 'cloud before consume-read ACK' : message.mes));
@@ -248,13 +249,15 @@ test('cookie-only null-fence ACK during consume read delivery forces a fresh GET
         deliverRead.resolve();
     }
     const result = await taken;
-    assert.equal(h.requests.length, 2, 'A check only before the awaited read would miss this committed ACK');
-    assert.equal(h.reads.length, 2, 'The exceptional fresh fetch merges once under the now-verified owner');
-    assertCloudUnprojected(result, cloudSession(message.mes).launch.messages);
+    assert.equal(h.requests.length, 1, 'An ACK cannot make complete phone progress wait for another cloud read');
+    assert.equal(h.reads.length, 1);
+    assert.equal(result.launch.local_chat[0].mes, message.mes);
+    assert.equal(result.launch.messages[0].content, message.mes);
+    assert.equal(result.launch.local_pending, true, 'A pre-ACK durable snapshot may retain its safe pending status until replay reconciles');
     assert.equal(h.context.sessionPrefetchCache.size, 0);
 });
 
-test('cookie-only null-fence stamp identity eviction refetches even when its stable ACK row still exists', async t => {
+test('cookie-only null-fence stamp identity eviction does not discard an intact phone ACK archive', async t => {
     const h = harness(t, { cookieOnly: true }), message = localMessage('earlier stable cookie local');
     const committed = await h.prepare([message]);
     await h.outbox.cloudACK(committed, { messages: [cloudMessage(message)] });
@@ -267,12 +270,13 @@ test('cookie-only null-fence stamp identity eviction refetches even when its sta
     assert.equal(ticket.stamp.version, 0, 'Identity invalidation does not require a same-scope version increment');
     assert.ok(await h.originalRead(scopeKey()), 'The local row remains after only in-memory stamp eviction');
     const result = await h.take();
-    assert.equal(result.launch.messages[0].content, 'fresh cloud under new stamp identity');
-    assert.equal(h.requests.length, 2);
-    assertCloudUnprojected(result, cloudSession('fresh cloud under new stamp identity').launch.messages);
+    assert.equal(result.launch.messages[0].content, message.mes);
+    assert.equal(result.launch.local_chat[0].mes, message.mes);
+    assert.equal(result.launch.local_pending, false);
+    assert.equal(h.requests.length, 1);
 });
 
-test('cookie-only null fence with no intervening ACK keeps fresh cloud authoritative over its stable local row', async t => {
+test('cookie-only null fence with no intervening ACK keeps the complete phone history over a remote edit', async t => {
     const h = harness(t, { cookieOnly: true }), message = localMessage('old acknowledged local body');
     const committed = await h.prepare([message]);
     await h.outbox.cloudACK(committed, { messages: [cloudMessage(message)] });
@@ -283,9 +287,10 @@ test('cookie-only null fence with no intervening ACK keeps fresh cloud authorita
     assert.equal(ticket.fence, null);
     assert.equal(ticket.version, ticket.stamp.version);
     const result = await h.take();
-    assertCloudUnprojected(result, fresh.launch.messages);
-    assert.equal(result.launch.messages[0].content, 'REMOTE AUTHORITATIVE EDIT');
-    assert.equal(h.requests.length, 1, 'Null alone must neither refetch nor prefer all existing local rows');
+    assert.equal(result.launch.local_chat[0].mes, message.mes);
+    assert.equal(result.launch.messages[0].content, message.mes);
+    assert.equal(result.launch.local_pending, false);
+    assert.equal(h.requests.length, 1, 'A verified phone archive does not wait for cloud authority');
     assert.equal(h.reads.length, 1);
     assert.equal(h.context.acknowledgedPromptTickets.get(result.launch), undefined);
 });
@@ -301,7 +306,7 @@ test('a newer durable version supersedes the local version present when the peer
     assert.equal(result.launch.local_pending, true);
 });
 
-test('ACK row-budget eviction after prefetch forces a fresh GET instead of accepting its obsolete cloud body', async t => {
+test('ACKs beyond the former row budget retain the prefetched target phone history', async t => {
     const h = harness(t), message = localMessage('saved before ACK');
     const committed = await h.prepare([message]);
     h.setRequest((_path, count) => cloudSession(count === 1 ? 'old issued cloud' : 'fresh after eviction'));
@@ -312,10 +317,12 @@ test('ACK row-budget eviction after prefetch forces a fresh GET instead of accep
         const saved = await h.prepare([other], { app: 'other-card', conversation: 'other-' + i });
         await h.outbox.cloudACK(saved, { messages: [cloudMessage(other)] });
     }
-    assert.equal(await h.originalRead(scopeKey()), null, 'The actual quota must have evicted the target ACK row');
+    assert.equal((await h.originalRead(scopeKey())).payload.messages[0].mes, message.mes);
     const result = await h.take();
-    assert.equal(result.launch.messages[0].content, 'fresh after eviction');
-    assert.equal(h.requests.length, 2);
+    assert.equal(result.launch.messages[0].content, message.mes);
+    assert.equal(result.launch.local_chat[0].mes, message.mes);
+    assert.equal(result.launch.local_pending, false);
+    assert.equal(h.requests.length, 1);
     assert.equal(h.context.sessionPrefetchCache.size, 0);
 });
 
@@ -493,7 +500,7 @@ test('an earlier take finally cannot delete a replacement peer prefetch when its
     assert.equal(h.requests.length, 2);
 });
 
-test('stable ACK prompt state is attached only at consumption and preserves its exact matching source', async t => {
+test('stable ACK canonical prompt state is restored only at consumption and preserves its complete phone source', async t => {
     const h = harness(t), local = promptSnapshot(), cloud = cloudMessage(local);
     const committed = await h.prepare([local]);
     await h.acknowledge(committed, [cloud]);
@@ -501,17 +508,16 @@ test('stable ACK prompt state is attached only at consumption and preserves its 
     const raw = await h.prefetch();
     assert.equal(h.context.acknowledgedPromptTickets.get(raw.launch), undefined, 'Peer preparation does not merge template tuples');
     const result = await h.take();
-    assertCloudUnprojected(result, [cloud]);
-    const ticket = h.context.acknowledgedPromptTickets.get(result.launch);
-    assert.equal(ticket.owner, OWNER);
-    assert.equal(ticket.epoch, 0);
-    assert.equal(ticket.scope, scopeKey());
-    assert.deepEqual(clone(ticket.states[0].values.variables), [{ count: 1, nested: { value: 'once' } }]);
-    assert.equal(ticket.states[0].source.mes, local.mes);
+    assert.equal(result.launch.messages[0].content, local.mes);
+    assert.equal(result.launch.local_chat[0].mes, local.mes);
+    assert.deepEqual(clone(result.launch.local_chat[0].variables), [{ count: 1, nested: { value: 'once' } }]);
+    assert.deepEqual(clone(result.launch.local_chat[0].is_ejs_processed), [true]);
+    assert.equal(result.launch.local_pending, false);
+    assert.equal(h.context.acknowledgedPromptTickets.get(result.launch), undefined);
 });
 
 for (const mismatch of ['cloud edit', 'ACK edit', 'cloud reorder']) {
-    test(`stable ACK ${mismatch} keeps fresh cloud authoritative and cannot inherit mismatched template state`, async t => {
+    test(`stable ACK ${mismatch} cannot replace complete phone source or its canonical template state`, async t => {
         const h = harness(t);
         const locals = [promptSnapshot('FIRST'), promptSnapshot('SECOND')];
         locals[1].extra.homer_message_id = 'second-fixture-message';
@@ -525,10 +531,11 @@ for (const mismatch of ['cloud edit', 'ACK edit', 'cloud reorder']) {
         h.setRequest(() => cloudSession('unused', { launch: { ...cloudSession().launch, messages: fresh } }));
         await h.prefetch();
         const result = await h.take();
-        assertCloudUnprojected(result, fresh);
-        const ticket = h.context.acknowledgedPromptTickets.get(result.launch);
-        assert.equal(ticket?.states[0] ?? null, null);
-        if (mismatch === 'cloud reorder') assert.equal(ticket, undefined);
+        assert.deepEqual(result.launch.messages.map(message => message.content), locals.map(message => message.mes));
+        assert.deepEqual(result.launch.local_chat.map(message => message.mes), locals.map(message => message.mes));
+        assert.deepEqual(clone(result.launch.local_chat[0].variables), [{ count: 1, nested: { value: 'once' } }]);
+        assert.equal(result.launch.local_pending, false);
+        assert.equal(h.context.acknowledgedPromptTickets.get(result.launch), undefined);
     });
 }
 

@@ -1,6 +1,6 @@
 # Homer Android working notes
 
-- Current release: 1.18.1 / 354 (2026-10-07), PR #20 merged at `465e2a9`. Personal backup download/preview/private-copy import is live; Pixel 6 verified DownloadManager save, system picker import and signed 353→354 upgrade with login retained. Production is `160.202.46.157` / `ser0YeymdcIz0pT`; use the existing SSH key and main-workspace publisher. See `specs/user-local-backup-20261007.md`. Earlier PR #19 generation/switching verification remains in `specs/pr19-review-20261007.md`.
+- Current release: 1.18.1 / 354 (2026-10-07), commit `465e2a9`. Added user-local-backup page/entry and authenticated native ZIP download; production backup routes/web and signed APK are live. Pixel 6 verified 353→354 upgrade, login/history retention, latest-version source and 6,025-byte ZIP download from production. See `specs/user-local-backup-20261007.md`; PR #19 review evidence remains at `specs/pr19-review-20261007.md`.
 
 - Native source of truth: this repository's `android-app/`. Web source of truth: `E:\酒馆开发` (`grey7213/AIXingYue`). Never overwrite either tree with a contributor's full copy; apply and inspect patches against their pinned baseline.
 - Read `MAINTAINER.md`, `CONTRIBUTING.md`, and the relevant `specs/` before changing release behavior.
@@ -19,6 +19,15 @@
 ## Verified pitfalls
 
 - Local backup: WebView's existing DownloadListener ignores Blob URLs and external-browser downloads do not inherit the app Cookie. Use the fixed same-origin `/console/api/web/user-backup/download` through `HomerNative.downloadUserBackup()` on the active backup page, with DownloadManager and the current Cookie. Use a timestamped filename as the download title so DocumentsUI can distinguish backups. Pixel 6 API 33 verified actual ZIP save, system picker selection and import; see `specs/user-local-backup-20261007.md`.
+
+- R354: phone-owned canonical chat archives are durable data, not an ACK-evicted
+  cache. Read prepared histories locally before cloud authorization; save locally
+  before live/opportunistic uploads. Never replay generation or billing requests.
+  Test actual full runtime offline, not only storage helpers: standalone welcome
+  templates can append late into an embedded history. Async mutation recovery must
+  fence owner, scope and epoch, including shared chat-array reuse across accounts.
+  Protected client saves require the incremental Python provider deployment first;
+  a PR/APK merge alone is not a server deployment or pre-loss data recovery.
 
 - PR #19: asset enumeration cannot detect a module deleted from both source and APK. `card-experience-runtime.mjs` still imports Spine, so retain `spine-portrait.mjs`, `spine-webgl.js` and its license; `verify_apk_assets.py` checks these independently. On Windows, source-map content comparisons normalize only CRLF/LF and VM fixtures accept `\r?\n`; do not remove the content or mapping checks. R353 has five cumulative segments followed by the maintainer registration patch.
 

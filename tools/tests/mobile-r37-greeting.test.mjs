@@ -224,7 +224,7 @@ test('user/system content is not interpreted as authored assistant opening', () 
 
 test('actual local_chat load branch projects only the cloned first assistant message', async () => {
     const bridge = await readFile(new URL('../../.web-cache/tree/sillytavern-runtime/public/scripts/extensions/homer-bridge/index.js', import.meta.url), 'utf8');
-    const begin = bridge.indexOf('    const messages = Array.isArray(launch.local_chat)');
+    const begin = bridge.indexOf('    const fromLocal = Array.isArray(launch.local_chat);');
     const end = bridge.indexOf('    delete launch.local_chat;', begin);
     assert(begin > 0 && end > begin, 'expected actual canonical local load branch');
     const original = [canonical(), { ...canonical(alternate), extra: { homer_sync_id: 'later-message' } }];

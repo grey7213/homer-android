@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Homer complete conversation storage acknowledgement",
+  "description": "Phone-local complete snapshots are authoritative for local use. Cloud writes require a scoped CAS version and idempotent commit. Conflicts retain pending phone edits; an authenticated version rebase retries once, and acceptance atomically backs up the previous cloud body. Reading a history never initiates a cloud overwrite.",
+  "type": "object",
+  "required": ["protocol", "version", "complete", "message_count"],
+  "properties": {
+    "protocol": {"const": 2},
+    "version": {"type": "string", "pattern": "^[0-9a-f]{32}$"},
+    "complete": {"const": true},
+    "message_count": {"type": "integer", "minimum": 0},
+    "unchanged": {"type": "boolean"}
+  },
+  "additionalProperties": false
+}

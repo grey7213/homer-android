@@ -332,15 +332,21 @@ function actualSection(source, start, end) {
     return source.slice(first, last);
 }
 
-async function mountActualRuntime({ embedded = true, chrome = true, embed = '1', channel = 'synthetic-host', site = 'https://fixture.invalid' } = {}) {
+async function mountActualRuntime({ embedded = true, chrome = true, embed = '1', channel = 'synthetic-host', site = 'https://fixture.invalid',
+    bridgeToken = 'synthetic-fixture-token', localSession = false, refreshToken = null } = {}) {
     const h = harness();
     h.window.location = { origin: 'https://fixture.invalid' }; h.window.parent = embedded ? {} : h.window;
     if (chrome) h.document.documentElement.classList.add('homer-host-chrome');
     const canonical = new h.FixtureElement(), send = { matches: () => false, click: () => h.calls.onSubmit++ };
     canonical.value = 'canonical synthetic draft';
+    const notices = [];
+    h.calls.tokenRefresh = 0;
     h.document.querySelector = selector => ({ '#form_sheld': h.container, '#send_textarea': canonical, '#send_but': send }[selector] || null);
     Object.assign(h.context, { requestedEmbed: embed, requestedHostChannel: channel, HOST_CHANNEL: 'synthetic-host', requestedSiteOrigin: site,
         loadingLaunch: false, rollbackBusy: false, conversationRecoveryBlocked: false, generationBusy: false,
+        launch: { app_id: 'synthetic-app', conversation_id: 'synthetic-conversation', bridge_token: bridgeToken, local_session: localSession },
+        refreshBridgeToken: async () => { h.calls.tokenRefresh++; await refreshToken?.(h); },
+        showHostNotice: (text, level) => notices.push({ text, level }),
         scopeDraftKey: () => h.state.scope, scopeDrafts: new Map(), Event,
         isGenerating: () => h.state.generating, assertCanonicalConversationScope: () => { h.calls.scopeAssert = (h.calls.scopeAssert || 0) + 1; },
         getContext: () => ({ stopGeneration: () => { h.calls.onStop++; h.state.generating = false; } }),
@@ -349,7 +355,7 @@ async function mountActualRuntime({ embedded = true, chrome = true, embed = '1',
     vm.runInContext(actualSection(bridge, 'function safeSiteOrigin()', 'function notifyHost('), h.context);
     vm.runInContext(actualSection(bridge, 'let tavoComposer = null;', 'const imageGenerationUi ='), h.context);
     await h.context.installTavoConversationUi();
-    return { ...h, canonical, controller: vm.runInContext('tavoComposer', h.context) };
+    return { ...h, canonical, notices, controller: vm.runInContext('tavoComposer', h.context) };
 }
 
 test('actual runtime caller suppresses proxy sizing only for the same-origin embedded host-owned chrome', async t => {
@@ -380,4 +386,75 @@ test('actual host-owned runtime retains canonical input/send/stop ABI and restor
     assert.equal(h.geometry.offsetWidth, 0);
     h.document.documentElement.classList.remove('homer-host-chrome'); h.controller.refresh(); assert.ok(h.geometry.offsetWidth > 0);
     assert.equal(h.canonical, canonicalIdentity); assert.equal(h.canonical.value, 'new canonical synthetic');
+});
+
+for (const localSession of [false, true]) {
+    test(`actual composer does not send a tokenless offline launch (local_session=${localSession})`, async () => {
+        const h = await mountActualRuntime({ bridgeToken: '', localSession });
+        h.window.tav.chatComposer._activateTrailing();
+        await h.settle(); await new Promise(resolve => setImmediate(resolve));
+        assert.equal(h.calls.tokenRefresh, 1);
+        assert.equal(h.calls.onSubmit, 0);
+        assert.equal(h.calls.scopeAssert, 1);
+        assert.equal(h.canonical.value, 'canonical synthetic draft');
+        assert.equal(h.roles.input.value, h.canonical.value);
+        assert.equal(h.notices.at(-1).level, 'warning');
+        assert.match(h.notices.at(-1).text, /生成回复需要联网/);
+    });
+}
+
+test('actual composer sends once after a current-scope token refresh without replacing the draft', async () => {
+    const h = await mountActualRuntime({ bridgeToken: '', localSession: true,
+        refreshToken: async pending => { pending.context.launch.bridge_token = 'synthetic-refreshed-token'; } });
+    h.window.tav.chatComposer._activateTrailing();
+    await h.settle(); await new Promise(resolve => setImmediate(resolve));
+    assert.equal(h.calls.tokenRefresh, 1);
+    assert.equal(h.calls.onSubmit, 1);
+    assert.equal(h.calls.scopeAssert, 2);
+    assert.equal(h.notices.length, 0);
+    assert.equal(h.canonical.value, 'canonical synthetic draft');
+});
+
+test('actual composer can send with a live token even when the conversation was opened from a local archive', async () => {
+    const h = await mountActualRuntime({ localSession: true });
+    h.window.tav.chatComposer._activateTrailing();
+    await h.settle();
+    assert.equal(h.calls.tokenRefresh, 0);
+    assert.equal(h.calls.onSubmit, 1);
+});
+
+test('actual composer never sends into a changed launch after its old token refresh settles', async () => {
+    let release;
+    const gate = new Promise(resolve => { release = resolve; });
+    const h = await mountActualRuntime({ bridgeToken: '', refreshToken: async pending => {
+        const target = pending.context.launch;
+        await gate;
+        target.bridge_token = 'synthetic-old-scope-token';
+    } });
+    h.window.tav.chatComposer._activateTrailing();
+    await h.settle();
+    assert.equal(h.calls.tokenRefresh, 1); assert.equal(h.calls.onSubmit, 0);
+    h.context.launch = { app_id: 'other-app', conversation_id: 'other-conversation', bridge_token: 'synthetic-other-scope-token' };
+    h.state.scope = 'other-owner:other-conversation'; h.canonical.value = 'new account private draft';
+    h.controller.refresh();
+    release();
+    await h.settle(); await new Promise(resolve => setImmediate(resolve));
+    assert.equal(h.calls.onSubmit, 0);
+    assert.equal(h.canonical.value, 'new account private draft');
+    assert.equal(h.context.scopeDrafts.get(h.state.scope), undefined);
+    assert.equal(h.calls.scopeAssert, 1);
+    assert.equal(h.notices.at(-1).level, 'warning');
+});
+
+test('actual composer rechecks canonical scope after a token refresh within the same launch', async () => {
+    const h = await mountActualRuntime({ bridgeToken: '', refreshToken: async pending => {
+        pending.context.launch.bridge_token = 'synthetic-refreshed-token';
+        pending.context.assertCanonicalConversationScope = () => { throw new Error('Synthetic account changed during refresh'); };
+    } });
+    h.window.tav.chatComposer._activateTrailing();
+    await h.settle(); await new Promise(resolve => setImmediate(resolve));
+    assert.equal(h.calls.tokenRefresh, 1);
+    assert.equal(h.calls.onSubmit, 0);
+    assert.equal(h.canonical.value, 'canonical synthetic draft');
+    assert.equal(h.roles.input.value, h.canonical.value);
 });
