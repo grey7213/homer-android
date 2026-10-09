@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 
 // Exercise the actual harness catch/finally without launching another browser,
 // closing the root agent's fixture, or mistaking synthetic checks for UI QA.
-const source = await readFile(new URL('./chatarchive_browser_checks.mjs', import.meta.url), 'utf8');
+const source = (await readFile(new URL('./chatarchive_browser_checks.mjs', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
 const marker = '\n} catch (failure) {\n  runError = failure;';
 const index = source.indexOf(marker);
 assert.ok(index > 0, 'browser evidence finalizer remains available for regression');
