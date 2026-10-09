@@ -18,6 +18,8 @@
 
 ## Verified pitfalls
 
+- R363 source authorization (2026-10-09): the user accepted the restored full-site embedded workshop and requested submission. Update existing PR #22 with the exact eight native build inputs used by the verified immutable R363 APK, plus handoff notes; exclude unrelated worktree changes. Safe areas, visible error/retry and same-origin explicit verified downloads remain required. Normal site authorization and separate server rollout are not replaced by a source PR. No merge, website/server deployment or official APK publication is authorized by this request.
+
 - Latest explicit acceptance (2026-10-09): R360 landscape gameplay was accepted. The user now requests exploration's notification-adjacent entry, UI polish, explicit on-demand ChatArchive workshop downloads and account game/branch restore, then a source PR. This supersedes the earlier no-commit acceptance phase, but does not authorize a formal APK/server release. Preserve the clearly labelled equivalent reconstruction and director-free ordinary gameplay; never claim missing protected 1.2.6 Hot gameplay was recovered. Stopped integrations and private QA media/accounts are not release inputs.
 
 - R361 delivery: native login/download browser has no Homer bridge and carries only the workshop's own cookie. Exact revision/hash binds media to games. CAPK/ZIP import and native Spine rendering are verified; 7Z/RAR are not supported. Cloud game backups require separate deployment of `server-patches/archive-r361/`, not just this PR/APK. Unuploaded phone-private data cannot survive uninstall. Do not claim production restore or live providers from synthetic HTTP/SQLite tests. Reconstruct the full ordered web patch chain on a clean pin and verify packaged assets before handoff.

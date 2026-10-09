@@ -802,6 +802,7 @@ public final class HomerActivity extends Activity {
             if (!base.getScheme().equals(page.getScheme()) || !base.getRawAuthority().equals(page.getRawAuthority())
                     || !("/app/visual-novel.html".equals(page.getPath()) || "/app/chat.html".equals(page.getPath()))) return;
             Intent intent=new Intent(this, ArchiveWorkshopActivity.class);
+            intent.putExtra("dark",getPreferences(MODE_PRIVATE).getBoolean("app_theme_dark",false));
             if(reference!=null&&!reference.isEmpty()){
                 if(reference.length()>512)return;
                 try{
