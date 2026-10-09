@@ -43,3 +43,5 @@
 ## 源码提交
 
 分支 `feat/chatarchive-workshop-r361` 已合并上游 `main`（`3eeeeb7`）的既有个人备份功能，保留 R354 本机主存档保护及本次完整剧场增量；源码 PR 与正式部署分开。未部署服务端时请勿卸载应用验证重装恢复。
+
+源码 PR：https://github.com/grey7213/homer-android/pull/22。创建后 GitHub `build` 已启动；不把本地 PASS 当远端 CI 已完成，不自动合并或发布。最后的记录提交只更新交付文档，不更改已验证 APK 的原生代码或 Web 源码。
