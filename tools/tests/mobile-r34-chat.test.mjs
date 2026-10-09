@@ -111,7 +111,7 @@ test('host insets are sent once per real size and again when the runtime becomes
   const sent = [];
   const context = evaluate('function syncHostInsets(', 'const hostSizeObserver', {
     runtimeReady: false, insetsSignature: '',
-    document: { querySelector: selector => ({ getBoundingClientRect: () => ({ height: selector === '.preview-header' ? 48 : 74 }) }) },
+    document: { body: {classList:{contains:()=>false}}, querySelector: selector => ({ getBoundingClientRect: () => ({ height: selector === '.preview-header' ? 48 : 74 }) }) },
     postRuntimeCommand(type, payload, options) { sent.push({ type, ...payload, ...options }); return true; },
   });
   context.syncHostInsets(); assert.equal(sent.length, 0);

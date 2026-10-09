@@ -5,6 +5,8 @@ import vm from 'node:vm';
 import { createHash } from 'node:crypto';
 import { createCardPreparationCache } from '../../sillytavern-runtime/public/scripts/homer-stable-template.mjs';
 import { preloadStaticDialogueUi } from '../../sillytavern-runtime/public/scripts/homer-static-ui-preload.mjs';
+import { sanitizeRuntimeValue } from '../../sillytavern-runtime/public/scripts/homer-local-runtime.mjs';
+import { emptyLocalSessions } from './helpers/bridge-session-vm.mjs';
 
 // Reuse the established actual switch/recovery/activation fixture. No token,
 // host queue, receive, bootstrap, notification or commit function is replaced.
@@ -16,7 +18,7 @@ const recovery = fs.readFileSync(new URL('./mobile-r35-switch-recovery.test.mjs'
 const fixtureStart = recovery.indexOf('function section(');
 const fixtureEnd = recovery.indexOf('async function switchTarget(h)', fixtureStart);
 assert.ok(fixtureStart >= 0 && fixtureEnd > fixtureStart, 'Existing recovery fixture boundaries');
-const fixtureContext = vm.createContext({ assert, vm, bridge, script, URL });
+const fixtureContext = vm.createContext({ assert, vm, bridge, script, URL, sanitizeRuntimeValue, emptyLocalSessions });
 vm.runInContext(recovery.slice(fixtureStart, fixtureEnd), fixtureContext);
 console.log('Loaded current shipping source SHA256:', JSON.stringify({
     bridge: createHash('sha256').update(bridge).digest('hex'),
@@ -64,6 +66,7 @@ function harness(options = {}) {
     scope.document.documentElement = { dataset: {}, classList: { add: value => h.classSet.add(value) } };
     Object.assign(scope, {
         preloadStaticDialogueUi,
+        localRuntime: null, localSessions: emptyLocalSessions(), sanitizeRuntimeValue,
         HOST_CHANNEL: 'fixture-host-channel', requestedEmbed: '1', requestedHostChannel: 'fixture-host-channel', requestedIdleHostDisplay: false,
         safeSiteOrigin: () => 'https://fixture.test', prewarmOnly: true, coreAvailable: true,
         bridgeStartScheduled: false, launchSessionPreloadPromise: null, prewarmBootstrapPromise: null,

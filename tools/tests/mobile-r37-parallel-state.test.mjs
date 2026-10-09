@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import { createChatOutbox } from '../../.web-cache/tree/sillytavern-runtime/public/scripts/homer-chat-outbox.mjs';
 import { transactionIDB } from './helpers/transaction-idb.mjs';
+import { emptyLocalSessions } from './helpers/bridge-session-vm.mjs';
 
 const source = fs.readFileSync(new URL('../../.web-cache/tree/sillytavern-runtime/public/scripts/extensions/homer-bridge/index.js', import.meta.url), 'utf8');
 function section(start, end) {
@@ -25,7 +26,7 @@ function harness() {
         reconcileStorageAccount: () => context.owner,
         cloudSyncScope: () => scope(context.session.user.id, context.launch.app_id, context.launch.conversation_id),
         queryString: (app, conv) => new URLSearchParams({ app_id: app, conversation_id: conv }).toString(),
-        chatOutbox: outbox, cloneJsonObject: clone, synchronizeJsonContainer: (target, values) => Object.assign(target, clone(values)),
+        chatOutbox: outbox, localSessions: emptyLocalSessions(), cloneJsonObject: clone, synchronizeJsonContainer: (target, values) => Object.assign(target, clone(values)),
         extensionSettingsBaseline: { memory: { enabled: false } }, extension_settings: {},
         replaceExtensionSettings: value => { context.extension_settings = clone(value); applied.push(clone(value)); },
         extensionSettingsSnapshot: () => ({ signature: JSON.stringify(context.extension_settings) }),

@@ -13,6 +13,7 @@ import { hasNonemptyDOMText } from '../../.web-cache/tree/sillytavern-runtime/pu
 import { holdLargeSourceLayout, SOURCE_LAYOUT_HOLD_CLASS } from '../../.web-cache/tree/sillytavern-runtime/public/scripts/homer-source-layout.mjs';
 import { transactionIDB } from './helpers/transaction-idb.mjs';
 import { clearCardTransportMemory } from '../../sillytavern-runtime/public/scripts/homer-card-transport-cache.mjs';
+import { emptyLocalSessions } from './helpers/bridge-session-vm.mjs';
 
 const source = fs.readFileSync(new URL('../../.web-cache/tree/sillytavern-runtime/public/scripts/extensions/homer-bridge/index.js', import.meta.url), 'utf8');
 function section(start, end) {
@@ -215,7 +216,7 @@ function bridgeHarness() {
     const outbox = createChatOutbox({ indexedDB: transactionIDB(), databaseName: 'r37-prompt' });
     const context = {
         owner: 'fixture-owner', storageAccountEpoch: 0, reconcileStorageAccount: () => context.owner,
-        chatOutbox: outbox, sessionReadFences: new WeakMap(), storageAckStamps: new Map(),
+        chatOutbox: outbox, localSessions: emptyLocalSessions(), sessionReadFences: new WeakMap(), storageAckStamps: new Map(),
         acknowledgedPromptTickets: new WeakMap(), prepareAcknowledgedPromptStates, restoreAcknowledgedPromptStates,
         capturePromptMessageState, samePromptMessageSource, clearPromptMessageState,
         cloneJsonValue: clone, storageAckKey: value => value,
@@ -234,14 +235,16 @@ async function acknowledged(harness, local, ack) {
     return harness.outbox.fence(scope());
 }
 
-test('actual stable-ACK preferLocalSession attaches only a launch-keyed validated tuple ticket without overriding fresh body', async () => {
+test('actual stable-ACK preference preserves the complete phone canonical prompt state', async () => {
     const h = bridgeHarness(), locals = [snapshotMessage(localMessage())], clouds = locals.map(cloudMessage);
     const fence = await acknowledged(h, locals, clouds), payload = sessionPayload(clone(clouds));
     assert.equal(await h.context.preferLocalSession(payload, 'fixture-card', 'fixture-conversation', fence), payload);
-    assert.equal(payload.launch.local_chat, undefined); assert.deepEqual(payload.launch.messages, clouds);
-    const ticket = h.context.acknowledgedPromptTickets.get(payload.launch);
-    assert.equal(ticket.owner, 'fixture-owner'); assert.equal(ticket.epoch, 0); assert.equal(ticket.scope, scope());
-    assert.deepEqual(clone(ticket.states[0].values.variables), [{ count: 1, nested: { value: 'once' } }]);
+    assert.equal(payload.launch.local_chat[0].mes, locals[0].mes);
+    assert.deepEqual(clone(payload.launch.local_chat[0].variables), [{ count: 1, nested: { value: 'once' } }]);
+    assert.deepEqual(clone(payload.launch.local_chat[0].is_ejs_processed), [true]);
+    assert.deepEqual(clone(payload.launch.messages), clouds);
+    assert.equal(payload.launch.local_pending, false);
+    assert.equal(h.context.acknowledgedPromptTickets.get(payload.launch), undefined);
     assert.equal(h.context.acknowledgedPromptTickets.get({ ...payload.launch }), undefined);
 });
 
@@ -273,6 +276,7 @@ function loadHarness(h, payload) {
     const chatRoot = { classList: { contains: name => classes.has(name), add: name => classes.add(name), remove: name => classes.delete(name) } };
     Object.assign(h.context, {
         session: payload, launch: payload.launch, runtimeVariables: {}, suppressSync: false,
+        cloudSyncScope: () => JSON.stringify([String(h.context.session.user.id), String(h.context.launch.app_id), String(h.context.launch.conversation_id)]),
         holdLargeSourceLayout: () => holdLargeSourceLayout(chatRoot),
         restoreCanonicalGreeting, greetingSwipes, regex_placement: { AI_OUTPUT: 2 },
         getRegexScripts: () => [], getRegexedString: raw => raw,
@@ -285,13 +289,43 @@ function loadHarness(h, payload) {
         } },
         conversationModelSettings: () => ({}), prefetchPersonaAvatarsForCurrentChat() {},
         scrollChatToBottom() { assert.equal(classes.has(SOURCE_LAYOUT_HOLD_CLASS), false); },
-        scrollOnMediaLoad() {}, scheduleSync() {}, scheduleHostStateNotify() {},
+        scrollOnMediaLoad() {}, scheduleSync() {}, scheduleHostStateNotify() {}, updateRuntimeStatus() {},
         cloneJsonValue: clone,
+        captureCurrentChatStorage: () => {
+            const captured = { app_id: 'fixture-card', conversation_id: 'fixture-conversation', messages: clone(chat) };
+            return { scope: scope(), storageVersion: payload.launch.storage?.version || '', payload: captured, body: JSON.stringify(captured) };
+        },
     });
+    h.context.sessionReadFences.set(payload, { owner:'fixture-owner', epoch:h.context.storageAccountEpoch, scope:scope() });
     vm.runInContext(section('function normalizeOpeningMessage(', 'function cloudMessageToDialogue('), h.context);
     vm.runInContext(section('function cloudMessageToDialogue(', 'function serializeChat('), h.context);
     return { events, prints, chat, classes };
 }
+
+function installProjectionTicket(h, payload, locals, clouds) {
+    // The compatibility projection path still consumes only its exact verified
+    // tuple once; ordinary phone-owned reopen uses the full canonical local chat.
+    delete payload.launch.local_chat;
+    h.context.acknowledgedPromptTickets.set(payload.launch, { owner: 'fixture-owner', epoch: h.context.storageAccountEpoch,
+        scope: scope(), states: prepareAcknowledgedPromptStates(clouds, locals, clouds) });
+}
+
+test('actual canonical phone hydration preserves an intentionally empty rollback instead of regenerating the card greeting', async () => {
+    const h = bridgeHarness(), payload = sessionPayload([]);
+    payload.launch.card = { data: { name: 'Fresh card', first_mes: 'Must not return', alternate_greetings: ['Not this either'] } };
+    await h.outbox.prepare({ scope: scope(), body: JSON.stringify({
+        app_id: 'fixture-card', conversation_id: 'fixture-conversation', messages: [],
+    }) });
+    await h.context.preferLocalSession(payload, 'fixture-card', 'fixture-conversation', await h.outbox.fence(scope()));
+    assert.deepEqual(clone(payload.launch.local_chat), []);
+    const loaded = loadHarness(h, payload);
+    await h.context.loadCloudChat();
+    assert.deepEqual(loaded.chat, []);
+    assert.deepEqual((await h.outbox.read(scope())).payload.messages, []);
+    assert.equal((await h.outbox.read(scope())).pending, true);
+    assert.deepEqual(loaded.prints[0], []);
+    assert.deepEqual(loaded.events, ['changed', 'loaded']);
+});
 
 test('actual cloud hydration releases the source layout on an event failure and restores sync state', async () => {
     const h = bridgeHarness(), payload = sessionPayload([cloudMessage(snapshotMessage(localMessage()))]);
@@ -308,6 +342,7 @@ test('actual cloud projection consumes the exact launch ticket before print/even
     const fence = await acknowledged(h, locals, clouds), payload = sessionPayload(clone(clouds));
     payload.launch.card = { data: { name: 'Fresh card', first_mes: 'START', alternate_greetings: ['START alternate'] } };
     await h.context.preferLocalSession(payload, 'fixture-card', 'fixture-conversation', fence);
+    installProjectionTicket(h, payload, locals, clouds);
     const loaded = loadHarness(h, payload);
     await h.context.loadCloudChat();
     assert.deepEqual(clone(loaded.chat[0].is_ejs_processed), [true]);
@@ -325,6 +360,7 @@ test('actual greeting canonicalization invalidates the formerly rendered state t
     const fence = await acknowledged(h, locals, clouds), payload = sessionPayload(clone(clouds));
     payload.launch.card = { data: { name: 'Fresh card', first_mes: 'START', alternate_greetings: [] } };
     await h.context.preferLocalSession(payload, 'fixture-card', 'fixture-conversation', fence);
+    installProjectionTicket(h, payload, locals, clouds);
     const loaded = loadHarness(h, payload);
     h.context.getRegexScripts = () => [{ scriptName: 'fixture-author-rule', findRegex: '^START$', replaceString: rendered, placement: [2], markdownOnly: true, disabled: false }];
     h.context.getRegexedString = raw => raw === 'START' ? rendered : raw;
@@ -339,6 +375,7 @@ test('actual ticket consumption rejects changed owner/epoch/scope or a distinct 
         const h = bridgeHarness(), locals = [snapshotMessage(localMessage())], clouds = locals.map(cloudMessage);
         const fence = await acknowledged(h, locals, clouds), payload = sessionPayload(clone(clouds));
         await h.context.preferLocalSession(payload, 'fixture-card', 'fixture-conversation', fence);
+        installProjectionTicket(h, payload, locals, clouds);
         const loaded = loadHarness(h, payload);
         if (mode === 'owner') h.context.owner = 'foreign-owner';
         if (mode === 'epoch') h.context.storageAccountEpoch++;
@@ -353,6 +390,7 @@ test('same-owner login observed by actual reconciliation advances epoch before a
     const h = bridgeHarness(), locals = [snapshotMessage(localMessage())], clouds = locals.map(cloudMessage);
     const fence = await acknowledged(h, locals, clouds), payload = sessionPayload(clone(clouds));
     await h.context.preferLocalSession(payload, 'fixture-card', 'fixture-conversation', fence);
+    installProjectionTicket(h, payload, locals, clouds);
     const loaded = loadHarness(h, payload);
     // The local login cache has re-established the same owner, but this runtime
     // has not reconciled that new login yet. Use the real account helper rather

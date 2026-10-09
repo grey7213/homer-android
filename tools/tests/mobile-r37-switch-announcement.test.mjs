@@ -41,6 +41,7 @@ function harness() {
     const context = vm.createContext({
         HOST_CHANNEL: 'homer:dialogue-host:v1', PREVIEW_CACHE_PREFIX: 'homer.dialogue.preview.v2:',
         runtimeReady: true, runtimeBound: true, runtimeState: { generating: false }, activeAppId: 'card-chat-a',
+        requestedPresentation: null, forwardPresentationVisibility() {}, presentationVisibility: null, clearVisibleGameRequest:()=>false,
         activeConversationId: 'chat-a', switchShellScope: '', previewRequestId: 0, launchRequestId: 0,
         readyHandoffTimer: 0, insetsSignature: '', adminPreview: false, adminBindPending: false,
         prewarming: false, pendingTool: null, pendingDraft: '', pendingCommands: [],

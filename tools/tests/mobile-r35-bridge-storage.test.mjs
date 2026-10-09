@@ -11,6 +11,8 @@ import { transactionIDB } from './helpers/transaction-idb.mjs';
 import { createHash } from 'node:crypto';
 import { cardTransportIDB } from './helpers/card-transport-idb.mjs';
 import { createCardTransportCache, clearCardTransportMemory } from '../../sillytavern-runtime/public/scripts/homer-card-transport-cache.mjs';
+import { emptyLocalSessions } from './helpers/bridge-session-vm.mjs';
+import { sanitizeRuntimeValue } from '../../sillytavern-runtime/public/scripts/homer-local-runtime.mjs';
 
 // Load actual product functions, rather than rewriting a second implementation.
 const source = fs.readFileSync(new URL('../../.web-cache/tree/sillytavern-runtime/public/scripts/extensions/homer-bridge/index.js', import.meta.url), 'utf8');
@@ -24,10 +26,11 @@ const deferred = () => { let resolve, reject; const promise = new Promise((a,b) 
 const turn = () => new Promise(resolve => setImmediate(resolve));
 const same = (a,b) => assert.equal(JSON.stringify(a), JSON.stringify(b));
 const id = (owner='test-owner-a', app='test-card-a', conv='test-conversation-a') => JSON.stringify([owner,app,conv]);
+const storage = { protocol:2, complete:true, version:'a'.repeat(32), message_count:1 };
 const payload = (text, app='test-card-a', conv='test-conversation-a') => ({app_id:app,conversation_id:conv,title:'Test',messages:[{mes:text,is_user:false,extra:{}}]});
 const snapshot = (text, owner='test-owner-a', app='test-card-a', conv='test-conversation-a') =>
-    captureCloudSync(id(owner,app,conv), payload(text,app,conv));
-const acknowledgement = text => ({messages:[{id:'test-cloud-message',role:'assistant',content:text,created_at:123}]});
+    ({...captureCloudSync(id(owner,app,conv), payload(text,app,conv)),storageVersion:storage.version});
+const acknowledgement = text => ({storage, messages:[{id:'test-cloud-message',role:'assistant',content:text,created_at:123}]});
 const sessionPayload = (text='old cloud', owner='test-owner-a') => ({user:{id:owner},
     launch:{app_id:'test-card-a',conversation_id:'test-conversation-a',card:{name:'Test'},bridge_token:true,
         messages:[{id:'test-cloud-message',role:'assistant',content:text}]}});
@@ -44,8 +47,8 @@ function harness({ cookieOnly = false } = {}) {
     const cache = new Map(cookieOnly ? [] : [['ai_xingyue_logged_in','1'],['ai_xingyue_user',JSON.stringify({id:'test-owner-a'})]]);
     const requests=[],statuses=[],notices=[],events=[],listeners=new Map(),marks=[],memoryClears=[];
     const context = {
-        session:{user:{id:'test-owner-a'}},launch:{app_id:'test-card-a',conversation_id:'test-conversation-a',card:{name:'Test'}},
-        chat:[{mes:'initial text',is_user:false,extra:{}}],chatOutbox:outbox,
+        session:{user:{id:'test-owner-a'}},launch:{app_id:'test-card-a',conversation_id:'test-conversation-a',card:{name:'Test'},storage},
+        chat:[{mes:'initial text',is_user:false,extra:{}}],chatOutbox:outbox,localSessions:emptyLocalSessions(),sanitizeRuntimeValue,
         captureCloudSync,canApplyCloudSync,createCloudSyncQueue,AbortController,URLSearchParams,
         storageOwner:cookieOnly?'':'test-owner-a',verifiedStorageOwner:'',storageAccountEpoch:0,storageRequests:new Set(),outboxReplay:null,
         clearCardTransportMemory:(...args)=>{memoryClears.push(args);clearCardTransportMemory(...args);},
@@ -90,6 +93,7 @@ function harness({ cookieOnly = false } = {}) {
         section('async function loadRuntimeState(', 'async function refreshOfficialRegex('),
         'globalThis.queues={cloudSyncQueue,extensionSyncQueue};',
     ].join('\n'),context);
+    context.sessionReadFences.set(context.session, { owner:'test-owner-a', epoch:0, scope:id() });
     const changeOwner = owner => {
         if(owner){cache.set('ai_xingyue_logged_in','1');cache.set('ai_xingyue_user',JSON.stringify({id:owner}));}
         else{cache.delete('ai_xingyue_logged_in');cache.delete('ai_xingyue_user');context.invalidateStorageAccount();return;}
@@ -515,7 +519,7 @@ test('actual cloud load identifies account before persona prefetch and finishes 
     assert.equal(h.context.suppressSync,false);
     assert.equal(canonical.chatMetadata.homer_preset_overrides,undefined);
     assert.equal(canonical.chatMetadata.homer_bridge.app_id,'test-card-a');
-    same(calls,['prefetch','paint','scroll','media','sync','notify']);
+    same(calls,['prefetch','paint','scroll','media','notify']);
 });
 
 test('unrelated scope or extension-kind ACK never invalidates another missing-row chat GET', async () => {
@@ -534,7 +538,7 @@ test('unrelated scope or extension-kind ACK never invalidates another missing-ro
     assert.equal(gets,1);
 });
 
-test('same-scope ACK plus row eviction refetches only once instead of accepting an old GET', async () => {
+test('same-scope ACK remains phone-authoritative after other histories acknowledge beyond the former row limit', async () => {
     const h=harness(), remote=deferred(),started=deferred();
     const original=await h.outbox.prepare(snapshot('new saved history'));
     let gets=0;
@@ -546,10 +550,13 @@ test('same-scope ACK plus row eviction refetches only once instead of accepting 
         const other=await h.outbox.prepare(snapshot('other '+i,'test-owner-a','other-card','other-'+i));
         await h.outbox.cloudACK(other,acknowledgement('other '+i));
     }
-    assert.equal(await h.outbox.read(id()),null);
+    assert.equal((await h.outbox.read(id())).payload.messages[0].mes,'new saved history');
     remote.resolve(sessionPayload('stale previously issued GET'));
-    assert.equal((await get).launch.messages[0].content,'fresh authoritative history');
-    assert.equal(gets,2);
+    const loaded=await get;
+    assert.equal(loaded.launch.messages[0].content,'new saved history');
+    assert.equal(loaded.launch.local_chat[0].mes,'new saved history');
+    assert.equal(loaded.launch.local_pending,false);
+    assert.equal(gets,1);
 });
 
 test('bounded ACK stamp token eviction also fences an old missing-row GET', async () => {
@@ -585,21 +592,28 @@ test('extension settings locally commit before remote wait and do not mutate lat
     h.context.requestJson=async()=>{sent.resolve();return remote.promise;};
     const saved=h.context.persistExtensionSettingsSnapshot({force:true});
     await sent.promise;
+    assert.equal(await saved,true,'a local commit does not wait for the remote acknowledgement');
+    const localScope=h.context.lastExtensionSettingsScope,localSignature=h.context.lastExtensionSettingsSignature;
     assert.equal((await h.outbox.read(id(),'extension-settings')).payload.extension_settings.memory.enabled,true);
     h.context.launch={app_id:'other-card',conversation_id:'other-conversation'};
     remote.resolve({extension_settings:{}});
-    assert.equal(await saved,true);
-    assert.equal(h.context.lastExtensionSettingsScope,'');
-    assert.equal(h.context.lastExtensionSettingsSignature,'');
+    await turn();
+    assert.equal(h.context.lastExtensionSettingsScope,localScope);
+    assert.equal(h.context.lastExtensionSettingsSignature,localSignature);
+    assert.notEqual(h.context.lastExtensionSettingsScope,h.context.extensionSettingsScope());
 });
 
-test('account change during extension ACK cannot mark old account settings as saved in current scope', async () => {
+test('account change during background extension ACK cannot replace its already committed phone settings signature', async () => {
     const h=harness(), ack=h.outbox.cloudACK.bind(h.outbox), gate=deferred(), started=deferred();
     h.outbox.cloudACK=async(...args)=>{started.resolve();await gate.promise;return ack(...args);};
     const saved=h.context.persistExtensionSettingsSnapshot({force:true});
-    await started.promise;h.changeOwner('test-owner-b');gate.resolve();await assert.rejects(saved,/账号已切换/);
-    assert.equal(h.context.lastExtensionSettingsScope,'');
-    assert.equal(h.context.lastExtensionSettingsSignature,'');
+    await started.promise;assert.equal(await saved,true);
+    const localScope=h.context.lastExtensionSettingsScope,localSignature=h.context.lastExtensionSettingsSignature;
+    h.changeOwner('test-owner-b');gate.resolve();await turn();
+    assert.equal(h.context.lastExtensionSettingsScope,localScope);
+    assert.equal(h.context.lastExtensionSettingsSignature,localSignature);
+    assert.equal((await h.outbox.read(id(),'extension-settings')).payload.extension_settings.memory.enabled,true);
+    assert.equal(await h.outbox.read(id('test-owner-b'),'extension-settings'),null);
 });
 
 test('extension-state stale GET overlays pending settings, not cloud defaults', async () => {
@@ -642,21 +656,25 @@ test('outbox replay is owner-only, rereads current durable version and never gen
     assert.equal((await pending('test-owner-b')).length,1);
 });
 
-test('cached skipped ACK clears a recreated outbox row rather than retaining ghost pending forever', async () => {
+test('unchanged acknowledged phone chat stays retained and makes no new POST on merely viewing', async () => {
     const h=harness();
     h.context.chat[0].extra={homer_message_id:'test-cloud-message',homer_sync_id:'test-cloud-message',homer_created_at:123};
     await h.context.syncCloudChat();
-    assert.equal((await h.outbox.read(id())).pending,false);
+    const original=await h.outbox.read(id());
+    assert.equal(original.pending,false);
     // Other active runtimes may acknowledge rows in the same account database,
-    // evicting this row without changing this bridge's safe deduplication ACK.
+    // but no longer evict this phone-owned history or change its identity.
     for(let i=0;i<24;i++){
         const row=await h.outbox.prepare(snapshot('other '+i,'test-owner-a','other-card','other-'+i));
         await h.outbox.cloudACK(row,acknowledgement('other '+i));
     }
-    assert.equal(await h.outbox.read(id()),null);
+    assert.equal((await h.outbox.read(id())).commitId,original.commitId);
     assert.equal(await h.context.syncCloudChat(),true);
     assert.equal(h.requests.length,1,'identical already acknowledged body should use its safe cached ACK');
-    assert.equal((await h.outbox.read(id())).pending,false,'cached ACK must acknowledge the recreated commitId');
+    const retained=await h.outbox.read(id());
+    assert.equal(retained.commitId,original.commitId,'viewing is not an edit or a new pending save');
+    assert.equal(retained.revision,original.revision);
+    assert.equal(retained.pending,false);
 });
 
 test('actual source activates replay on online/start and rechecks local state at prefetch consume', () => {

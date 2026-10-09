@@ -18,6 +18,22 @@ def dialogueRuntimeRoot = new File(workspaceRoot, "sillytavern-runtime")
 def dialogueClientSource = new File(dialogueRuntimeRoot, "public")
 def dialogueLibraryOutput = new File(dialogueRuntimeRoot, "dist/_webpack")
 def generatedClientAssets = layout.buildDirectory.dir("generated/homerClientAssets")
+def generatedArchiveTestAssets = layout.buildDirectory.dir("generated/archiveTestAssets")
+
+// The synthetic service host is packaged in the test APK only, never the app.
+tasks.register("syncArchiveTestAssets", Sync) {
+    from(new File(workspaceRoot, "tools/tests")) { include "chatarchive_game_fixture.html" }
+    def sample = providers.gradleProperty("HOMER_ARCHIVE_QA_SAMPLE").orElse("").get()
+    if (!sample.isEmpty()) from(new File(sample)) { rename { "archive-workshop-qa.zip" } }
+    into(generatedArchiveTestAssets)
+}
+tasks.configureEach { task ->
+    if (task.name.contains("AndroidTest")) {
+        task.dependsOn("syncArchiveTestAssets")
+    }
+}
+def archiveStarterPath = providers.gradleProperty("HOMER_ARCHIVE_STARTER_PACK").orElse("").get()
+def archiveMediaBase = providers.gradleProperty("HOMER_ARCHIVE_MEDIA_BASE_URL").orElse("").get()
 
 // 这两棵树由 tools/bootstrap.py 装配，不在版本控制内。缺了直接报清楚，
 // 否则 syncHomerClientAssets 会安静地打出一个没有前端资源的 APK。
@@ -50,8 +66,15 @@ tasks.register("syncHomerClientAssets", Sync) {
     dependsOn(tasks.named("compileHomerDialogueLibraries"))
     inputs.files(fileTree(new File(workspaceRoot, "tools/webview-compat")) { exclude "node_modules/**" })
     into(generatedClientAssets)
+    if (!archiveStarterPath.isEmpty()) {
+        File starter = new File(archiveStarterPath)
+        if (!starter.isFile()) throw new GradleException("HOMER_ARCHIVE_STARTER_PACK is missing")
+        from(starter) { into "archive"; rename { "starter.hcap" } }
+    }
     from(webClientSource) {
         into "client/web"
+        // The user stopped this integration; retain work locally, do not ship it.
+        exclude "app/ai-story.html", "app/assets/ai-story/**", "app/assets/js/ai-story-bootstrap.mjs"
     }
     from(dialogueClientSource) {
         into "client/runtime"
@@ -114,8 +137,8 @@ android {
         applicationId "org.nebula.horizon.composeai"
         minSdk 26
         targetSdk 35
-        versionCode 354
-        versionName "1.18.1"
+        versionCode 363
+        versionName "1.18.10"
         buildConfigField "String", "PATCH_PUBLIC_KEY_B64", javaString(configuredPatchKey)
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -129,9 +152,12 @@ android {
             applicationIdSuffix providers.gradleProperty("HOMER_DEBUG_APPLICATION_SUFFIX").orElse(".debug").get()
             versionNameSuffix "-debug"
             buildConfigField "String", "SERVER_BASE_URL", javaString(configuredDebugServer)
+            buildConfigField "String", "ARCHIVE_MEDIA_BASE_URL", javaString(archiveMediaBase)
         }
         release {
             buildConfigField "String", "SERVER_BASE_URL", javaString(configuredServer)
+            // Acceptance-only local media origins never leak into a formal build.
+            buildConfigField "String", "ARCHIVE_MEDIA_BASE_URL", javaString("")
             minifyEnabled false
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
         }
@@ -148,6 +174,7 @@ android {
 
     sourceSets {
         main.assets.srcDir(generatedClientAssets)
+        androidTest.assets.srcDir(generatedArchiveTestAssets)
     }
 }
 

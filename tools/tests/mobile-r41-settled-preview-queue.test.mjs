@@ -60,9 +60,9 @@ test('shipping state consumer publishes live UI immediately and queues only sett
     const source = fs.readFileSync(new URL('../../frontend/app/assets/js/chat.js', import.meta.url), 'utf8');
     const begin = source.indexOf('function cacheRuntimeState('), end = source.indexOf('function acceptsRuntimeTransition(', begin);
     const calls = [], listeners = new Map();
-    const scope = { adminPreview: false, activeAppId: 'synthetic-card', activeConversationId: 'a', runtimeState: null,
+    const scope = { adminPreview: false, runtimeBindingOwner: ()=>'owner', runtimeAccountEpoch:0, activeAppId: 'synthetic-card', activeConversationId: 'a', runtimeState: null,
         pendingDraft: '', previewSend: {}, previewInput: {}, history: [], settingsSignature: '', SETTINGS_CACHE_PREFIX: 'test:',
-        setRuntimeOverlay() {}, conversationSnapshot: value => snapshot(value.conversation_id), canAcceptRuntimeDraft: () => true,
+        setRuntimeOverlay() {}, forwardPresentationVisibility() {}, conversationSnapshot: value => snapshot(value.conversation_id), canAcceptRuntimeDraft: () => true,
         settledPreviewQueue: { enqueue: value => calls.push(['queue', value.conversation_id]), flush: () => calls.push(['flush']) },
         canUseIdleHostDisplay: () => false,
         writeCachedConversation() { throw Error('Synchronous preview write'); }, writeCachedHistory() {}, scopedKey: value => value,

@@ -1,3 +1,8 @@
 # Diff payloads are build inputs: never normalize their authored line endings.
 web-patches/*.patch -text
 server-patches/**/*.patch -text
+# Server handoff manifests hash canonical LF bytes on every platform.
+tools/server/homer_chat_storage.py text eol=lf
+tools/server/homer_archive_storage.py text eol=lf
+server-patches/chat-storage-r354-v2/homer_chat_storage.py text eol=lf
+server-patches/archive-r361/homer_archive_storage.py text eol=lf

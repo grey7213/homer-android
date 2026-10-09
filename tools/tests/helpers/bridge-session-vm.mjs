@@ -3,6 +3,14 @@
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { prepareAcknowledgedPromptStates } from '../../../.web-cache/tree/sillytavern-runtime/public/scripts/homer-prompt-message-state.mjs';
+import { sanitizeRuntimeValue } from '../../../.web-cache/tree/sillytavern-runtime/public/scripts/homer-local-runtime.mjs';
+
+// These older fixtures isolate the selected bridge behavior. Real durable
+// session storage is exercised independently by the R354 archive tests.
+export const emptyLocalSessions = () => ({
+    read: async () => null, remember: async () => {}, resource: async () => null,
+    rememberResource: async () => {}, list: async () => [],
+});
 
 export function sessionVM(source, overrides = {}) {
     const start = source.indexOf('async function preferLocalSession(');
@@ -21,6 +29,7 @@ export function sessionVM(source, overrides = {}) {
             fence: async () => ({ revision: 0, ackRevision: 0, commitId: null }),
             read: async () => null,
         },
+        localSessions: emptyLocalSessions(), localRuntime: null, sanitizeRuntimeValue,
         cloneJsonValue: value => JSON.parse(JSON.stringify(value)),
         // The transport cache is tested separately; this established session
         // fixture retains its original controlled request peripheral.

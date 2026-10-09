@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import { createChatOutbox } from '../../sillytavern-runtime/public/scripts/homer-chat-outbox.mjs';
 import { transactionIDB } from './helpers/transaction-idb.mjs';
+import { emptyLocalSessions } from './helpers/bridge-session-vm.mjs';
 
 const source = fs.readFileSync(new URL('../../sillytavern-runtime/public/scripts/extensions/homer-bridge/index.js', import.meta.url), 'utf8');
 function section(start, end) {
@@ -31,7 +32,7 @@ function harness(t) {
             if (path === '/api/homer/models') return { list: [{ id: 'off', enabled: false }, { id: 'chosen', name: 'visible' }], default_id: 'chosen' };
             return { scripts: [{ id: 'rule', findRegex: 'x', replaceString: 'y' }] };
         },
-        chatOutbox: outbox, cloneJsonObject: clone, synchronizeJsonContainer: (a, b) => Object.assign(a, clone(b)),
+        chatOutbox: outbox, localSessions: emptyLocalSessions(), cloneJsonObject: clone, synchronizeJsonContainer: (a, b) => Object.assign(a, clone(b)),
         extensionSettingsBaseline: { memory: { enabled: false } }, extension_settings: {}, runtimeVariables: {},
         runtimeUiData: { models: [], modelDefaultId: '' }, payloadList: data => Array.isArray(data) ? data : data?.list || [],
         replaceExtensionSettings: value => { c.extension_settings = clone(value); applied.push(clone(value)); },

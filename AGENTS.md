@@ -1,6 +1,6 @@
 # Homer Android working notes
 
-- Current release: 1.18.1 / 354 (2026-10-07), PR #20 merged at `465e2a9`. Personal backup download/preview/private-copy import is live; Pixel 6 verified DownloadManager save, system picker import and signed 353→354 upgrade with login retained. Production is `160.202.46.157` / `ser0YeymdcIz0pT`; use the existing SSH key and main-workspace publisher. See `specs/user-local-backup-20261007.md`. Earlier PR #19 generation/switching verification remains in `specs/pr19-review-20261007.md`.
+- Current release: 1.18.1 / 354 (2026-10-07), commit `465e2a9`. Added user-local-backup page/entry and authenticated native ZIP download; production backup routes/web and signed APK are live. Pixel 6 verified 353→354 upgrade, login/history retention, latest-version source and 6,025-byte ZIP download from production. See `specs/user-local-backup-20261007.md`; PR #19 review evidence remains at `specs/pr19-review-20261007.md`.
 
 - Native source of truth: this repository's `android-app/`. Web source of truth: `E:\酒馆开发` (`grey7213/AIXingYue`). Never overwrite either tree with a contributor's full copy; apply and inspect patches against their pinned baseline.
 - Read `MAINTAINER.md`, `CONTRIBUTING.md`, and the relevant `specs/` before changing release behavior.
@@ -18,7 +18,26 @@
 
 ## Verified pitfalls
 
+- R363 source authorization (2026-10-09): the user accepted the restored full-site embedded workshop and requested submission. Update existing PR #22 with the exact eight native build inputs used by the verified immutable R363 APK, plus handoff notes; exclude unrelated worktree changes. Safe areas, visible error/retry and same-origin explicit verified downloads remain required. Normal site authorization and separate server rollout are not replaced by a source PR. No merge, website/server deployment or official APK publication is authorized by this request.
+
+- Latest explicit acceptance (2026-10-09): R360 landscape gameplay was accepted. The user now requests exploration's notification-adjacent entry, UI polish, explicit on-demand ChatArchive workshop downloads and account game/branch restore, then a source PR. This supersedes the earlier no-commit acceptance phase, but does not authorize a formal APK/server release. Preserve the clearly labelled equivalent reconstruction and director-free ordinary gameplay; never claim missing protected 1.2.6 Hot gameplay was recovered. Stopped integrations and private QA media/accounts are not release inputs.
+
+- R361 delivery: native login/download browser has no Homer bridge and carries only the workshop's own cookie. Exact revision/hash binds media to games. CAPK/ZIP import and native Spine rendering are verified; 7Z/RAR are not supported. Cloud game backups require separate deployment of `server-patches/archive-r361/`, not just this PR/APK. Unuploaded phone-private data cannot survive uninstall. Do not claim production restore or live providers from synthetic HTTP/SQLite tests. Reconstruct the full ordered web patch chain on a clean pin and verify packaged assets before handoff.
+
+- R355 rejection: a stage skin over existing chat history is not an AI visual-novel game. New gameplay must have its own durable game/person/channel/event state, start without old histories, create exactly one authorized dedicated conversation per person, and complete new game → private thread → date → stage → remembered event → reopen → branch restore. Count full-loop acceptance, not visible widgets or unrelated passing tests. Protect pending generation before network work; do not auto-replay uncertain generation/billing. Mark synthetic-provider/browser checks separately from actual provider/Android evidence. Never call independent reconstruction recovered original source.
+
+- Game provider guard: the shipping EventEmitter deliberately catches listener exceptions. A throwing prompt listener does not block sending or billing. Capture a turn-scoped guard in the actual sender before any await, enforce it directly after final settings listeners and before fetch, and preserve its rejection even if the higher-level Generate catches sender errors. Test with the shipping event implementation; do not use a throwing fixture emitter as proof of fail-closed behavior. Test ordinary requests as well as stopped/stale/ABA and unsupported preset requests.
+
 - Local backup: WebView's existing DownloadListener ignores Blob URLs and external-browser downloads do not inherit the app Cookie. Use the fixed same-origin `/console/api/web/user-backup/download` through `HomerNative.downloadUserBackup()` on the active backup page, with DownloadManager and the current Cookie. Use a timestamped filename as the download title so DocumentsUI can distinguish backups. Pixel 6 API 33 verified actual ZIP save, system picker selection and import; see `specs/user-local-backup-20261007.md`.
+
+- R354: phone-owned canonical chat archives are durable data, not an ACK-evicted
+  cache. Read prepared histories locally before cloud authorization; save locally
+  before live/opportunistic uploads. Never replay generation or billing requests.
+  Test actual full runtime offline, not only storage helpers: standalone welcome
+  templates can append late into an embedded history. Async mutation recovery must
+  fence owner, scope and epoch, including shared chat-array reuse across accounts.
+  Protected client saves require the incremental Python provider deployment first;
+  a PR/APK merge alone is not a server deployment or pre-loss data recovery.
 
 - PR #19: asset enumeration cannot detect a module deleted from both source and APK. `card-experience-runtime.mjs` still imports Spine, so retain `spine-portrait.mjs`, `spine-webgl.js` and its license; `verify_apk_assets.py` checks these independently. On Windows, source-map content comparisons normalize only CRLF/LF and VM fixtures accept `\r?\n`; do not remove the content or mapping checks. R353 has five cumulative segments followed by the maintainer registration patch.
 

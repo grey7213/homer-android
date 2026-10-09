@@ -11,6 +11,9 @@ const snapshot = (text = 'unchanged text', id = scope()) => {
         messages: [{ name: 'Test', is_user: false, mes: text, extra: {} }] }) };
 };
 const ack = (id = 'test-message', content = 'unchanged text') => ({ messages: [{ id, role: 'assistant', content }] });
+const storageVersion = 'a'.repeat(32);
+const versionedACK = (id = 'test-message') => ({ ...ack(id),
+    storage: { protocol: 2, version: storageVersion, complete: true, message_count: 1 } });
 
 function instrumentedFixture() {
     const indexedDB = transactionIDB(), databaseName = 'r40-outbox-noop';
@@ -105,14 +108,17 @@ test('identical ACK does not rewrite, prune, age or advance its existing storage
 });
 
 test('different allowed ACK metadata still performs the strict write and stores the new IDs', async () => {
-    const h = instrumentedFixture(), first = await h.outbox.prepare(snapshot());
-    await h.outbox.cloudACK(first, ack('old-id'));
+    const h = instrumentedFixture(), first = await h.outbox.prepare({ ...snapshot(), storageVersion });
+    await h.outbox.cloudACK(first, versionedACK('old-id'));
     h.reset();
-    assert.deepEqual(await h.outbox.cloudACK(first, ack('new-id')), { applied: true, revision: first.revision });
+    assert.deepEqual(await h.outbox.cloudACK(first, versionedACK('new-id')), { applied: true, revision: first.revision });
     assert.deepEqual(h.metrics.modes, [{ mode: 'readonly', durability: null }, { mode: 'readwrite', durability: 'strict' }]);
     assert.equal(h.metrics.puts, 1);
-    assert.equal(h.metrics.cursors, 1);
-    assert.equal((await h.outbox.read(first.scope)).ackPayload.messages[0].id, 'new-id');
+    assert.equal(h.metrics.cursors, 0, 'Acknowledging durable history does not prune other conversations');
+    const stored = await h.outbox.read(first.scope);
+    assert.equal(stored.ackPayload.messages[0].id, 'new-id');
+    assert.equal(stored.baseVersion, storageVersion);
+    assert.equal(stored.cloudVersion, storageVersion);
 });
 
 test('the unchanged-body fast path does not settle at readonly request success', async () => {
@@ -159,13 +165,13 @@ test('concurrent changed prepares recheck inside the write transaction without l
 });
 
 test('overlapping identical ACKs are idempotent even when both readonly prechecks see pending', async () => {
-    const h = instrumentedFixture(), first = await h.outbox.prepare(snapshot());
+    const h = instrumentedFixture(), first = await h.outbox.prepare({ ...snapshot(), storageVersion });
     h.reset();
-    const results = await Promise.all([h.outbox.cloudACK(first, ack()), h.outbox.cloudACK(first, ack())]);
+    const results = await Promise.all([h.outbox.cloudACK(first, versionedACK()), h.outbox.cloudACK(first, versionedACK())]);
     assert.equal(results.filter(result => result.applied).length, 1);
     assert.equal(results.filter(result => result.unchanged).length, 1);
     assert.equal(h.metrics.puts, 1);
-    assert.equal(h.metrics.cursors, 1);
+    assert.equal(h.metrics.cursors, 0, 'Overlapping acknowledgements do not prune durable history');
     assert.equal((await h.outbox.read(first.scope)).pending, false);
 });
 

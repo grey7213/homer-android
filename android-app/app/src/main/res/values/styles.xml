@@ -8,4 +8,11 @@
         <item name="android:navigationBarColor">@color/homer_background</item>
         <item name="android:windowNoTitle">true</item>
     </style>
+    <style name="Theme.Homer.WorkshopDark" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">#EFA7C4</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowBackground">#141414</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
 </resources>
