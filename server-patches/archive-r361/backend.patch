@@ -1,0 +1,36 @@
+diff --git a/tools/ai_fengyue_local_server.py b/tools/ai_fengyue_local_server.py
+--- a/tools/ai_fengyue_local_server.py
++++ b/tools/ai_fengyue_local_server.py
+@@ -9,6 +9,7 @@
+ import hmac
+ import io
+ import json
++from homer_archive_storage import read_games, write_game, ArchiveStorageError
+ import math
+ import os
+ import random
+@@ -21338,6 +21339,24 @@
+                 return error_response("method not allowed", 405)
+             return ok_response(self.store.enabled_sillytavern_extensions())
+ 
++        if normalized == "console/api/web/archive/saves":
++            token_user = self.authenticated_token_user()
++            if not token_user:
++                return error_response("unauthorized", 401)
++            try:
++                owner = str(token_user["id"])
++                if self.command.upper() == "GET":
++                    result = read_games(self.store, owner,
++                                        parse_query_str(query, "game_id", ""),
++                                        parse_query_int(query, "page", 1, 1, 1000))
++                elif self.command.upper() == "POST" and isinstance(body, dict):
++                    result = write_game(self.store, owner, body)
++                else:
++                    return error_response("method not allowed", 405)
++                return ok_response(result)
++            except ArchiveStorageError as exc:
++                return error_response(str(exc), exc.status)
++
+         if normalized in (
+             "console/api/web/dialogue/runtime-state",
+             "console/api/web/sillytavern/runtime-state",

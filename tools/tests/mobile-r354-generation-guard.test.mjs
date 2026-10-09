@@ -25,7 +25,7 @@ function fixture({ token = '', read = async () => { throw new Error('Synthetic o
     const h = {
         MODULE_ID: 'generation-guard-test', console: { warn() {}, error() {} }, launch,
         session: { user: { id: 'synthetic-owner' }, runtime: { prior: true } }, adminBinding: false, loadingLaunch: false,
-        generationBusy: false, generationSettleTimer: 12, dialogueEventLogMuted: 0,
+        generationBusy: false, activeGameTurn: null, generationSettleTimer: 12, dialogueEventLogMuted: 0,
         getContext: () => ({ ...chatContext }),
         messageMenuTargetForIndex: index => ({ messageIndex: index }),
         resolveMessageMenuTarget: target => chat[target?.messageIndex]

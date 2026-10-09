@@ -1,0 +1,101 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>独立游戏闭环合成验收</title>
+<link rel="stylesheet" href="/app/assets/css/visual-novel-library.css"><link rel="stylesheet" href="/app/assets/css/archive-hall.css"><style>body{margin:0;background:#f5f4f7;font:15px/1.5 system-ui;color:#22232a}body[data-theme=dark]{background:#17171b;color:#ededf1}#fixture-header{height:62px;display:flex;align-items:center;padding:0 16px;box-sizing:border-box}#library{padding:16px;max-width:1100px;margin:auto}button,input{font:inherit}</style>
+<body class="vn-library-page"><header id="fixture-header">合成服务验收 · 不连接真实账号或模型</header><div id="library"></div><div id="reader"></div>
+<script type="module">
+import { createGameStore, buildGameContext } from '/app/assets/js/visual-novel-game-store.mjs';
+import { mountVisualNovel } from '/app/assets/js/visual-novel-runtime.mjs';
+import { createGameLibraryController } from '/app/assets/js/visual-novel-library.mjs';
+import { createVisualNovelServices } from '/app/assets/js/visual-novel-services.mjs';
+const query = new URLSearchParams(location.search); document.body.dataset.theme = query.get('theme') || 'light';
+document.documentElement.dataset.theme = document.body.dataset.theme;
+localStorage.setItem('ai_xingyue_shell_theme', document.body.dataset.theme);
+const owner = 'synthetic-game-owner-' + (query.get('slot') || 'main'), user = { id: owner }, calls = [], prompts = [];
+const store = createGameStore(); let reader, library, generationMode = 'normal', pendingResolve;
+const roles = [{ id:'synthetic-role-a', name:'合成角色甲', current_version_id:'version-a', icon:'' },
+  { id:'synthetic-role-b', name:'合成角色乙', current_version_id:'version-b', icon:'' }];
+const apiClient = {
+  importCard: async payload => { calls.push({kind:'import-theme',payload}); return {data:{id:'archive-'+payload.data.extensions.homer_archive.role_id}}; },
+  exploreSearch: async params => { calls.push({kind:'roles',params}); return {data:{apps:roles,total:2}}; },
+  myApps: async params => { calls.push({kind:'owned-roles',params}); return {data:{list:roles,total:2}}; },
+  startConversation: async payload => { calls.push({kind:'create-conversation',payload}); return {data:{app_id:payload.app_id,conversation_id:'dedicated-'+payload.app_id+'-'+calls.length}}; },
+};
+async function launch(url) {
+  const params = new URL(url, location.href).searchParams;
+  const game = await store.get(owner, params.get('vn_game'));
+  document.querySelector('#library').hidden = true;
+  const character = game.characters.find(c=>c.id===game.active.characterId);
+  reader = await mountVisualNovel({root:document.querySelector('#reader'),scope:{owner,appId:character.appId,conversationId:character.conversationId},
+    gameStore:createGameStore(),gameId:game.id,card:{name:character.name,avatar:'',media_assets:[]},messages:[{mes:'历史哨兵不得显示'}],isCurrent:()=>true,
+    actions:{settings:async panel=>calls.push({kind:'settings',panel}),stop:async()=>{}},
+    services:createVisualNovelServices({scope:{owner,appId:character.appId,conversationId:character.conversationId},isCurrent:()=>true,apiClient:{
+      imageChat:async(payload,{signal})=>{calls.push({kind:'cg'});return fetch('/synthetic/image-result',{method:'POST',body:JSON.stringify(payload),signal}).then(r=>r.json());},
+      synthesizeTts:async(payload,{signal})=>{calls.push({kind:'tts'});return fetch('/synthetic/tts-result',{method:'POST',body:JSON.stringify(payload),signal}).then(r=>r.json());}
+    }}),gameHost:{
+      async generate(request) {
+        calls.push({kind:'generation',request}); const latest = await store.get(owner,game.id);
+        prompts.push(buildGameContext(latest,latest.active.characterId,request.channel,request.eventId));
+        reader.setBusy(true);
+        try {
+          if(generationMode==='hold') await new Promise(resolve=>pendingResolve=resolve);
+          if(generationMode==='fail') throw Object.assign(new Error('合成服务失败'),{outcome:'uncertain'});
+          if(generationMode==='guard') throw Object.assign(new Error('合成发送校验拒绝'),{outcome:'failed',code:'VN_GAME_PROMPT'});
+          return {requestId:request.requestId,messageId:'canonical-'+request.requestId,
+            text:request.channel==='group' ? '[角色:合成角色甲]\n大家好，这里是独立故事群。\n[角色:合成角色乙]\n'+request.userText : request.channel==='talk' ? '合成私聊回复：'+request.userText+(request.userText.includes('一起去海边')?'\n[约会邀请:海边散步|傍晚海岸]':'') : '[旁白]\n海风吹过，这段事件已发生。\n\n[角色:'+character.name+']\n我记得我们刚才的经历。\n```choices\n[{"id":"walk","label":"继续散步","text":"我们继续散步吧"},{"id":"rest","label":"坐下休息","text":"我们坐下休息吧"}]\n```'};
+        } finally { reader.setBusy(false); }
+      },stop:async()=>{calls.push({kind:'stop'});pendingResolve?.();pendingResolve=null;},settings:async panel=>calls.push({kind:'settings',panel}),
+    },
+  });
+  reader.settings.typewriter=false; reader.show({instant:true});
+  window.gameFixture.reader=reader;
+}
+const html = await fetch('/app/visual-novel.html').then(r=>r.text());
+const tree = new DOMParser().parseFromString(html,'text/html'), root = tree.querySelector('[data-vn-game-library]');
+if(query.get('native')==='1'){
+  // Use the actual hall chrome and styles for device geometry. The generic
+  // browser fixture header/padding is not a product-layout measurement.
+  document.querySelector('#fixture-header').remove();
+  document.querySelector('style').remove();
+  document.body.className=tree.body.className;
+  const libraryRoot=document.querySelector('#library');
+  libraryRoot.style.cssText='padding:0;max-width:none;margin:0';
+  await Promise.all([...tree.querySelectorAll('link[rel=stylesheet]')]
+    .filter(node=>!node.getAttribute('href').includes('archive-hall')&&!node.getAttribute('href').includes('visual-novel-library'))
+    .map(node=>new Promise((resolve,reject)=>{
+      const css=document.createElement('link');css.rel='stylesheet';css.href=node.getAttribute('href');
+      css.onload=resolve;css.onerror=()=>reject(Error('Native fixture product stylesheet unavailable'));
+      document.head.append(css);
+    })));
+  libraryRoot.append(tree.querySelector('.app-shell'));
+}else document.querySelector('#library').append(root);
+if(query.get('archive')!=='1') root.querySelector('[data-game-role-source]').value='public';
+else if(query.get('native')!=='1') {
+  let media={state:'ready',ready:true,packs:[query.get('pack')||'full'],attempt:0};
+  if(query.get('automatic')==='1')media={state:'missing',ready:false,packs:[],attempt:0};
+  window.HomerNative={getArchiveMediaStatus:()=>JSON.stringify(media),importArchiveMedia:()=>calls.push({kind:'synthetic-picker'}),
+    prepareArchiveMedia:id=>{calls.push({kind:'synthetic-media-prepare',id});media={state:'ready',ready:true,packs:[...media.packs,id],attempt:media.attempt+1,requestedPack:id};}};
+}
+library=createGameLibraryController(root,{readUser:()=>user,apiClient,loadStore:()=>store,navigate:url=>launch(url)});
+async function returnHall(){ if(reader){reader.destroy();await reader.gameSession.destroy();reader=null;window.gameFixture.reader=null;}
+  const old=document.querySelector('#reader'), fresh=document.createElement('div');fresh.id='reader';old.replaceWith(fresh);
+  document.querySelector('#library').hidden=false;await library.refresh(); }
+document.addEventListener('click',e=>{const anchor=e.composedPath().find(n=>n?.tagName==='A');if(!anchor)return;
+  const url=new URL(anchor.href,location.href);
+  if(url.pathname==='/app/visual-novel.html'){e.preventDefault();void returnHall();}
+  else if(url.pathname==='/app/chat.html'&&url.searchParams.has('vn_game')){
+    e.preventDefault();void(async()=>{
+      if(reader){reader.destroy();await reader.gameSession.destroy();}
+      const node=document.createElement('div');node.id='reader';document.querySelector('#reader').replaceWith(node);await launch(url.href);
+    })();
+  }
+});
+window.gameFixture={owner,calls,prompts,store,library,reader,launch,mode:value=>generationMode=value,
+  async reopen(){ const id=reader.game.id;reader.destroy();await reader.gameSession.destroy();
+    document.querySelector('#reader').remove(); const node=document.createElement('div');node.id='reader';document.body.append(node);
+    const game=await store.get(owner,id), c=game.characters.find(c=>c.id===game.active.characterId);
+    await launch('/app/chat.html?'+new URLSearchParams({app_id:c.appId,conversation_id:c.conversationId,vn_game:id,presentation:'archive_vn'})); },
+};
+// Synthetic outer host only. The real conversation host registers its own
+// scoped closeCardStageOverlay via installRuntimeBackHandler.
+if(query.get('native')==='1') window.HomerCloseOverlay=()=>reader?.closeTopOverlay()===true;
+window.gameFixtureReady=true;
+</script></body></html>

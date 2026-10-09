@@ -75,7 +75,7 @@ function hostHarness({ native = true, admin = false } = {}) {
         runtimeLaunchOwner: 'synthetic-owner', runtimeEngineToken: 'synthetic-engine', runtimePriorDocument: null,
         runtimeBound: false, coreReady: false, bridgeAvailable: false, prewarming: false,
         activeAppId: 'synthetic-card', activeConversationId: 'synthetic-chat', pendingDraft: '', composerDraftDirty: false,
-        previewRequestId: 0, readyHandoffTimer: 0, adminBindPending: false, switchShellScope: '', runtimeOverlayActive: false,
+        previewRequestId: 0, readyHandoffTimer: 0, adminBindPending: false, switchShellScope: '', runtimeOverlayActive: false, requestedPresentation: null, presentationVisibility: null,
         insetsSignature: '', pendingTool: null, settingsSignature: '', SETTINGS_CACHE_PREFIX: 'synthetic-settings:', history: [],
         previewInput: node('input'), previewSend: node('send'), launcherVisual: node('visual'), launcher: node('launcher'), announcer: node('announcer'),
         frame: { inert: true, contentWindow: {} }, composerUi: { refresh() { effects.push('composer'); } }, composerInputScope: '',
@@ -96,6 +96,7 @@ function hostHarness({ native = true, admin = false } = {}) {
         window: { clearTimeout() {}, ...(native ? { HomerNative: { notifyShellReady() {} } } : {}) },
     });
     vm.runInContext([
+        section(host, 'function forwardPresentationVisibility(', 'function markReady('),
         section(host, 'function canAcceptRuntimeDraft(', 'function submitDraft('),
         section(host, 'function runtimeBindingOwner(', 'function resetColdRuntimeBinding('),
         section(host, 'function matchesColdRuntimeFlight(', 'function openRuntimeTool('),

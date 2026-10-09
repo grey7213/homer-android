@@ -34,7 +34,7 @@ function fixture(options = {}) {
         reaffirmExtensionSettingsAfterReady: false, officialRegexState: { count: 1, errors: [], revision: 'old-rules' },
         lastExtensionSettingsScope: 'card-a\u0000conversation-a', lastExtensionSettingsSignature: 'old signature',
         storageAccountEpoch: 0, owner: 'owner-a', conversationRecoveryBlocked: false,
-        loadingLaunch: false, adminBinding: false, generationBusy: false, rollbackBusy: false,
+        loadingLaunch: false, adminBinding: false, generationBusy: false, rollbackBusy: false, activeGameTurn: null,
         generationSnapshot: null, suppressSync: false, lastSyncSignature: '', requestedAppId: 'card-a', requestedConversationId: 'conversation-a',
         characters: [card('card-a', 'old.png', 'Old'), card('card-b', 'new.png', 'New')],
         this_chid: '0', chat: [oldMessage], chat_metadata: clone(oldMetadata), dom: ['old-live-iframe'],
@@ -137,7 +137,7 @@ function fixture(options = {}) {
         section(bridge, 'function captureExtensionStorage(', 'async function persistExtensionSettingsSnapshot('),
         section(bridge, 'async function syncCloudChat(', 'async function syncCloudChatSnapshot('),
         section(bridge, 'async function switchConversation(', 'async function copyDiagnostic('),
-        section(bridge, '    eventSource.on(event_types.CHAT_COMPLETION_SETTINGS_READY,', "    window.addEventListener('homer-generation-diagnostic'"),
+        section(bridge, '    eventSource.on(event_types.CHAT_COMPLETION_SETTINGS_READY, async data =>', "    window.addEventListener('homer-generation-diagnostic'"),
     ].join('\n'), scope);
     return { scope, calls, events, notices, previousSession, oldMessage: clone(oldMessage), oldMetadata, classSet, handlers };
 }

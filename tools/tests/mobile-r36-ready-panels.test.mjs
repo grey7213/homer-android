@@ -16,7 +16,7 @@ function harness({ pending = null, draftDirty = false } = {}) {
     } } },
     window: { clearTimeout() {}, setTimeout(callback) { timers.push(callback); } },
     clearReadyTimer() {}, adminPreview: false, adminBindPending: true, frame: { inert: true },
-    runtimeReady: false, runtimeOverlayActive: false, setRuntimeOverlay() {},
+    runtimeReady: false, runtimeOverlayActive: false, setRuntimeOverlay() {}, forwardPresentationVisibility() {}, presentationVisibility: null, requestedPresentation: null,
     insetsSignature: 'old', syncHostInsets() {}, composerDraftDirty: draftDirty,
     previewInput: { value: 'unsent draft' }, previewRequestId: 0, readyHandoffTimer: 0,
     activeConversationId: 'chat-a', pendingTool: pending,

@@ -304,6 +304,7 @@ public final class HomerActivity extends Activity {
 
     void checkForAppUpdate() { if (apkUpdates != null) apkUpdates.check(true); }
     private static final int FILE_CHOOSER_REQUEST = 701;
+    private static final int ARCHIVE_MEDIA_REQUEST = 702;
     private static final int WEB_PERMISSION_REQUEST = 702;
     private static final long READY_POLL_MS = 300L;
     private static final long READY_TIMEOUT_MS = 150_000L;
@@ -405,6 +406,8 @@ public final class HomerActivity extends Activity {
     private PatchManager patchManager;
     private ApkUpdateController apkUpdates;
     private ClientAssetStore clientAssetStore;
+    private ArchiveMediaStore archiveMediaStore;
+    private ArchiveWorkshopStore archiveWorkshopStore;
     private ValueCallback<Uri[]> fileChooserCallback;
     private PermissionRequest pendingPermissionRequest;
     private String[] pendingPermissionResources = new String[0];
@@ -414,6 +417,7 @@ public final class HomerActivity extends Activity {
     private boolean liveReadyHandled;
     private boolean updateChecked;
     private boolean immersiveLandscape;
+    private final ArchiveOrientationPolicy archiveOrientation = new ArchiveOrientationPolicy();
     private boolean snapshotLoaded;
     private boolean startupFailed;
     private View recoveryPanel;
@@ -434,6 +438,8 @@ public final class HomerActivity extends Activity {
         patchManager = new PatchManager(this);
         patchManager.recoverInterruptedUpdate();
         clientAssetStore = new ClientAssetStore(this, patchManager);
+        archiveMediaStore = new ArchiveMediaStore(this);
+        archiveWorkshopStore = new ArchiveWorkshopStore(this);
         apkUpdates = new ApkUpdateController(this);
 
         root = new FrameLayout(this);
@@ -453,7 +459,7 @@ public final class HomerActivity extends Activity {
             int bottom = 0;
             int left = 0;
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                android.graphics.Insets bars = current.getInsets(WindowInsets.Type.systemBars());
+                android.graphics.Insets bars = current.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
                 top = bars.top;
                 right = bars.right;
                 // Android 15 edge-to-edge does not resize our padded WebViews
@@ -466,6 +472,12 @@ public final class HomerActivity extends Activity {
                 right = current.getSystemWindowInsetRight();
                 bottom = current.getSystemWindowInsetBottom();
                 left = current.getSystemWindowInsetLeft();
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && current.getDisplayCutout() != null) {
+                    top = Math.max(top,current.getDisplayCutout().getSafeInsetTop());
+                    right = Math.max(right,current.getDisplayCutout().getSafeInsetRight());
+                    bottom = Math.max(bottom,current.getDisplayCutout().getSafeInsetBottom());
+                    left = Math.max(left,current.getDisplayCutout().getSafeInsetLeft());
+                }
             }
             // System-bar appearance changes can dispatch the same insets on
             // every tab switch. Only a real bar/keyboard/rotation change needs
@@ -678,7 +690,29 @@ public final class HomerActivity extends Activity {
         view.setDownloadListener(openExternalDownload());
     }
 
-    void requestOrientation(String value) {
+    private void updateArchiveOrientation(String url) {
+        ArchiveOrientationPolicy.Resolution result = archiveOrientation.update(
+                ArchiveOrientationPolicy.isGameUrl(BuildConfig.SERVER_BASE_URL,url),
+                getRequestedOrientation(),immersiveLandscape,ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+        if (result == null) return;
+        immersiveLandscape=result.immersive;
+        if (getRequestedOrientation()!=result.orientation) setRequestedOrientation(result.orientation);
+        applySystemBars();
+    }
+
+    void refreshArchiveOrientation(WebView owner,Object token,String documentUrl) {
+        if(owner==null||owner!=liveView||token==null||token!=liveDocumentTokens.get(owner)
+                || !java.util.Objects.equals(documentUrl,owner.getUrl())
+                || !SafeUrls.isTrustedNavigation(BuildConfig.SERVER_BASE_URL,documentUrl))return;
+        updateArchiveOrientation(documentUrl);
+    }
+
+    void requestOrientation(WebView owner,Object token,String value) {
+        if(owner==null||owner!=liveView||token==null||token!=liveDocumentTokens.get(owner)
+                || !SafeUrls.isTrustedNavigation(BuildConfig.SERVER_BASE_URL,owner.getUrl()))return;
+        // Ordinary card teardown can arrive while a game route is opening.
+        // Only authoritative navigation/URL refresh releases the game rotation.
+        if(archiveOrientation.active()) { applySystemBars();return; }
         immersiveLandscape = "landscape".equals(value);
         int requested = immersiveLandscape
                 ? ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
@@ -752,6 +786,59 @@ public final class HomerActivity extends Activity {
     }
 
     private long lastUserBackupDownload = 0;
+
+    String archiveMediaStatus() { return archiveMediaStore == null ? "{\"state\":\"unavailable\"}" : archiveMediaStore.status(); }
+
+    String archiveWorkshopCatalog() { return archiveWorkshopStore == null ? "{\"version\":1,\"roles\":[]}" : archiveWorkshopStore.catalog(); }
+
+    void openArchiveWorkshop(WebView owner) {
+        openArchiveWorkshopResource(owner, "");
+    }
+
+    void openArchiveWorkshopResource(WebView owner, String reference) {
+        if (owner == null || owner != liveView) return;
+        try {
+            URI page=URI.create(owner.getUrl()),base=URI.create(BuildConfig.SERVER_BASE_URL);
+            if (!base.getScheme().equals(page.getScheme()) || !base.getRawAuthority().equals(page.getRawAuthority())
+                    || !("/app/visual-novel.html".equals(page.getPath()) || "/app/chat.html".equals(page.getPath()))) return;
+            Intent intent=new Intent(this, ArchiveWorkshopActivity.class);
+            if(reference!=null&&!reference.isEmpty()){
+                if(reference.length()>512)return;
+                try{
+                    org.json.JSONObject media=new org.json.JSONObject(reference);
+                    String resource=media.getString("resourceId"), revision=media.getString("revisionId"),sha=media.getString("sha256");
+                    if(!resource.matches("[a-f0-9-]{36}")||!revision.matches("[a-f0-9-]{36}")||!sha.matches("[a-f0-9]{64}"))return;
+                    intent.putExtra("resource",resource);intent.putExtra("revision",revision);intent.putExtra("sha256",sha);
+                }catch(org.json.JSONException invalid){return;}
+            }
+            startActivity(intent);
+        } catch (RuntimeException unavailable) { android.widget.Toast.makeText(this,"无法打开工坊，请重新进入剧场",android.widget.Toast.LENGTH_LONG).show(); }
+    }
+
+    void prepareArchiveMedia(WebView owner, String roleId) {
+        if (owner == null || owner != liveView || archiveMediaStore == null) return;
+        try {
+            URI page = URI.create(owner.getUrl()), base = URI.create(BuildConfig.SERVER_BASE_URL);
+            if (!base.getScheme().equals(page.getScheme()) || !base.getRawAuthority().equals(page.getRawAuthority())
+                    || !"/app/visual-novel.html".equals(page.getPath())) return;
+            archiveMediaStore.prepare(roleId);
+        } catch (RuntimeException invalid) { /* Untrusted document has no resource authority. */ }
+    }
+
+    void importArchiveMedia(WebView owner) {
+        if (owner == null || owner != liveView || archiveMediaStore == null) return;
+        try {
+            URI page = URI.create(owner.getUrl()), base = URI.create(BuildConfig.SERVER_BASE_URL);
+            if (!base.getScheme().equals(page.getScheme()) || !base.getRawAuthority().equals(page.getRawAuthority())
+                    || !"/app/visual-novel.html".equals(page.getPath())) return;
+            Intent picker = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            picker.addCategory(Intent.CATEGORY_OPENABLE);
+            picker.setType("*/*"); // .hcap is not associated with a public MIME type.
+            startActivityForResult(picker, ARCHIVE_MEDIA_REQUEST);
+        } catch (RuntimeException error) {
+            android.widget.Toast.makeText(this, "无法打开文件选择器", android.widget.Toast.LENGTH_LONG).show();
+        }
+    }
 
     void downloadUserBackup(WebView owner) {
         if (owner == null || owner != liveView) return;
@@ -835,6 +922,7 @@ public final class HomerActivity extends Activity {
             if ("/app/favorites.html".equals(path)) return "favorites";
             if ("/app/community.html".equals(path)) return "community";
             if ("/app/workshop.html".equals(path)) return "workshop";
+            if ("/app/visual-novel.html".equals(path)) return "visual-novel";
             if ("/app/me.html".equals(path)) return "me";
             if ("/dashboard.html".equals(path)) return "account";
             if ("/admin.html".equals(path)) return "admin";
@@ -886,6 +974,7 @@ public final class HomerActivity extends Activity {
             // A tap before chat.js installs its listener is queued, not treated
             // as an old bundle requiring loadUrl (which would reboot the engine).
             pendingConversationNavigations.put(view, target);
+            if(view==liveView)updateArchiveOrientation(target);
             return true;
         }
         if (!canSwitchConversationInPlace(current, target) && !isPreparedChatUrl(current)) return false;
@@ -913,6 +1002,7 @@ public final class HomerActivity extends Activity {
         if (key.isEmpty()) return;
         persistentPages.put(key, liveView);
         activePersistentPage = key;
+        updateArchiveOrientation(target);
         applySystemBars();
     }
 
@@ -923,11 +1013,13 @@ public final class HomerActivity extends Activity {
         if (activePersistentPage.isEmpty() && persistentPages.isEmpty()) {
             persistentPages.put(key, liveView);
             activePersistentPage = key;
-        applySystemBars();
+            updateArchiveOrientation(target);
+            applySystemBars();
             return false;
         }
         if (key.equals(activePersistentPage)) {
             String current = liveView.getUrl();
+            if(java.util.Objects.equals(current,target))updateArchiveOrientation(target);
             return current != null && (current.equals(target) || switchLiveConversation(liveView, target));
         }
 
@@ -952,6 +1044,7 @@ public final class HomerActivity extends Activity {
         }
         liveView = targetView;
         activePersistentPage = key;
+        updateArchiveOrientation(target);
         applySystemBars();
         String currentTarget = liveView.getUrl();
         boolean targetChanged = shouldLoadPersistentTarget(currentTarget, target);
@@ -1020,7 +1113,8 @@ public final class HomerActivity extends Activity {
             setWebViewVisibility(liveView, View.INVISIBLE);
             liveView = target;
             activePersistentPage = key;
-        applySystemBars();
+            updateArchiveOrientation(target.getUrl());
+            applySystemBars();
             liveView.setAlpha(1f);
             setWebViewVisibility(liveView, View.VISIBLE);
             setWebViewVisibility(snapshotView, View.GONE);
@@ -1274,6 +1368,12 @@ public final class HomerActivity extends Activity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == ARCHIVE_MEDIA_REQUEST) {
+            if (resultCode == RESULT_OK && data != null && data.getData() != null && archiveMediaStore != null) {
+                archiveMediaStore.install(data.getData());
+            }
+            return;
+        }
         if (requestCode != FILE_CHOOSER_REQUEST || fileChooserCallback == null) return;
         Uri[] result = WebChromeClient.FileChooserParams.parseResult(resultCode, data);
         fileChooserCallback.onReceiveValue(result);
@@ -1319,6 +1419,7 @@ public final class HomerActivity extends Activity {
         preparingDialogueOwners.clear();
         preparingDialogueEngines.clear();
         if (apkUpdates != null) apkUpdates.close();
+        if (archiveMediaStore != null) archiveMediaStore.close();
         handler.removeCallbacksAndMessages(null);
         if (pendingPermissionRequest != null) pendingPermissionRequest.deny();
         if (fileChooserCallback != null) fileChooserCallback.onReceiveValue(null);
@@ -1332,11 +1433,25 @@ public final class HomerActivity extends Activity {
     }
 
     private final class LiveClient extends WebViewClient {
+        @Override
+        public void doUpdateVisitedHistory(WebView view, String url, boolean isReload) {
+            super.doUpdateVisitedHistory(view, url, isReload);
+            // replaceState/pushState retains the document and the chat engine.
+            // Its native URL notification can arrive after a JS bridge call;
+            // do not depend on getUrl() already reflecting that new URL.
+            if (startupFailed || view != liveView) return;
+            updateArchiveOrientation(url);
+        }
+
         @Override public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
             return handleRendererExit(view);
         }
         @Override
         public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+            WebResourceResponse workshop = archiveWorkshopStore.intercept(request);
+            if (workshop != null) return workshop;
+            WebResourceResponse media = archiveMediaStore.intercept(request);
+            if (media != null) return media;
             WebResourceResponse local = clientAssetStore.intercept(request);
             return local != null ? local : super.shouldInterceptRequest(view, request);
         }
@@ -1372,6 +1487,7 @@ public final class HomerActivity extends Activity {
                 setWebViewVisibility(view, view.getVisibility());
             }
             if (startupFailed || view != liveView) return;
+            updateArchiveOrientation(url);
             liveStartedAt = System.currentTimeMillis();
             liveReadyHandled = false;
             boolean conversationTarget = StartupPresentation.isConversationUrl(url);

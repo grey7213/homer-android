@@ -41,6 +41,30 @@ REQUIRED_STORAGE_ASSETS = (
     'scripts/homer-local-runtime.mjs',
     'scripts/homer-cloud-sync.mjs',
 )
+REQUIRED_VISUAL_NOVEL_ASSETS = (
+    'app/visual-novel.html',
+    'app/assets/js/visual-novel-core.mjs',
+    'app/assets/js/visual-novel-runtime.mjs',
+    'app/assets/js/visual-novel-library.mjs',
+    'app/assets/js/visual-novel-game-store.mjs',
+    'app/assets/js/visual-novel-game-sync.mjs',
+    'app/assets/js/chatarchive-theme.mjs',
+    'app/assets/js/archive-resource-client.mjs',
+    'app/assets/js/archive-cast.mjs',
+    'app/assets/js/visual-novel-game-session.mjs',
+    'app/assets/js/visual-novel-gameplay.mjs',
+    'app/assets/js/archive-game-ui.mjs',
+    'app/assets/js/visual-novel-services.mjs',
+    'app/assets/js/visual-novel-story-store.mjs',
+    'app/assets/js/visual-novel-asset-cache.mjs',
+    'app/assets/js/visual-novel-conversations.mjs',
+    'app/assets/css/visual-novel-conversations.css',
+    'app/assets/css/visual-novel-reader.css',
+    'app/assets/css/visual-novel-library.css',
+    'app/assets/css/archive-hall.css',
+    'app/assets/css/archive-game.css',
+    'app/assets/images/archive-room.svg',
+)
 
 
 def die(message: str) -> None:
@@ -58,6 +82,13 @@ def main() -> int:
 
     with zipfile.ZipFile(args.apk) as apk:
         names = set(apk.namelist())
+        excluded = [name for name in names if name in {
+            'assets/client/web/app/ai-story.html',
+            'assets/client/web/app/assets/js/ai-story-bootstrap.mjs',
+        } or name.startswith('assets/client/web/app/assets/ai-story/')
+            or '/st-yuzi-phone/' in name]
+        if excluded:
+            die('已停止的内容残留在 APK 中：' + ', '.join(sorted(excluded)[:10]))
         index_name = "assets/client/index.txt"
         if index_name not in names:
             die(f"{index_name} 不在包里 —— syncHomerClientAssets 大概没跑")
@@ -87,11 +118,13 @@ def main() -> int:
         die("仓库根没有 frontend/，先跑 python tools/bootstrap.py")
     # The card experience imports this module even for cards without Spine.
     # Enumerating existing source files cannot detect an accidental deletion.
-    for rel in REQUIRED_CARD_ASSETS:
+    for rel in (*REQUIRED_CARD_ASSETS, *REQUIRED_VISUAL_NOVEL_ASSETS):
         if not (web_root / rel).is_file() or f'assets/client/web/{rel}' not in names:
             die(f'角色体验必需依赖缺失：frontend/{rel}')
 
     def packable(rel: Path) -> bool:
+        if rel.as_posix() in {'app/ai-story.html', 'app/assets/js/ai-story-bootstrap.mjs'} or rel.as_posix().startswith('app/assets/ai-story/'):
+            return False
         # aapt 会丢掉 assets 里以点开头的目录和文件（.well-known/、.gitkeep 这类），
         # 生产包也一样缺，所以这些不算漏。
         return not (SKIP_PARTS & set(rel.parts)) and not any(

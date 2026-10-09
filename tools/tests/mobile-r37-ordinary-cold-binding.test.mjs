@@ -71,6 +71,7 @@ function harness({ prewarming = false, runtimeReady = false, runtimeBound = fals
             setTimeout(callback, delay) { const id = ++nextTimerId; timers.set(id, { callback, delay }); return id; },
             clearTimeout(id) { timers.delete(id); }, addEventListener(name, callback) { listeners.set(name, callback); } },
         activeAppId: prewarming ? '' : 'fixture-a', activeConversationId: prewarming ? '' : 'fixture-chat-a', activeTarget: null,
+        requestedPresentation: null, forwardPresentationVisibility() {}, presentationVisibility: null, syncArchivePresentation() {}, clearVisibleGameRequest:()=>false,
         coreReady: false, bridgeAvailable: false, runtimeReady, runtimeBound, prewarming,
         runtimePreparedTarget: '',
         adminPreview: false, adminBindPending: false, pendingAdminCard: '', preparedAdminCard: '', pendingDraft: '', pendingCommands: [],

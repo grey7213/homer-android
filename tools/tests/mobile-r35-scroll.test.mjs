@@ -39,7 +39,7 @@ test('Homer deferred-scroll printing still renders all requested messages and re
 function loadHarness(fail) {
     const calls = [], chat = [], metadata = {};
     const context = {
-        suppressSync: false, session: { user: { id: 'fixture-owner' } }, holdLargeSourceLayout,
+        suppressSync: false, runtimeVariables: {}, session: { user: { id: 'fixture-owner' } }, holdLargeSourceLayout,
         acknowledgedPromptTickets: new WeakMap(), restoreAcknowledgedPromptStates, samePromptMessageSource, clearPromptMessageState,
         sessionReadFences: new WeakMap(), storageAccountEpoch: 0, reconcileStorageAccount: () => 'fixture-owner',
         cloudSyncScope: () => JSON.stringify(['fixture-owner','fixture-card','fixture-chat']),

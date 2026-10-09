@@ -14,7 +14,9 @@ from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "output"
-URL = "http://127.0.0.1:8796/?homer_embed=1&homer_app_id=synthetic-card&homer_conversation_id=synthetic-conv"
+PORT = int(os.environ.get('HOMER_RUNTIME_QA_PORT', '8796'))
+ORIGIN = f"http://127.0.0.1:{PORT}"
+URL = ORIGIN + "/?homer_embed=1&homer_app_id=synthetic-card&homer_conversation_id=synthetic-conv"
 OWNER = "r354-synthetic-owner"
 SCOPE = json.dumps([OWNER, "synthetic-card", "synthetic-conv"], separators=(",", ":"))
 MESSAGES = [{"id": f"synthetic-{i}", "role": "assistant" if i % 2 == 0 else "user",
@@ -34,7 +36,7 @@ REGEX = {"revision": "r354-synthetic-regex", "scripts": [{"id": "synthetic-rule"
     "scriptName": "synthetic display rule", "findRegex": "synthetic-R1100", "replaceString": "REGEX-RETAINED-1100",
     "placement": [2], "disabled": False, "minDepth": None, "maxDepth": None, "trimStrings": [], "substituteRegex": 0}]}
 SESSION = {"user": {"id": OWNER, "name": "Synthetic QA", "is_admin": False},
-    "runtime": {"dialogue_api_base_url": "http://127.0.0.1:8796/synthetic-provider", "backend_base_url": "http://127.0.0.1:8796"},
+    "runtime": {"dialogue_api_base_url": ORIGIN+"/synthetic-provider", "backend_base_url": ORIGIN},
     "launch": {"app_id": "synthetic-card", "conversation_id": "synthetic-conv", "title": "Synthetic 1101 history",
         "card": CARD, "bridge_token": "synthetic-only-not-credential", "bridge_token_ttl_seconds": 900,
         "messages": MESSAGES, "storage": {"protocol": 2, "complete": True, "version": "1" * 32,
@@ -336,9 +338,10 @@ try:
                 context.close()
                 continue
             generation_started[0] = True
+            print('Beginning bounded offline generation rejection check', flush=True)
             offline_generation = page.evaluate("""async () => {
               const {getContext}=await import('/scripts/st-context.js'); const ctx=getContext();
-              try {await ctx.generate('normal');return {resolved:true,count:ctx.chat.length};}
+              try {await Promise.race([ctx.generate('normal'),new Promise((_,reject)=>setTimeout(()=>reject(new Error('QA_GENERATION_TIMEOUT')),45000))]);return {resolved:true,count:ctx.chat.length};}
               catch(e){return {resolved:false,error:String(e.message),count:ctx.chat.length};}
             }""")
             page.wait_for_timeout(1500)
@@ -347,9 +350,10 @@ try:
             assert not offline_generation["resolved"] and not after_offline_generation["generating"], offline_generation
             assert not generation_requests, generation_requests
             online[0] = True
+            print('Beginning bounded online generation rejection check', flush=True)
             online_generation = page.evaluate("""async () => {
               const {getContext}=await import('/scripts/st-context.js'); const ctx=getContext();
-              try {await ctx.generate('normal');return {resolved:true,count:ctx.chat.length};}
+              try {await Promise.race([ctx.generate('normal'),new Promise((_,reject)=>setTimeout(()=>reject(new Error('QA_GENERATION_TIMEOUT')),45000))]);return {resolved:true,count:ctx.chat.length};}
               catch(e){return {resolved:false,error:String(e.message),count:ctx.chat.length};}
             }""")
             page.wait_for_timeout(1500)

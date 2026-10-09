@@ -37,6 +37,7 @@ public final class PersistentPageNavigationTest {
         assertEquals("me", HomerActivity.persistentPageKey("https://example.test/app/me.html"));
         assertEquals("favorites", HomerActivity.persistentPageKey("https://example.test/app/favorites.html"));
         assertEquals("workshop", HomerActivity.persistentPageKey("https://example.test/app/workshop.html"));
+        assertEquals("visual-novel", HomerActivity.persistentPageKey("https://example.test/app/visual-novel.html"));
         assertEquals("community", HomerActivity.persistentPageKey("https://example.test/app/community.html"));
         assertEquals("account", HomerActivity.persistentPageKey("https://example.test/dashboard.html"));
         assertEquals("admin", HomerActivity.persistentPageKey("https://example.test/admin.html"));

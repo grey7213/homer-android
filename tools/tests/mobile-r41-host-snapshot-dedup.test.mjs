@@ -38,7 +38,7 @@ function harness({ firstTimer = 1, loading = false, reuseTimer = false } = {}) {
     const scope = vm.createContext({
         URL, HOST_CHANNEL: 'homer:dialogue-host:v1', requestedEmbed: '1', requestedIdleHostDisplay: false,
         requestedHostChannel: 'homer:dialogue-host:v1', requestedSiteOrigin: 'https://synthetic.invalid',
-        loadingLaunch: loading, session: null, launch: null, suppressSync: false,
+        loadingLaunch: loading, session: null, launch: null, suppressSync: false, runtimeVariables: {},
         runtimeUiData: { conversations: [], models: [], modelDefaultId: '' },
         hostStateNotifyTimer: null, hostStateNotifyToken: null, generationBusy: false, rollbackBusy: false,
         conversationRecoveryBlocked: false, hostOverlayActive: false,
