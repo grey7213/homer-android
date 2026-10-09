@@ -1,5 +1,6 @@
 {
-  "source_sha256_lf": "4aea1dad268faee0b28610bfec12fdfaaf24be68893a8c3d662f1ec0286ada8b",
-  "result_sha256_lf": "a5c71a28b3b521cb5608910bc0223683b1fce65efaf8f9feeb2f455bcba76737",
-  "module_sha256": "619cc25ca6b2bc4e4e5cbc31097fd6cfd7248c210a0ad5e8339332eda6e9281c"
+  "source_sha256_lf": "6704c07c7e9c326121ba39337cc41276326558acdf26122c234dda2b359f1cf9",
+  "result_sha256_lf": "6da580ff2a42a4ce25ba06e4f859447ec8a1f53f426d8a23916fddb3cbb70139",
+  "module_sha256": "619cc25ca6b2bc4e4e5cbc31097fd6cfd7248c210a0ad5e8339332eda6e9281c",
+  "requires_chat_storage_v2": true
 }

@@ -6,10 +6,10 @@ diff --git a/tools/ai_fengyue_local_server.py b/tools/ai_fengyue_local_server.py
  import io
  import json
 +from homer_archive_storage import read_games, write_game, ArchiveStorageError
+ from homer_chat_storage import read_chat, write_chat, ChatStorageError
  import math
  import os
- import random
-@@ -21338,6 +21339,24 @@
+@@ -21175,6 +21176,24 @@
                  return error_response("method not allowed", 405)
              return ok_response(self.store.enabled_sillytavern_extensions())
  

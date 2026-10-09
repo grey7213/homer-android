@@ -4,12 +4,14 @@
 
 ## 应用顺序
 
-1. 对已有数据库做可恢复备份，保留当前服务文件。不要覆盖整个后端目录。
+1. 对已有数据库做可恢复备份，保留当前服务文件。不要覆盖整个后端目录。先按 `server-patches/chat-storage-r354-v2/README.md` 落地并验证 R354 普通聊天存档增量；若已经落地，不重复应用。
 2. 在后端仓库检查 `manifest.json` 的 `source_sha256_lf` 与现有 `tools/ai_fengyue_local_server.py`（UTF-8、CRLF 规范为 LF）的 SHA-256。不同则先审核边界，不强行套补丁。
 3. `git apply --check backend.patch`，核对后 `git apply backend.patch`。将 `homer_archive_storage.py` 放在后端 `tools/`，与 `ai_fengyue_local_server.py` 同目录；不可仅放在 Android 仓库。
 4. `python -m py_compile tools/ai_fengyue_local_server.py tools/homer_archive_storage.py`。按现有部署流程重启服务，不修改账号、模型、计费和普通历史路由。
 5. 用专用测试账号、新专用会话验收 `GET/POST /console/api/web/archive/saves`，不使用真实玩家历史。检查未登录 401、跨账号不可读写、重复 `commit_id` 幂等、旧版本 CAS 409、已确认备份重启数据库后可读。
 6. 确认手机明确显示“进度已备份到账号”，再验收清空测试端数据 → 同账号恢复全部剧情/分支 → 重新下载同修订人物 → 继续。不得在未确认备份时让真实用户卸载。
+
+本清单 `requires_chat_storage_v2=true`，其源摘要等于 R354 清单的结果摘要，保证两个补丁顺序一致。维护者源树已继续演进时，先审核 R354/剧场边界，再用 `python tools/export_archive_server.py --source <已有R354的源文件> --destination <新的空目录>` 重新导出增量；不要对已经含 R354 的源文件再加 `--with-chat-storage`。
 
 ## 数据边界
 

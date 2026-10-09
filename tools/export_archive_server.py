@@ -49,8 +49,13 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--source", type=Path, required=True)
     parser.add_argument("--destination", type=Path, required=True)
+    parser.add_argument("--with-chat-storage", action="store_true",
+                        help="Export after the ordered R354 chat-storage increment")
     args = parser.parse_args()
     before = args.source.read_text(encoding="utf-8-sig")
+    if args.with_chat_storage:
+        from export_r354_server import transform_server as transform_chat_storage
+        before = transform_chat_storage(before)
     after = transform_server(before)
     args.destination.mkdir(parents=True, exist_ok=False)
     path = "tools/ai_fengyue_local_server.py"
@@ -58,7 +63,7 @@ def main():
     (args.destination / "backend.patch").write_bytes(patch.encode())
     module = (ROOT / "tools/server/homer_archive_storage.py").read_bytes()
     (args.destination / "homer_archive_storage.py").write_bytes(module)
-    (args.destination / "manifest.json").write_text(json.dumps({"source_sha256_lf": hashlib.sha256(before.encode()).hexdigest(), "result_sha256_lf": hashlib.sha256(after.encode()).hexdigest(), "module_sha256": hashlib.sha256(module).hexdigest()}, indent=2), encoding="utf-8")
+    (args.destination / "manifest.json").write_text(json.dumps({"source_sha256_lf": hashlib.sha256(before.encode()).hexdigest(), "result_sha256_lf": hashlib.sha256(after.encode()).hexdigest(), "module_sha256": hashlib.sha256(module).hexdigest(), "requires_chat_storage_v2": args.with_chat_storage}, indent=2), encoding="utf-8")
 
 
 if __name__ == "__main__":
