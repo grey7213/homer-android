@@ -71,6 +71,13 @@ function harness() {
             remove: (...names) => names.forEach(name => classes.delete(name)),
         } }, querySelector: selector => selector === '#preview-settings-title' ? settingsTitle : settingsAvatar },
         getCachedUser: () => ({ id: owner }), safePreviewImage: value => value || '', normalizeMessage: value => value,
+        // Announcements here have no deletion journal or privileged UI. Those
+        // modules have dedicated scope/role tests; retain a live owner adapter.
+        runtimeBindingOwner: () => owner,
+        isConversationDeleted: () => false,
+        filterDeletedConversations: (_owner, rows) => rows,
+        refreshConversationDeletions: async () => [],
+        syncAdminHostControls() {},
         appearance: { refresh() {} }, setPreviewAvatarSource(image, source) { image.src = source; },
         conversationSnapshot: value => value,
         renderMessages(messages) { calls.cachePaints++; previews.push(messages); }, renderHistory() {},

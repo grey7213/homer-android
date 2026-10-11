@@ -31,7 +31,10 @@ class Tests(unittest.TestCase):
         for source in [SOURCE.replace('import json','import missing'),SOURCE.replace('dialogue/runtime-state','changed'),SOURCE+SOURCE,transform_server(SOURCE)]:
             with self.assertRaises(ValueError):transform_server(source)
     def test_ordered_chat_storage_then_archive_preserves_both_routes(self):
-        from test_r354_export import FIXTURE
+        try:
+            from .test_r354_export import FIXTURE
+        except ImportError:
+            from test_r354_export import FIXTURE
         from export_r354_server import transform_server as transform_chat_storage
         hook='''
     def runtime_route(self, normalized, body, query):

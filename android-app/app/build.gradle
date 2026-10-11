@@ -23,6 +23,7 @@ def generatedArchiveTestAssets = layout.buildDirectory.dir("generated/archiveTes
 // The synthetic service host is packaged in the test APK only, never the app.
 tasks.register("syncArchiveTestAssets", Sync) {
     from(new File(workspaceRoot, "tools/tests")) { include "chatarchive_game_fixture.html" }
+    from(new File(workspaceRoot, "tools/tests/fixtures")) { include "memory-private-fixture.js" }
     def sample = providers.gradleProperty("HOMER_ARCHIVE_QA_SAMPLE").orElse("").get()
     if (!sample.isEmpty()) from(new File(sample)) { rename { "archive-workshop-qa.zip" } }
     into(generatedArchiveTestAssets)
@@ -137,8 +138,8 @@ android {
         applicationId "org.nebula.horizon.composeai"
         minSdk 26
         targetSdk 35
-        versionCode 363
-        versionName "1.18.10"
+        versionCode 366
+        versionName "1.18.13"
         buildConfigField "String", "PATCH_PUBLIC_KEY_B64", javaString(configuredPatchKey)
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }

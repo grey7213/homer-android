@@ -1,0 +1,20 @@
+{
+  "purpose": "isolated code-only regression fixtures, never deployed",
+  "files": {
+    "community_workshop.py": {
+      "sha256": "15917325a66f09dc2cd0937583783292e67a0649e93334d467d65856b59b0409",
+      "bytes": 31694,
+      "source": "reviewed existing server module"
+    },
+    "card_version_workshop.py": {
+      "sha256": "1bc9c23ae161a11fb542aa343a688179c028ab842e7f57789f36bd465eedf32c",
+      "bytes": 19426,
+      "source": "reviewed existing server module"
+    },
+    "provider_runtime_baseline.py": {
+      "sha256": "1d75b79fa3ae45bb117ac88b3227094d71ea97cd419a7b411ae571f36ea8fde2",
+      "bytes": 8113,
+      "source": "exact selected methods/route excerpt"
+    }
+  }
+}

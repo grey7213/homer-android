@@ -16,6 +16,14 @@ const AMBIGUOUS = Symbol('ambiguous export');
 const GENERATED_DIRECTORY = 'scripts/homer-core';
 const BUNDLE_PREFIX = 'runtime-core-';
 const QUICK_REPLY_DIRECTORY = 'scripts/extensions/quick-reply/';
+// Outer app pages use these storage modules without a dialogue document.
+// A facade into the eager dialogue core would boot its globals (jQuery, DOM,
+// settings) merely to delete/read a local archive. Keep one canonical external
+// URL for these modules in both consumers instead of adding another core copy.
+const SHARED_STORAGE_MODULES = new Set([
+    'scripts/homer-content-digest.mjs', 'scripts/homer-memory-sync.mjs',
+    'scripts/homer-chat-outbox.mjs', 'scripts/homer-local-session.mjs',
+]);
 
 export function coreBundleEnabled({ argv = [], env = process.env } = {}) {
     if (argv.includes('--no-runtime-core-bundle')) return false;
@@ -317,7 +325,8 @@ async function bundleRuntimeModules({ runtimeRoot, manifest = { files: {} }, pre
 }
 
 export async function bundleRuntimeCore(options) {
-    return bundleRuntimeModules(options);
+    return bundleRuntimeModules({ ...options,
+        shouldBundle: path => !isLibrary(path) && !SHARED_STORAGE_MODULES.has(path) });
 }
 
 /**

@@ -1,0 +1,10 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+const html=fs.readFileSync(new URL('../../sillytavern-runtime/public/index.html',import.meta.url),'utf8');
+const snippet=html.slice(html.indexOf('const runtimeRootPaths ='),html.indexOf('const nativeXhrOpen ='));
+function fixture(){let sent;const window={location:{origin:'https://synthetic.invalid',href:'https://synthetic.invalid/module/dialogue/'},fetch:(input,init)=>{sent={input,init};return Promise.resolve(sent);}};vm.runInNewContext(snippet,{window,dialogueMount:'/module/dialogue',URL,Request});return {window,get sent(){return sent;}};}
+test('mounted POST preserves streamed JSON body, method, headers and credentials',async()=>{const f=fixture();const input=new Request('https://synthetic.invalid/api/settings/get',{method:'POST',body:'{"scope":"synthetic"}',headers:{'X-CSRF-Token':'synthetic-only','Content-Type':'application/json'},credentials:'include'});await f.window.fetch(input);assert.equal(f.sent.input.url,'https://synthetic.invalid/module/dialogue/api/settings/get');assert.equal(f.sent.input.method,'POST');assert.equal(f.sent.input.credentials,'include');assert.equal(f.sent.input.headers.get('X-CSRF-Token'),'synthetic-only');assert.equal(await f.sent.input.text(),'{"scope":"synthetic"}');});
+test('GET, cancellation, already mounted and foreign requests remain intact',async()=>{const f=fixture(),c=new AbortController();const input=new Request('https://synthetic.invalid/api/users/me',{signal:c.signal});await f.window.fetch(input);c.abort();assert.ok(f.sent.input.signal.aborted);for(const url of ['https://synthetic.invalid/module/dialogue/api/users/me','https://foreign.invalid/api/users/me']){const r=new Request(url);await f.window.fetch(r);assert.equal(f.sent.input,r);}});
+test('keepalive body is not reconstructed as a forbidden stream and overrides survive',async()=>{const f=fixture(),r=new Request('https://synthetic.invalid/api/settings/save',{method:'POST',body:'{}',keepalive:true});const init={cache:'no-store'};await f.window.fetch(r,init);assert.equal(f.sent.input,r);assert.equal(f.sent.init,init);});

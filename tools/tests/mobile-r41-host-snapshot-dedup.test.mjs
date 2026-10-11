@@ -140,12 +140,15 @@ test('shipping ordinary cloud reloads continue to notify and never retain a load
     assert.ok(!h.effects.includes('durable-sync:100'), 'viewing an existing history is not a cloud mutation');
 });
 
-test('loading coalesces only chat-loaded; ordinary edits, swipes, generation and model feedback remain scheduled', () => {
+test('loading schedules feedback but publishes messages only after canonical loading finishes', () => {
     for (const reason of ['message-edited', 'message-swiped', 'generation-started', 'generation-ended', 'model-settings', 'requested', 'ready']) {
         const h = harness({ loading: true });
         h.scope.scheduleHostStateNotify(0, reason);
         assert.equal(h.timers.size, 1, reason);
         h.flush();
+        assert.equal(h.states().length, 0, 'loading is not permission to overwrite the local archive');
+        h.scope.loadingLaunch = false;
+        h.scope.notifyHostState(reason);
         assert.equal(h.states().length, 1, reason);
         assert.equal(h.states()[0].data.reason, reason);
     }

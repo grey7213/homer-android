@@ -40,6 +40,8 @@ REQUIRED_STORAGE_ASSETS = (
     'scripts/homer-local-session.mjs',
     'scripts/homer-local-runtime.mjs',
     'scripts/homer-cloud-sync.mjs',
+    'scripts/homer-memory-sync.mjs',
+    'scripts/homer-content-digest.mjs',
 )
 REQUIRED_VISUAL_NOVEL_ASSETS = (
     'app/visual-novel.html',
@@ -105,6 +107,12 @@ def main() -> int:
 
     with zipfile.ZipFile(args.apk) as apk:
         compat = json.loads(apk.read('assets/client/webview-compat-manifest.json'))
+        # These are used by outer histories/workshop pages, which have no
+        # dialogue globals. A core facade here crashes the entire outer page.
+        for shared in ('scripts/homer-chat-outbox.mjs', 'scripts/homer-local-session.mjs',
+                       'scripts/homer-memory-sync.mjs', 'scripts/homer-content-digest.mjs'):
+            if shared in compat.get('core_bundle', {}).get('modules', {}):
+                die('共享存档模块不能触发完整对话运行时：' + shared)
         digest = lambda data: hashlib.sha256(data).hexdigest()
         for tool, expected_hash in compat['tool'].items():
             if digest((ROOT / 'tools/webview-compat' / tool).read_bytes()) != expected_hash:

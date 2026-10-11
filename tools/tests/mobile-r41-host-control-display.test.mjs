@@ -80,6 +80,7 @@ function hostHarness({ native = true, admin = false } = {}) {
         previewInput: node('input'), previewSend: node('send'), launcherVisual: node('visual'), launcher: node('launcher'), announcer: node('announcer'),
         frame: { inert: true, contentWindow: {} }, composerUi: { refresh() { effects.push('composer'); } }, composerInputScope: '',
         getCachedUser: () => ({ id: 'synthetic-owner' }),
+        syncAdminHostControls() {},
         updateVisibleConversationUrl(app, conv) { scope.activeAppId = app; scope.activeConversationId = conv; },
         dispatchColdRuntimeTarget() { effects.push('dispatch'); },
         clearReadyTimer() {}, setRuntimeOverlay(value) { effects.push('overlay'); scope.runtimeOverlayActive = value; }, syncHostInsets() {},

@@ -1,0 +1,38 @@
+--- a/tools/community_workshop.py
++++ b/tools/community_workshop.py
+@@ -215,7 +215,7 @@
+ 
+     @staticmethod
+     def can_view_work(user_id: str, row: dict | None, is_admin: bool = False) -> bool:
+-        if not row:
++        if not row or row.get("status") == "deleted":
+             return False
+         return bool(
+             is_admin
+@@ -250,7 +250,7 @@
+         return out
+ 
+     def list_works(self, work_type: str, scope: str, user_id: str, search: str = "", limit: int = 60):
+-        where, args = [], []
++        where, args = ["status!='deleted'"], []
+         if work_type in WORK_TYPES:
+             where.append("work_type=?"); args.append(work_type)
+         if scope == "mine":
+@@ -328,6 +328,8 @@
+                 if not locked_row or str(locked_row["owner_user_id"] or "") != user_id:
+                     raise PermissionError("forbidden")
+                 locked = dict(locked_row)
++                if locked.get("status") == "deleted":
++                    raise ValueError("work not available")
+                 merged = dict(locked)
+                 mapping = {"name":"name", "summary":"summary", "cover_url":"cover_url", "is_public":"is_public", "is_open_source":"is_open_source", "status":"status"}
+                 for source, target in mapping.items():
+@@ -364,7 +366,7 @@
+             try:
+                 row = self.conn.execute("select * from community_works where id=?", (work_id,)).fetchone()
+                 value = dict(row) if row else None
+-                if not value or (value.get("owner_user_id") != user_id and (not value.get("is_public") or value.get("status") != "published")):
++                if not value or value.get("status") == "deleted" or (value.get("owner_user_id") != user_id and (not value.get("is_public") or value.get("status") != "published")):
+                     raise ValueError("work not available")
+                 deleted = self.conn.execute(
+                     "delete from community_work_favorites where user_id=? and work_id=?",

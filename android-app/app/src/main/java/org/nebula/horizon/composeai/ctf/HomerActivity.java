@@ -93,7 +93,9 @@ public final class HomerActivity extends Activity {
         String next = preparationOwner(owner);
         boolean identityChanged = !availableAccountOwner.equals(next) || next.isEmpty();
         if (identityChanged) {
+            cancelFileChooser();
             pendingHistoryPreparation = null;
+            pendingResourceExport = null;
             // Also reject an off-thread bridge callback captured before logout
             // and a subsequent login to the same account/document (ABA).
             liveDocumentTokens.replaceAll((view, token) -> new Object());
@@ -305,6 +307,9 @@ public final class HomerActivity extends Activity {
     void checkForAppUpdate() { if (apkUpdates != null) apkUpdates.check(true); }
     private static final int FILE_CHOOSER_REQUEST = 701;
     private static final int ARCHIVE_MEDIA_REQUEST = 702;
+    private static final int RESOURCE_EXPORT_REQUEST = 703;
+    private static final int CAMERA_CAPTURE_REQUEST = 704;
+    private static final int CAMERA_PERMISSION_REQUEST = 705;
     private static final int WEB_PERMISSION_REQUEST = 702;
     private static final long READY_POLL_MS = 300L;
     private static final long READY_TIMEOUT_MS = 150_000L;
@@ -385,6 +390,9 @@ public final class HomerActivity extends Activity {
             """;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
+    // Page readiness may be restarted/cancelled on navigation. It must not
+    // clear completion callbacks of an already-written user export.
+    private final Handler readinessHandler = new Handler(Looper.getMainLooper());
     private FrameLayout root;
     private WebView snapshotView;
     private WebView liveView;
@@ -409,6 +417,12 @@ public final class HomerActivity extends Activity {
     private ArchiveMediaStore archiveMediaStore;
     private ArchiveWorkshopStore archiveWorkshopStore;
     private ValueCallback<Uri[]> fileChooserCallback;
+    private WebView fileChooserSource;
+    private Object fileChooserDocument;
+    private String fileChooserOwner = "";
+    private String fileChooserUrl = "";
+    private boolean fileChooserInFlight;
+    private WebCameraCapture cameraCapture;
     private PermissionRequest pendingPermissionRequest;
     private String[] pendingPermissionResources = new String[0];
     private String pendingDraft = "";
@@ -514,14 +528,14 @@ public final class HomerActivity extends Activity {
         prepareSnapshotForTarget(startupTarget);
         // Give the tiny local document the first main-loop turn before the
         // heavier live WebView begins parsing the bundled runtime.
-        handler.post(this::startLivePage);
+        readinessHandler.post(this::startLivePage);
     }
 
     private void showRecovery(String title, String message, boolean updateEngine) {
         if (isFinishing() || isDestroyed()) return;
         startupFailed = true;
         liveRevealed = false;
-        handler.removeCallbacksAndMessages(null);
+        readinessHandler.removeCallbacksAndMessages(null);
         if (recoveryPanel != null) root.removeView(recoveryPanel);
         LinearLayout panel = new LinearLayout(this);
         panel.setOrientation(LinearLayout.VERTICAL);
@@ -786,6 +800,83 @@ public final class HomerActivity extends Activity {
     }
 
     private long lastUserBackupDownload = 0;
+    private ResourceExport pendingResourceExport;
+
+    private static final class ResourceExport {
+        final WebView source;
+        final Object documentToken;
+        final String documentUrl, accountOwner, requestId, filename, mime;
+        final byte[] bytes;
+        ResourceExport(WebView source, Object token, String url, String owner, String requestId,
+                String filename, String mime, byte[] bytes) {
+            this.source=source;documentToken=token;documentUrl=url;accountOwner=owner;
+            this.requestId=requestId;this.filename=filename;this.mime=mime;this.bytes=bytes;
+        }
+    }
+
+    private boolean currentResourceExport(ResourceExport export) {
+        return export != null && !isFinishing() && !isDestroyed() && accountAvailable
+                && export.source == liveView && export.documentToken != null
+                && export.documentToken == liveDocumentTokens.get(export.source)
+                && export.accountOwner.equals(availableAccountOwner)
+                && export.documentUrl.equals(export.source.getUrl())
+                && ResourceExportPolicy.trustedEditor(BuildConfig.SERVER_BASE_URL, export.source.getUrl());
+    }
+
+    private void resourceExportResult(ResourceExport export, String state, String message) {
+        if (!currentResourceExport(export)) return;
+        JSONObject result=new JSONObject();
+        try { result.put("requestId",export.requestId);result.put("state",state);result.put("message",message); }
+        catch(org.json.JSONException impossible){return;}
+        export.source.evaluateJavascript("window.dispatchEvent(new CustomEvent('homer-resource-export-result',{detail:"
+                + result + "}));",null);
+    }
+
+    void exportWorkshopResource(WebView source, Object documentToken, String payload) {
+        if (source == null || source != liveView || documentToken == null
+                || documentToken != liveDocumentTokens.get(source) || !accountAvailable
+                || !ResourceExportPolicy.trustedEditor(BuildConfig.SERVER_BASE_URL,source.getUrl())) return;
+        ResourceExport export=null;
+        try {
+            JSONObject data=new JSONObject(payload);
+            String requestId=data.getString("requestId"),filename=data.getString("filename"),mime=data.getString("mime"),content=data.getString("content");
+            if(!requestId.matches("[A-Za-z0-9._:-]{1,160}"))return;
+            export=new ResourceExport(source,documentToken,source.getUrl(),availableAccountOwner,requestId,filename,mime,new byte[0]);
+            byte[] bytes=ResourceExportPolicy.validate(requestId,filename,mime,content);
+            if("application/json".equals(mime)){
+                org.json.JSONTokener json=new org.json.JSONTokener(content);
+                Object value=json.nextValue();
+                if(!(value instanceof JSONObject || value instanceof JSONArray) || json.nextClean()!=0) throw new IllegalArgumentException("invalid JSON");
+            }
+            export=new ResourceExport(source,documentToken,source.getUrl(),availableAccountOwner,requestId,filename,mime,bytes);
+            if(pendingResourceExport!=null){resourceExportResult(export,"failed","请先完成或取消当前导出。");return;}
+            pendingResourceExport=export;
+            Intent picker=new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
+                    .setType(mime).putExtra(Intent.EXTRA_TITLE,filename);
+            startActivityForResult(picker,RESOURCE_EXPORT_REQUEST);
+        }catch(Exception failure){
+            if(pendingResourceExport==export)pendingResourceExport=null;
+            if(export!=null)resourceExportResult(export,"failed","资源文件无效或无法打开保存窗口，请检查内容后重试。");
+            else android.widget.Toast.makeText(this,"资源文件无效或超过大小限制，未导出。",android.widget.Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void completeResourceExport(int resultCode, Intent data) {
+        ResourceExport export=pendingResourceExport;pendingResourceExport=null;
+        if(!currentResourceExport(export))return;
+        Uri destination=data==null?null:data.getData();
+        if(resultCode!=RESULT_OK || destination==null){resourceExportResult(export,"cancelled","");return;}
+        if(!"content".equals(destination.getScheme())){resourceExportResult(export,"failed","保存位置无效，文件没有导出。");return;}
+        new Thread(()->{
+            boolean saved=false;
+            try(java.io.OutputStream stream=getContentResolver().openOutputStream(destination,"wt")){
+                if(stream==null)throw new java.io.IOException("No document stream");
+                stream.write(export.bytes);stream.flush();saved=true;
+            }catch(Exception unavailable){saved=false;}
+            final boolean written=saved;
+            handler.post(()->resourceExportResult(export,written?"saved":"failed",written?"":"写入文件失败，请选择其他保存位置。"));
+        },"homer-resource-export").start();
+    }
 
     String archiveMediaStatus() { return archiveMediaStore == null ? "{\"state\":\"unavailable\"}" : archiveMediaStore.status(); }
 
@@ -1217,7 +1308,7 @@ public final class HomerActivity extends Activity {
                 // A partially loaded page is expected until the dialogue runtime reports ready.
             }
             if (System.currentTimeMillis() - liveStartedAt < READY_TIMEOUT_MS) {
-                handler.postDelayed(this::pollLiveReady, READY_POLL_MS);
+                readinessHandler.postDelayed(this::pollLiveReady, READY_POLL_MS);
             } else {
                 updateSnapshotConnectionState(isOnline(), false);
             }
@@ -1369,16 +1460,25 @@ public final class HomerActivity extends Activity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == RESOURCE_EXPORT_REQUEST) {
+            completeResourceExport(resultCode, data);
+            return;
+        }
         if (requestCode == ARCHIVE_MEDIA_REQUEST) {
             if (resultCode == RESULT_OK && data != null && data.getData() != null && archiveMediaStore != null) {
                 archiveMediaStore.install(data.getData());
             }
             return;
         }
-        if (requestCode != FILE_CHOOSER_REQUEST || fileChooserCallback == null) return;
-        Uri[] result = WebChromeClient.FileChooserParams.parseResult(resultCode, data);
-        fileChooserCallback.onReceiveValue(result);
-        fileChooserCallback = null;
+        if (requestCode == CAMERA_CAPTURE_REQUEST) {
+            Uri[] result = resultCode == RESULT_OK && cameraCapture != null && cameraCapture.hasPhoto()
+                    ? new Uri[]{cameraCapture.uri} : null;
+            completeFileChooser(result);
+            return;
+        }
+        if (requestCode == FILE_CHOOSER_REQUEST) {
+            completeFileChooser(WebChromeClient.FileChooserParams.parseResult(resultCode, data));
+        }
     }
 
     @Override
@@ -1388,6 +1488,15 @@ public final class HomerActivity extends Activity {
             int[] grantResults
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == CAMERA_PERMISSION_REQUEST) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED
+                    && fileChooserCurrent()) startCameraCapture();
+            else {
+                completeFileChooser(null);
+                android.widget.Toast.makeText(this, "未拍摄照片，可以重新拍照或从相册选择", android.widget.Toast.LENGTH_LONG).show();
+            }
+            return;
+        }
         if (requestCode == 6107) {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) downloadUserBackup(liveView);
             else android.widget.Toast.makeText(this, "未获得保存权限，备份没有下载", android.widget.Toast.LENGTH_LONG).show();
@@ -1413,6 +1522,7 @@ public final class HomerActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        pendingResourceExport = null;
         pendingHistoryPreparation = null;
         liveDocumentTokens.clear();
         accountAvailable = false;
@@ -1422,8 +1532,10 @@ public final class HomerActivity extends Activity {
         if (apkUpdates != null) apkUpdates.close();
         if (archiveMediaStore != null) archiveMediaStore.close();
         handler.removeCallbacksAndMessages(null);
+        readinessHandler.removeCallbacksAndMessages(null);
         if (pendingPermissionRequest != null) pendingPermissionRequest.deny();
-        if (fileChooserCallback != null) fileChooserCallback.onReceiveValue(null);
+        fileChooserInFlight = false;
+        completeFileChooser(null);
         if (snapshotView != null) snapshotView.destroy();
         Set<WebView> views = new HashSet<>(persistentPages.values());
         if (liveView != null) views.add(liveView);
@@ -1506,7 +1618,7 @@ public final class HomerActivity extends Activity {
             applySystemBars();
             applyNativeInsetsToWebViews();
             cacheDatabase.saveLastUrl(url);
-            handler.removeCallbacksAndMessages(null);
+            readinessHandler.removeCallbacksAndMessages(null);
             pollLiveReady();
             scheduleDialoguePreparation();
         }
@@ -1534,16 +1646,35 @@ public final class HomerActivity extends Activity {
                 ValueCallback<Uri[]> callback,
                 FileChooserParams params
         ) {
-            if (fileChooserCallback != null) fileChooserCallback.onReceiveValue(null);
+            // An old picker/camera result must never complete a newer input.
+            if (fileChooserInFlight) { callback.onReceiveValue(null); return true; }
+            cancelFileChooser();
+            if (webView != liveView || !SafeUrls.isTrustedNavigation(BuildConfig.SERVER_BASE_URL, webView.getUrl())) {
+                callback.onReceiveValue(null); return true;
+            }
             fileChooserCallback = callback;
+            fileChooserSource = webView;
+            fileChooserDocument = liveDocumentTokens.get(webView);
+            fileChooserOwner = availableAccountOwner;
+            fileChooserUrl = webView.getUrl();
+            String[] types = FilePickerTypes.normalize(params.getAcceptTypes());
+            if (WebCameraCapture.acceptsPhoto(params.isCaptureEnabled(), types)) {
+                if (checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) startCameraCapture();
+                else {
+                    fileChooserInFlight = true;
+                    try { requestPermissions(new String[]{Manifest.permission.CAMERA}, CAMERA_PERMISSION_REQUEST); }
+                    catch (RuntimeException unavailable) { completeFileChooser(null); }
+                }
+                return true;
+            }
             try {
                 Intent intent = params.createIntent();
                 intent.addCategory(Intent.CATEGORY_OPENABLE);
-                String[] types = FilePickerTypes.normalize(params.getAcceptTypes());
                 intent.setType(types.length == 1 ? types[0] : "*/*");
                 intent.removeExtra(Intent.EXTRA_MIME_TYPES);
                 if (types.length > 1) intent.putExtra(Intent.EXTRA_MIME_TYPES, types);
                 intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, params.getMode() == FileChooserParams.MODE_OPEN_MULTIPLE);
+                fileChooserInFlight = true;
                 startActivityForResult(intent, FILE_CHOOSER_REQUEST);
                 return true;
             } catch (RuntimeException error) {
@@ -1553,10 +1684,10 @@ public final class HomerActivity extends Activity {
                     fallback.addCategory(Intent.CATEGORY_OPENABLE);
                     fallback.setType("*/*");
                     fallback.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, params.getMode() == FileChooserParams.MODE_OPEN_MULTIPLE);
+                    fileChooserInFlight = true;
                     startActivityForResult(fallback, FILE_CHOOSER_REQUEST);
                 } catch (RuntimeException unavailable) {
-                    fileChooserCallback = null;
-                    callback.onReceiveValue(null);
+                    completeFileChooser(null);
                     android.widget.Toast.makeText(HomerActivity.this,
                             "无法打开系统文件选择器，请启用手机的文件管理应用后重试", android.widget.Toast.LENGTH_LONG).show();
                 }
@@ -1567,6 +1698,44 @@ public final class HomerActivity extends Activity {
         @Override
         public void onPermissionRequest(PermissionRequest request) {
             runOnUiThread(() -> handleWebPermissionRequest(request));
+        }
+    }
+
+    private boolean fileChooserCurrent() {
+        return fileChooserCallback != null && !isFinishing() && !isDestroyed()
+                && fileChooserSource == liveView && fileChooserDocument != null
+                && fileChooserSource.getVisibility() == View.VISIBLE
+                && fileChooserUrl.equals(fileChooserSource.getUrl())
+                && fileChooserDocument == liveDocumentTokens.get(fileChooserSource)
+                && fileChooserOwner.equals(availableAccountOwner)
+                && SafeUrls.isTrustedNavigation(BuildConfig.SERVER_BASE_URL, fileChooserSource.getUrl());
+    }
+
+    private void cancelFileChooser() {
+        if (fileChooserCallback != null) { fileChooserCallback.onReceiveValue(null); fileChooserCallback = null; }
+        // Keep an outstanding external result reserved until it returns. If a
+        // new picker starts first, its callback could consume the old result.
+        if (!fileChooserInFlight) completeFileChooser(null);
+    }
+
+    private void completeFileChooser(Uri[] result) {
+        boolean current = fileChooserCurrent();
+        ValueCallback<Uri[]> callback = fileChooserCallback;
+        fileChooserCallback = null; fileChooserInFlight = false;
+        fileChooserSource = null; fileChooserDocument = null; fileChooserOwner = ""; fileChooserUrl = "";
+        if (cameraCapture != null) { cameraCapture.finish(this, current && result != null); cameraCapture = null; }
+        if (callback != null) callback.onReceiveValue(current ? result : null);
+    }
+
+    private void startCameraCapture() {
+        if (!fileChooserCurrent()) { completeFileChooser(null); return; }
+        try {
+            cameraCapture = WebCameraCapture.create(this);
+            fileChooserInFlight = true;
+            startActivityForResult(cameraCapture.intent(), CAMERA_CAPTURE_REQUEST);
+        } catch (Exception unavailable) {
+            completeFileChooser(null);
+            android.widget.Toast.makeText(this, "无法打开相机，请启用相机应用或从相册选择", android.widget.Toast.LENGTH_LONG).show();
         }
     }
 

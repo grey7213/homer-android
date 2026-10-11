@@ -5,6 +5,7 @@ import vm from 'node:vm';
 import { createChatOutbox } from '../../sillytavern-runtime/public/scripts/homer-chat-outbox.mjs';
 import { transactionIDB } from './helpers/transaction-idb.mjs';
 import { emptyLocalSessions } from './helpers/bridge-session-vm.mjs';
+import { sanitizeRuntimeValue } from '../../sillytavern-runtime/public/scripts/homer-local-runtime.mjs';
 
 const source = fs.readFileSync(new URL('../../sillytavern-runtime/public/scripts/extensions/homer-bridge/index.js', import.meta.url), 'utf8');
 function section(start, end) {
@@ -36,7 +37,7 @@ function harness(t) {
         extensionSettingsBaseline: { memory: { enabled: false } }, extension_settings: {}, runtimeVariables: {},
         runtimeUiData: { models: [], modelDefaultId: '' }, payloadList: data => Array.isArray(data) ? data : data?.list || [],
         replaceExtensionSettings: value => { c.extension_settings = clone(value); applied.push(clone(value)); },
-        extensionSettingsSnapshot: () => ({ signature: JSON.stringify(c.extension_settings) }), extensionSettingsScope: () => c.cloudSyncScope(),
+        sanitizeRuntimeValue, extensionSettingsScope: () => c.cloudSyncScope(),
         lastExtensionSettingsScope: '', lastExtensionSettingsSignature: '', conversationExtensionSettings: null,
         applicationReady: true, reaffirmExtensionSettingsAfterReady: false,
         eventSource: { emit: async event => { events.push(event); } }, event_types: { SETTINGS_LOADED: 'settings' },
@@ -46,6 +47,7 @@ function harness(t) {
     };
     vm.createContext(c);
     vm.runInContext([
+        section('function extensionSettingsSnapshot(', 'function captureExtensionStorage('),
         section('function selectRuntimeModelId(', 'function selectedModel('),
         section('async function loadRuntimeState(', 'async function persistRuntimeVariables('),
         section('function prepareRuntimeModels(', 'let modLoadController;'),

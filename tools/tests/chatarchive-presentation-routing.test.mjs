@@ -52,6 +52,14 @@ function fixture(search = '', completeInitialTarget = true) {
     previewInput: node, previewSend: node, previewTitle: node, launcherVisual: {}, launcher: node, announcer: node,
     readyHandoffTimer: 0, history: [], appearance: { refresh: noop }, settledPreviewQueue: { clear: noop },
     clearReadyTimer: noop, syncHostInsets: noop, setDocumentTitle: noop,
+    // Admin controls are outside this routing fixture; their verified scope is
+    // covered by backend-contracts-r366 and the privileged workspace tests.
+    syncAdminHostControls: noop,
+    // No explicit deletion is queued in these presentation-routing scenarios.
+    // The real deletion journal and owner fences are tested in history-deletion.
+    isConversationDeleted: () => false,
+    filterDeletedConversations: (_owner, rows) => rows,
+    refreshConversationDeletions: async () => [],
     canUseIdleHostDisplay: () => false, adoptRuntimeControls: () => false, closeDrawers: noop,
     scopedKey: value => value, renderCachedConversation: () => true, renderConversation: noop,
     updateModelSummary: noop, loadQuickPreview: noop, showToast: value => toasts.push(value),

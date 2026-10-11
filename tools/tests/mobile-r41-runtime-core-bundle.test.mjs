@@ -120,6 +120,31 @@ test('root/mounted/core/extension imports share live state and execute initializ
     assert.deepEqual(await readFile(join(root, 'lib.js')), libraryBefore);
 });
 
+test('outer storage imports never activate the packaged dialogue core or require its DOM globals', async t => {
+    const root = await fixture(t, {
+        'script.js': `import {digest} from './scripts/homer-content-digest.mjs';
+            globalThis.coreStarts=(globalThis.coreStarts||0)+1;
+            if(!globalThis.jQuery)throw Error('Dialogue-only global missing');export {digest};`,
+        'scripts/homer-content-digest.mjs': 'export const digest={kind:"shared-pure-digest"};',
+        'scripts/homer-memory-sync.mjs': `export {digest} from './homer-content-digest.mjs';`,
+        'scripts/homer-chat-outbox.mjs': `export {digest} from './homer-memory-sync.mjs';`,
+    });
+    const original = await readFile(join(root, 'scripts/homer-content-digest.mjs'));
+    const result = await bundleRuntimeCore({runtimeRoot:root});
+    assert.equal(result.module_count,1);
+    assert.ok(result.external.includes('/module/dialogue/scripts/homer-content-digest.mjs'));
+    assert.deepEqual(await readFile(join(root,'scripts/homer-content-digest.mjs')),original);
+    const host=moduleHost(root);
+    const storage=await host.load('/scripts/homer-chat-outbox.mjs');
+    assert.equal(storage.digest.kind,'shared-pure-digest');
+    assert.equal(host.context.globalThis.coreStarts,undefined);
+    const canonicalStorage=await host.load('/module/dialogue/scripts/homer-chat-outbox.mjs');
+    host.context.globalThis.jQuery={};
+    const core=await host.load('/module/dialogue/script.js');
+    assert.strictEqual(core.digest,canonicalStorage.digest);
+    assert.equal(host.context.globalThis.coreStarts,1);
+});
+
 test('actual source-layout lease and core scroll share one WeakMap through generated facade imports', async t => {
     const scriptSource = await readFile(new URL('../../sillytavern-runtime/public/script.js', import.meta.url), 'utf8');
     const layoutSource = await readFile(new URL('../../sillytavern-runtime/public/scripts/homer-source-layout.mjs', import.meta.url), 'utf8');

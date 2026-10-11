@@ -300,6 +300,7 @@ function bridgeFixture({ refreshGate = null, story = null, confirmed = true, fai
     };
     vm.createContext(sandbox);
     vm.runInContext('const archivePresentationScopes = new WeakMap(); let archiveStoryStorePromise = null; let activeGameTurn = null; let activeArchiveGameId = ""; let archiveGameEpoch = 0;\n'
+        + section(bridgeSource, 'function extensionStorageSnapshot(', 'function captureExtensionStorage(')
         + section(bridgeSource, 'function captureArchivePresentationScope(', 'function resolveChatStorageConflict(')
             .replace(/import\('\/app\/assets\/js\/visual-novel-story-store\.mjs\?[^']+'\)/, 'loadStoryStoreModule()'), sandbox);
     return { sandbox, calls, context, capture: () => sandbox.captureArchivePresentationScope(),

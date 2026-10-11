@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createHash, webcrypto } from 'node:crypto';
 import vm from 'node:vm';
+import { mergeConversationHistory } from '../../.web-cache/tree/frontend/assets/js/conversation-history-merge.mjs';
 
 // The subject is shipping host code, not a replacement queue implementation.
 // Surrounding UI rendering is inert; iframe writes and protocol sends are observed.
@@ -93,6 +94,14 @@ function harness({ prewarming = false, runtimeReady = false, runtimeBound = fals
         appearance: { refresh() {} }, composerUi: { refresh() {} },
         closeDrawers() {}, showToast: message => notices.push(message),
         scopedKey: key => owner + ':' + key, setDocumentTitle() {}, updateModelSummary() {}, renderConversation() {},
+        syncAdminHostControls() {},
+        // Deletion persistence has its own transactional and browser fixtures.
+        // This protocol fixture contains no deleted conversation; keep the real
+        // cold-binding tests independent of its native/IndexedDB adapters.
+        refreshConversationDeletions: async () => {},
+        mergeConversationHistory,
+        filterDeletedConversations: (_owner, list) => list,
+        isConversationDeleted: () => false,
         showShell() {}, readCachedHistory: () => [], renderHistory() {}, loadHistory: async () => {},
         renderCachedConversation: id => previews.push(id), loadQuickPreview: async id => previews.push(id), writeCachedConversation() {},
         getCachedUser: () => owner ? { id: owner } : null,

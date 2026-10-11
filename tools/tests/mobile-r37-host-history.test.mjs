@@ -100,6 +100,8 @@ function harness(rows = [row()]) {
         URL, location: { href: 'https://fixture.invalid/app/chat.html' }, history: rows,
         historySignature: '', activeConversationId: 'fixture-a', historyList: list, historyCount: { textContent: '' },
         document, window: view, leftDrawer, rightDrawer, scrim: { hidden: true }, createDeferredListCovers,
+        // Deletion is exercised by history-deletion and real UI/IDB journeys.
+        filterDeletedConversations: (_owner, rows) => rows, runtimeBindingOwner: () => 'fixture-owner',
     };
     vm.createContext(scope);
     vm.runInContext(coverSetup + '\n' + safeImage + '\n' + helper + '\n' + render + '\n' + drawers + '\nglobalThis.historyCovers=historyCovers;', scope);

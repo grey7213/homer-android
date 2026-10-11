@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { readFileSync } from 'node:fs';
+import { attachHomerGenerationIntent } from '../../sillytavern-runtime/public/scripts/homer-generation-intent.mjs';
 import { createGame, applyGameCommand, buildGameContext } from '../../frontend/app/assets/js/visual-novel-game-store.mjs';
 
 const read = path => readFileSync(new URL(path, import.meta.url), 'utf8');
@@ -239,7 +240,7 @@ test('shipping OpenAI prompt event really forwards the spliced array, not an ign
 
 function installNativeSender(h, { parametersGate } = {}) {
   const requests = [], failures = [];
-  Object.assign(h.sandbox, { AbortController,
+  Object.assign(h.sandbox, { AbortController, attachHomerGenerationIntent, yaml: { parse: JSON.parse },
     getChatCompletionModel: () => 'synthetic-configured-model', beginDiagnostic: () => ({ output_chars: 0 }), requireAvailableModel() {},
     async createGenerationParameters(_settings, model, type, messages) {
       if (parametersGate) await parametersGate.promise;
@@ -352,12 +353,12 @@ function routingFixture(query = '') {
   const sandbox = vm.createContext({ URL, URLSearchParams,
     location: { origin: 'https://synthetic.invalid', href: `https://synthetic.invalid/app/chat.html?app_id=app-a&conversation_id=chat-a${query}`, search: `?app_id=app-a&conversation_id=chat-a${query}` },
     activeAppId: 'app-a', activeConversationId: 'chat-a', runtimeAccountEpoch: 1, runtimeReady: true,
-    runtimeBindingOwner: () => owner, adminPreview: false, runtimeState: null, pendingDraft: '', adminBindPending: false,
+    runtimeBindingOwner: () => owner, adminPreview: false, runtimeState: null, pendingDraft: '', adminBindPending: false, pendingAdminCard: '',
     document: { querySelector: () => null, body: node }, appearance: { refresh: noop }, composerUi: null,
     composerDraftDirty: false, previewInput: node, previewRequestId: 0, readyHandoffTimer: 0,
     runtimeOverlayActive: false, frame: {}, switchShellScope: '', insetsSignature: '', pendingTool: null,
     launcherVisual: {}, launcher: node, announcer: {},
-    closeDrawers: noop, showToast: noop, renderCachedConversation: noop, bindPreparedConversation: noop,
+    closeDrawers: noop, showToast: noop, renderCachedConversation: noop, bindPreparedConversation: noop, syncAdminHostControls: noop,
     clearReadyTimer: noop, setRuntimeOverlay: noop, syncHostInsets: noop, setDocumentTitle: noop, flushRuntimeCommands: noop,
     forwardPresentationVisibility: noop, canUseIdleHostDisplay: () => false, adoptRuntimeControls: () => false,
     postRuntimeCommand: (type, payload) => posts.push({ type, ...plain(payload) }),

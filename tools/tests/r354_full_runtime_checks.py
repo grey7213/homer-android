@@ -59,7 +59,8 @@ SNAPSHOT = """async () => {
    initialized:performance.getEntriesByName('homer-native-init-start').length,
    coreReady:performance.getEntriesByName('homer-prewarm-core-ready').length,
    generating:isGenerating(),
-   appReady:performance.getEntriesByName('homer-prewarm-core-ready').length>=2};
+   appReady:performance.getEntriesByName('homer-prewarm-core-ready').length>=2,
+   marks:performance.getEntriesByType('mark').filter(e=>e.name.startsWith('homer-')).map(e=>({name:e.name,ms:Math.round(e.startTime)}))};
 }"""
 
 def check_snapshot(snapshot):
@@ -225,6 +226,23 @@ try:
             page.screenshot(path=str(OUT / f"r354-full-runtime-online-{width}.png"))
             assert "/api/homer/sync" not in posts
             readonly_state_posts = [entry for entry in requests if entry["method"] == "POST" and entry["path"] == "/api/homer/runtime-state"]
+            # Verify real bridge persistence, then remove only this synthetic
+            # conversation's optional resource mirror. The authoritative outbox
+            # must still restore the complete settings offline without a GET.
+            phone_settings = page.evaluate("""async () => {
+                const ctx=window.SillyTavern.getContext();
+                ctx.extensionSettings.r366_phone_state={saved:'synthetic-durable'};
+                const result=await ctx.saveSettingsDebounced();
+                const {createChatOutbox}=await import('/scripts/homer-chat-outbox.mjs');
+                const outbox=createChatOutbox();
+                const scope=JSON.stringify(['r354-synthetic-owner','synthetic-card','synthetic-conv']);
+                const row=await outbox.read(scope,'extension-settings');outbox.close();
+                if(!result||row?.payload.extension_settings.r366_phone_state?.saved!=='synthetic-durable'
+                    ||row.payload.variables?.homer_model_settings?.model_id!=='synthetic-model') {
+                    throw new Error('Actual bridge did not save complete phone settings');
+                }
+                return true;
+            }""")
             second_session = json.loads(json.dumps(SESSION))
             second_session["launch"]["conversation_id"] = "synthetic-conv-b"
             second_session["launch"]["title"] = "Synthetic second 1101 history"
@@ -266,6 +284,17 @@ try:
                 }
                 await store.close();
             }""", [second_session, third_session])
+            page.evaluate("""async () => {
+                const db=await new Promise((resolve,reject)=>{
+                    const req=indexedDB.open('homer-local-sessions-v1',1);
+                    req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);
+                });
+                await new Promise((resolve,reject)=>{
+                    const tx=db.transaction('entries','readwrite');
+                    tx.objectStore('entries').delete(['r354-synthetic-owner','synthetic-card','synthetic-conv','resource','runtime-state']);
+                    tx.oncomplete=resolve;tx.onabort=()=>reject(tx.error);tx.onerror=()=>reject(tx.error);
+                });db.close();
+            }""")
             online[0] = False
             failed.clear()
             started = time.monotonic()
@@ -274,6 +303,8 @@ try:
             page.wait_for_timeout(1000)
             offline = page.evaluate(SNAPSHOT)
             check_snapshot(offline)
+            assert page.evaluate("window.SillyTavern.getContext().extensionSettings.r366_phone_state?.saved") == 'synthetic-durable'
+            assert not any(entry['phase']=='offline' and entry['path']=='/api/homer/runtime-state' for entry in requests), requests
             offline_seconds = round(time.monotonic() - started, 3)
             page.screenshot(path=str(OUT / f"r354-full-runtime-offline-{width}.png"))
             offline_failed = list(failed)
@@ -370,6 +401,7 @@ try:
                 "console": warnings, "requests": requests, "denied": denied,
                 "offline_request_failures": offline_failed, "network_errors": network_errors,
                 "readonly_state_posts": readonly_state_posts, "state_write_diffs": state_write_diffs, "warm_switch": warm_switch}
+            record['complete_phone_settings_without_resource_mirror'] = phone_settings
             results.append(record)
             (OUT / "r354-full-runtime-browser.json").write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
             print(json.dumps({"viewport": [width, height], "passed": True, "prime_seconds": priming_seconds,

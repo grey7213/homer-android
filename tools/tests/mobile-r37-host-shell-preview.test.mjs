@@ -48,6 +48,13 @@ function harness({ cached = true } = {}) {
         localStorage: { getItem: key => local.get(key) || null, setItem(key, value) { calls.localWrites++; local.set(key, value); } },
         document: { querySelector: selector => selector === '#preview-settings-title' ? settingsTitle : settingsAvatar },
         getCachedUser: () => ({ id: owner }),
+        // This cache/display fixture has no explicit deletion markers. Keep the
+        // adapter owner-bound; real journal behavior lives in history-deletion.
+        runtimeBindingOwner: () => owner,
+        isConversationDeleted: () => false,
+        filterDeletedConversations: (_owner, rows) => rows,
+        refreshConversationDeletions: async () => [],
+        syncAdminHostControls() {},
         safePreviewImage: value => value || '', normalizeMessage: value => value, conversationSnapshot: value => value,
         appearance: { refresh() {} }, setPreviewAvatarSource(image, value) { image.src = value; }, setDocumentTitle() {},
         renderMessages(messages) { calls.cachePaints++; paints.push({ owner, id: context.activeConversationId, messages }); }, renderHistory() {},

@@ -91,16 +91,17 @@ export function transactionIDB() {
                 },
                 delete(key) { return tx.enqueue(() => { tx.rows.delete(keyOf(key)); }); },
                 index(indexName) {
-                    return { openCursor(wanted) {
+                    const cursor = (wanted, keysOnly) => {
                         let values, position = 0;
                         const request = {};
                         const next = () => tx.enqueue(() => {
                             if (!values) values = [...tx.rows.values()].filter(row => keyOf(row[indexName]) === keyOf(wanted)).map(copy);
                             const value = values[position++];
-                            return value ? { value, continue: next } : null;
+                            return value ? { ...(keysOnly ? {} : { value }), primaryKey: copy(value.key), continue: next } : null;
                         }, request);
                         next(); return request;
-                    } };
+                    };
+                    return { openCursor: wanted => cursor(wanted, false), openKeyCursor: wanted => cursor(wanted, true) };
                 },
             };
         }

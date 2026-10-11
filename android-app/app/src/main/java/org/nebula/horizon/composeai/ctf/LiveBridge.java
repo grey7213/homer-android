@@ -49,6 +49,14 @@ public final class LiveBridge {
         activity.runOnUiThread(() -> activity.downloadUserBackup(owner));
     }
 
+    @JavascriptInterface
+    public void exportWorkshopResource(String payload) {
+        final Object documentToken = activity.historyPreparationDocumentToken(owner);
+        // Reject oversized messages before posting another copy to the UI queue.
+        if (payload == null || payload.length() > ResourceExportPolicy.MAX_BYTES * 2 + 16384) return;
+        activity.runOnUiThread(() -> activity.exportWorkshopResource(owner, documentToken, payload));
+    }
+
     /** Pure UTF-8 digest only; an empty result requests the existing web fallback. */
     @JavascriptInterface
     public String sha256Utf8(String value) { return HomerUtf8Sha256.digest(value); }
@@ -149,5 +157,10 @@ public final class LiveBridge {
     @JavascriptInterface
     public boolean saveConversationSnapshot(String payload) {
         return database.saveConversationSnapshot(payload);
+    }
+
+    @JavascriptInterface
+    public boolean deleteConversationSnapshots(String accountOwner, String identifiers) {
+        return database.deleteConversationSnapshots(accountOwner, identifiers);
     }
 }

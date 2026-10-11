@@ -12,6 +12,13 @@ function evaluate(start, end, context) {
     // No history preparation is offered in this legacy behavior fixture.
     // The actual mailbox protocol is covered by mobile-r41-history-preparation-host.
     historyReadPreparation: context.historyReadPreparation || { clear() {}, flush() { return false; } },
+    // These legacy host scenarios have no deletion journal or admin panel.
+    // Exercise those modules in history-deletion and backend-contracts-r366;
+    // do not let a newly imported dependency swallow this fixture's cache path.
+    syncAdminHostControls: context.syncAdminHostControls || (() => {}),
+    isConversationDeleted: context.isConversationDeleted || (() => false),
+    filterDeletedConversations: context.filterDeletedConversations || ((_owner, rows) => rows),
+    refreshConversationDeletions: context.refreshConversationDeletions || (async () => []),
   });
   vm.createContext(context);
   vm.runInContext(host.slice(host.indexOf('function runtimeBindingOwner('), host.indexOf('function openRuntimeTool(')), context);

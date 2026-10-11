@@ -79,7 +79,7 @@ public class HomerCacheDatabaseTest {
         saveExample();
         assertEquals("cached reply", new JSONArray(cache.readConversationHistory())
                 .getJSONObject(0).getString("last_message"));
-        assertEquals(4, cache.getReadableDatabase().getVersion());
+        assertEquals(5, cache.getReadableDatabase().getVersion());
     }
 
     @Test public void testVersionOneMigrationCreatesConversationTable() throws Exception {
@@ -115,5 +115,44 @@ public class HomerCacheDatabaseTest {
         db.setVersion(version);
         db.close();
         cache = new HomerCacheDatabase(isolated);
+    }
+
+    @Test public void testOwnedDeletionPersistsAndRejectsLatePreviewSave() throws Exception {
+        cache.setAccountScope("audit-A"); saveExample();
+        assertFalse(cache.deleteConversationSnapshots("audit-B", "[\"audit-chat\"]"));
+        assertEquals(1, new JSONArray(cache.readConversationHistory()).length());
+        assertTrue(cache.deleteConversationSnapshots("audit-A", "[\"audit-chat\"]"));
+        assertEquals("{}", cache.readConversationSnapshot("audit-chat"));
+        cache.close(); cache = new HomerCacheDatabase(isolated);
+        assertFalse(cache.saveConversationSnapshot("{\"conversation_id\":\"audit-chat\",\"app_id\":\"audit-card\",\"messages\":[]}"));
+        assertEquals("[]", cache.readConversationHistory());
+        cache.setAccountScope("audit-B"); saveExample();
+        assertEquals(1, new JSONArray(cache.readConversationHistory()).length());
+        cache.setAccountScope("audit-A");
+        assertFalse(cache.saveConversationSnapshot("{\"conversation_id\":\"audit-chat\",\"messages\":[]}"));
+    }
+
+    @Test public void testBatchDeletionKeepsUnselectedAndRejectsInvalidBatch() throws Exception {
+        cache.setAccountScope("audit-A"); saveExample();
+        assertTrue(cache.saveConversationSnapshot("{\"conversation_id\":\"audit-keep\",\"messages\":[{\"content\":\"keep\"}]}"));
+        assertFalse(cache.deleteConversationSnapshots("audit-A", "[\"audit-chat\",7]"));
+        assertEquals(2, new JSONArray(cache.readConversationHistory()).length());
+        assertTrue(cache.deleteConversationSnapshots("audit-A", "[\"audit-chat\",\"missing\"]"));
+        assertEquals("audit-keep", new JSONArray(cache.readConversationHistory()).getJSONObject(0).getString("id"));
+    }
+
+    @Test public void testDeletedConversationCannotReturnThroughLateStartupHint() {
+        cache.setAccountScope("audit-A");
+        String removed="https://patcher.villainy.top/app/chat.html?conversation_id=audit-chat";
+        String kept="https://patcher.villainy.top/app/chat.html?conversation_id=audit-keep";
+        assertTrue(cache.saveSnapshot("{}",removed));
+        assertTrue(cache.deleteConversationSnapshots("audit-A","[\"audit-chat\"]"));
+        assertEquals("",cache.readLastUrl());
+        assertTrue(cache.saveSnapshot("{}",kept));
+        assertFalse(cache.saveSnapshot("{}",removed));
+        cache.saveLastUrl(removed);
+        assertEquals(kept,cache.readLastUrl());
+        cache.setAccountScope("audit-B");
+        assertTrue(cache.saveSnapshot("{}",removed));
     }
 }

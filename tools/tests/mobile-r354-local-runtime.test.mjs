@@ -29,6 +29,45 @@ test('embedded installation is idempotent', () => {
     assert.equal(installLocalRuntime({ target, isEmbedded: true, owner: () => 'owner-a', storage }), first);
 });
 
+test('mounted runtime creates string-backed POST at its final URL and retains local read classification', async () => {
+    const calls = [], storage = createLocalRuntimeStore({ indexedDB: transactionIDB() });
+    const adapter = createLocalRuntimeAdapter({ origin: ORIGIN, owner: () => 'owner-a', storage,
+        requestMount: '/module/dialogue', fetcher: async (request, init) => {
+            calls.push({request, init});
+            if (typeof request === 'string') return json({token:'synthetic-live-only'});
+            assert.equal(new URL(request.url).pathname, '/module/dialogue/api/settings/get');
+            assert.equal(await request.clone().text(), '{}');
+            assert.equal(request.headers.get('X-CSRF-Token'), 'synthetic-live-only');
+            return json({settings:'{}'});
+        } });
+    assert.equal((await adapter.fetch('/api/settings/get', post({}))).status, 200);
+    assert.equal(calls[0].request, ORIGIN+'/module/dialogue/csrf-token');
+    assert.ok(await storage.read('owner-a','boot','POST:/api/settings/get'));
+    const previous = calls.length;
+    await adapter.fetch('/module/dialogue/api/settings/get', post({}));
+    // Cached data returns first; its permitted background refresh may run once.
+    assert.ok(calls.length <= previous+1);
+});
+
+test('mounting does not redirect foreign/console calls, alter caller streams or fake generation', async () => {
+    const calls=[], controller = new AbortController();
+    const adapter=createLocalRuntimeAdapter({origin:ORIGIN,owner:()=> 'owner-a',requestMount:'/module/dialogue',
+        storage:createLocalRuntimeStore({indexedDB:transactionIDB()}), fetcher:async request=>{
+            if(typeof request==='string')return json({token:'synthetic-live-only'});
+            calls.push(request);return json({});
+        }});
+    const stream=new ReadableStream({start(c){c.enqueue(new TextEncoder().encode('stream-body'));c.close();}});
+    await adapter.fetch(new Request(ORIGIN+'/api/homer/unknown',{method:'POST',body:stream,duplex:'half',signal:controller.signal}));
+    assert.equal(calls[0].url,ORIGIN+'/api/homer/unknown');
+    assert.equal(await calls[0].clone().text(),'stream-body');controller.abort();assert.ok(calls[0].signal.aborted);
+    await adapter.fetch('https://foreign.invalid/api/homer/sync',post({}));
+    assert.equal(calls.at(-1).url,'https://foreign.invalid/api/homer/sync');
+    await adapter.fetch('/console/api/web/auth/login',post({}));
+    assert.equal(calls.at(-1).url,ORIGIN+'/console/api/web/auth/login');
+    await adapter.fetch('/api/homer/sync',post({messages:[]}));
+    assert.equal(calls.at(-1).url,ORIGIN+'/module/dialogue/api/homer/sync');
+});
+
 test('settings nested JSON and credential fields are not persisted', async () => {
     const fixture = { settings: JSON.stringify({ username: 'Synthetic', api_key_openai: 'synthetic-private',
         oai_settings: { proxy_password: 'synthetic-private', api_key: 'synthetic-private', temperature: 0.8 },

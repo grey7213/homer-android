@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
+import { sanitizeRuntimeValue } from '../../sillytavern-runtime/public/scripts/homer-local-runtime.mjs';
 
 const bridge = fs.readFileSync(new URL('../../sillytavern-runtime/public/scripts/extensions/homer-bridge/index.js', import.meta.url), 'utf8');
 const script = fs.readFileSync(new URL('../../sillytavern-runtime/public/script.js', import.meta.url), 'utf8');
@@ -51,7 +52,7 @@ function fixture(options = {}) {
         document: { body: { classList: { add: value => classSet.add(value), remove: value => classSet.delete(value) } } },
         performance: { mark: name => calls.push(['mark', name]) },
         reconcileStorageAccount: () => scope.owner,
-        cloneJsonValue: clone, cloneJsonObject: clone,
+        cloneJsonValue: clone, cloneJsonObject: clone, sanitizeRuntimeValue,
         getContext: () => ({ characterId: scope.this_chid, characters: scope.characters, chatId: scope.getCurrentChatId(),
             chat: scope.chat, chatMetadata: scope.chat_metadata, printMessages: async config => {
                 calls.push(['print', scope.this_chid, config]);
@@ -134,6 +135,7 @@ function fixture(options = {}) {
         section(bridge, 'function prepareLaunchMirrorHeader(', 'function prepareInitialCharacterRead('),
         section(bridge, 'function normalizeBootstrapToken(', 'function notifyHostConversation('),
         section(bridge, 'function cloudSyncScope()', 'async function commitConversationBeforeSwitch()'),
+        section(bridge, 'function extensionStorageSnapshot(', 'function captureExtensionStorage('),
         section(bridge, 'function captureExtensionStorage(', 'async function persistExtensionSettingsSnapshot('),
         section(bridge, 'async function syncCloudChat(', 'async function syncCloudChatSnapshot('),
         section(bridge, 'async function switchConversation(', 'async function copyDiagnostic('),

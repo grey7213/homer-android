@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import { createSettledPreviewQueue } from '../../frontend/assets/js/settled-preview-queue.mjs';
+import { acceptsConversationSnapshot } from '../../frontend/assets/js/conversation-snapshot-policy.mjs';
 
 function fixture({ limit } = {}) {
     let account = 'owner-a:login-1', next = 0;
@@ -60,8 +61,8 @@ test('shipping state consumer publishes live UI immediately and queues only sett
     const source = fs.readFileSync(new URL('../../frontend/app/assets/js/chat.js', import.meta.url), 'utf8');
     const begin = source.indexOf('function cacheRuntimeState('), end = source.indexOf('function acceptsRuntimeTransition(', begin);
     const calls = [], listeners = new Map();
-    const scope = { adminPreview: false, runtimeBindingOwner: ()=>'owner', runtimeAccountEpoch:0, activeAppId: 'synthetic-card', activeConversationId: 'a', runtimeState: null,
-        pendingDraft: '', previewSend: {}, previewInput: {}, history: [], settingsSignature: '', SETTINGS_CACHE_PREFIX: 'test:',
+    const scope = { acceptsConversationSnapshot, currentMessages: [], adminPreview: false, runtimeBindingOwner: ()=>'owner', runtimeAccountEpoch:0, activeAppId: 'synthetic-card', activeConversationId: 'a', runtimeState: null,
+        pendingDraft: '', previewSend: {}, previewInput: {}, history: [], settingsSignature: '', SETTINGS_CACHE_PREFIX: 'test:', syncAdminHostControls() {},
         setRuntimeOverlay() {}, forwardPresentationVisibility() {}, conversationSnapshot: value => snapshot(value.conversation_id), canAcceptRuntimeDraft: () => true,
         settledPreviewQueue: { enqueue: value => calls.push(['queue', value.conversation_id]), flush: () => calls.push(['flush']) },
         canUseIdleHostDisplay: () => false,
@@ -73,10 +74,10 @@ test('shipping state consumer publishes live UI immediately and queues only sett
         renderConversation() {}, renderHistory() { calls.push(['history']); }, updateModelSummary() { calls.push(['model']); },
         composerUi: { refresh() { calls.push(['composer']); } } };
     vm.createContext(scope); vm.runInContext(source.slice(begin, end), scope);
-    scope.cacheRuntimeState({ app_id: 'synthetic-card', conversation_id: 'a', generating: false });
+    scope.cacheRuntimeState({ owner_id: 'owner', messages_ready: true, messages: [], app_id: 'synthetic-card', conversation_id: 'a', generating: false });
     assert.deepEqual(calls.map(x => x[0]), ['queue', 'history', 'model', 'composer']);
     calls.length = 0;
-    scope.cacheRuntimeState({ app_id: 'synthetic-card', conversation_id: 'a', generating: true });
+    scope.cacheRuntimeState({ owner_id: 'owner', messages_ready: true, messages: [], app_id: 'synthetic-card', conversation_id: 'a', generating: true });
     assert.deepEqual(calls.map(x => x[0]), ['history', 'model', 'composer']);
     calls.length = 0;
     scope.cacheRuntimeState({ app_id: 'other-card', conversation_id: 'a' }); assert.equal(calls.length, 0);

@@ -13,6 +13,7 @@ import { cardTransportIDB } from './helpers/card-transport-idb.mjs';
 import { createCardTransportCache, clearCardTransportMemory } from '../../sillytavern-runtime/public/scripts/homer-card-transport-cache.mjs';
 import { emptyLocalSessions } from './helpers/bridge-session-vm.mjs';
 import { sanitizeRuntimeValue } from '../../sillytavern-runtime/public/scripts/homer-local-runtime.mjs';
+import { memoryFromPayload, memoryReceipt } from '../../sillytavern-runtime/public/scripts/homer-memory-sync.mjs';
 
 // Load actual product functions, rather than rewriting a second implementation.
 const source = fs.readFileSync(new URL('../../.web-cache/tree/sillytavern-runtime/public/scripts/extensions/homer-bridge/index.js', import.meta.url), 'utf8');
@@ -49,7 +50,7 @@ function harness({ cookieOnly = false } = {}) {
     const context = {
         session:{user:{id:'test-owner-a'}},launch:{app_id:'test-card-a',conversation_id:'test-conversation-a',card:{name:'Test'},storage},
         chat:[{mes:'initial text',is_user:false,extra:{}}],chatOutbox:outbox,localSessions:emptyLocalSessions(),sanitizeRuntimeValue,
-        captureCloudSync,canApplyCloudSync,createCloudSyncQueue,AbortController,URLSearchParams,
+        captureCloudSync,canApplyCloudSync,createCloudSyncQueue,AbortController,URLSearchParams,memoryFromPayload,memoryReceipt,
         storageOwner:cookieOnly?'':'test-owner-a',verifiedStorageOwner:'',storageAccountEpoch:0,storageRequests:new Set(),outboxReplay:null,
         clearCardTransportMemory:(...args)=>{memoryClears.push(args);clearCardTransportMemory(...args);},
         preparedAdminLaunch:null,scopeDrafts:new Map(),payloadList:value=>value.list||[],
@@ -64,6 +65,7 @@ function harness({ cookieOnly = false } = {}) {
         extensionSettingsPersistTimer:null,extensionSettingsPersistChain:Promise.resolve(),extensionSettingsPersistWaiters:[],
         lastExtensionSettingsScope:'',lastExtensionSettingsSignature:'',conversationExtensionSettings:null,
         runtimeVariables:{},applicationReady:true,reaffirmExtensionSettingsAfterReady:false,
+        storyMetadata:{version:1},captureArchiveStoryMetadataState:()=>clone(context.storyMetadata),
         conversationRecoveryBlocked:false,suppressSync:false,lastSyncSignature:'',syncTimer:null,requestedAppId:'test-card-a',requestedConversationId:'test-conversation-a',holdLargeSourceLayout,
         queryString:(app,conv)=>new URLSearchParams({app_id:app,conversation_id:conv}).toString(),
         synchronizeJsonContainer:(target,value)=>Object.assign(target,clone(value)),
@@ -86,7 +88,7 @@ function harness({ cookieOnly = false } = {}) {
         section('const cloudSyncQueue =', 'let eventHandlersInstalled'),
         section('async function replayPendingStorage()', "window.addEventListener('storage'"),
         section("window.addEventListener('storage'", 'let tavoComposer ='),
-        section('function extensionSettingsScope(', 'function saveConversationExtensionSettings()'),
+        section('function extensionSettingsScope(', 'function installExtensionSettingsPersistenceBridge()'),
         section('async function preferLocalSession(', 'function sessionCacheKey('),
         section('function prepareAdminLaunch(', 'let initialized = false;'),
         section('function cloudSyncScope()', 'function scheduleSync('),
@@ -601,6 +603,96 @@ test('extension settings locally commit before remote wait and do not mutate lat
     assert.equal(h.context.lastExtensionSettingsScope,localScope);
     assert.equal(h.context.lastExtensionSettingsSignature,localSignature);
     assert.notEqual(h.context.lastExtensionSettingsScope,h.context.extensionSettingsScope());
+});
+
+test('actual non-force settings save persists variable-only changes and restores them offline after reopening', async t => {
+    const h=harness(), remote=deferred();t.after(()=>h.outbox.close());
+    h.context.requestJson=async()=>remote.promise;
+    assert.equal(await h.context.saveConversationExtensionSettings(),true);
+    h.context.runtimeVariables.cardProgress={chapter:4,flags:['opened']};
+    assert.equal(await h.context.saveConversationExtensionSettings(),true);
+    const saved=await h.outbox.read(id(),'extension-settings');
+    same(saved.payload.variables.cardProgress,{chapter:4,flags:['opened']});
+    assert.equal(saved.pending,true,'the save must not wait for a cloud ACK');
+    const reopened=createChatOutbox({indexedDB:h.indexedDB,databaseName:'bridge-unit'});
+    t.after(()=>reopened.close());
+    h.context.chatOutbox=reopened;
+    h.context.runtimeVariables={};h.context.extension_settings={};
+    h.context.requestJson=async()=>{throw new Error('synthetic offline');};
+    await h.context.loadRuntimeState();
+    same(h.context.runtimeVariables.cardProgress,{chapter:4,flags:['opened']});
+    assert.equal(h.context.captureExtensionStorage(),null,'load baseline covers variables as well as settings');
+    remote.resolve({});await turn();
+});
+
+test('actual non-force save detects live story metadata changes without requiring settings edits', async t => {
+    const h=harness(), remote=deferred();t.after(()=>h.outbox.close());
+    h.context.requestJson=async()=>remote.promise;
+    h.context.runtimeVariables.homer_story_metadata={oldMirror:true};
+    assert.equal(await h.context.saveConversationExtensionSettings(),true);
+    const previous=await h.outbox.read(id(),'extension-settings');
+    h.context.storyMetadata={version:2,choices:['synthetic-choice']};
+    assert.equal(await h.context.saveConversationExtensionSettings(),true);
+    const saved=await h.outbox.read(id(),'extension-settings');
+    assert.notEqual(saved.commitId,previous.commitId);
+    same(saved.payload.variables.homer_story_metadata,h.context.storyMetadata);
+    const reopened=createChatOutbox({indexedDB:h.indexedDB,databaseName:'bridge-unit'});
+    t.after(()=>reopened.close());
+    same((await reopened.read(id(),'extension-settings')).payload.variables.homer_story_metadata,h.context.storyMetadata);
+    remote.resolve({});await turn();
+});
+
+test('same sanitized storage body is a no-op and missing story namespace is not fabricated', async t => {
+    const h=harness();t.after(()=>h.outbox.close());
+    h.context.runtimeVariables.cardProgress=7;
+    assert.equal(await h.context.saveConversationExtensionSettings(),true);
+    await turn();
+    const previous=await h.outbox.read(id(),'extension-settings'), count=h.requests.length;
+    assert.equal(Object.hasOwn(previous.payload.variables,'homer_story_metadata'),false);
+    h.context.storyMetadata={version:20};
+    assert.equal(await h.context.saveConversationExtensionSettings(),false);
+    const sameRow=await h.outbox.read(id(),'extension-settings');
+    assert.equal(sameRow.commitId,previous.commitId);
+    assert.equal(h.requests.length,count);
+});
+
+test('complete phone settings prepare without a cloud request or optional mirror', async t => {
+    const h=harness();t.after(()=>h.outbox.close());
+    h.context.runtimeVariables.cardProgress=42;
+    const captured=h.context.captureExtensionStorage();
+    await h.outbox.prepare(captured.snapshot,'extension-settings');
+    h.context.requestJson=async()=>{throw new Error('must not request server');};
+    const ticket=h.context.prepareRuntimeState('test-card-a','test-conversation-a');
+    const outcome=await ticket.pending;
+    assert.equal(outcome.error,undefined);
+    assert.equal(outcome.value.state.variables.cardProgress,42);
+    assert.equal(h.requests.length,0);
+});
+
+test('account change during durable settings read rejects the old prepared state', async t => {
+    const h=harness(), held=deferred(), reached=deferred();t.after(()=>h.outbox.close());
+    await h.outbox.prepare(h.context.captureExtensionStorage().snapshot,'extension-settings');
+    const read=h.outbox.read.bind(h.outbox);
+    h.outbox.read=async(...args)=>{const row=await read(...args);reached.resolve();await held.promise;return row;};
+    const ticket=h.context.prepareRuntimeState('test-card-a','test-conversation-a');
+    await reached.promise;h.changeOwner('test-owner-b');held.resolve();
+    const outcome=await ticket.pending;
+    assert.match(outcome.error.message,/账号已切换/);
+    assert.equal(h.requests.length,0);
+});
+
+test('variable save captured before scope change cannot adopt later variables or change its signature baseline', async t => {
+    const h=harness(), gate=h.indexedDB.holdNextCommit();t.after(()=>h.outbox.close());
+    h.context.runtimeVariables.cardProgress='captured A';
+    const saved=h.context.persistExtensionSettingsSnapshot();await gate.reached;
+    h.context.launch={app_id:'test-card-b',conversation_id:'test-conversation-b'};
+    h.context.runtimeVariables={cardProgress:'current B'};
+    h.context.lastExtensionSettingsSignature='B baseline';
+    gate.release();assert.equal(await saved,true);
+    same((await h.outbox.read(id(),'extension-settings')).payload.variables,{cardProgress:'captured A'});
+    assert.equal(h.context.lastExtensionSettingsSignature,'B baseline');
+    assert.equal(await h.outbox.read(id('test-owner-a','test-card-b','test-conversation-b'),'extension-settings'),null);
+    await turn();
 });
 
 test('account change during background extension ACK cannot replace its already committed phone settings signature', async () => {

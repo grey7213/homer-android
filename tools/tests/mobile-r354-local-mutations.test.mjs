@@ -23,6 +23,7 @@ const mutationCode = [
     section('async function deleteCloudMessage(', '\nasync function handleMessageMenuAction('),
 ].join('\n');
 const variableCode = [
+    section('function extensionStorageSnapshot(', '\nfunction captureExtensionStorage('),
     section('function captureExtensionStorage(', '\nasync function persistExtensionSettingsSnapshot('),
     section('async function persistRuntimeVariables(', '\nasync function persistModelSettings('),
 ].join('\n');
