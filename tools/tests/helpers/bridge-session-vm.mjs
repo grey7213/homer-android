@@ -19,6 +19,9 @@ export function sessionVM(source, overrides = {}) {
     const scope = {
         URLSearchParams, MODULE_ID: 'isolated-session-test', console: { debug() {} },
         storageAccountEpoch: 0, verifiedStorageOwner: '', storageOwner: 'unit-session-owner',
+        // Optional UI controller is absent in this session-only VM, just like
+        // its pre-mount null state in the shipping module. R367 tests cover it.
+        presetBallController: null,
         preparedAdminLaunch: null, scopeDrafts: new Map(),
         sessionReadFences: new WeakMap(), storageAckStamps: new Map(), storageRequests: new Set(),
         acknowledgedPromptTickets: new WeakMap(), prepareAcknowledgedPromptStates,

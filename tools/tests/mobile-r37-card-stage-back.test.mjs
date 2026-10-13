@@ -67,6 +67,7 @@ function environment({ previous = null, stageResult = false, loaded = true, pane
                 throw new Error(`Unexpected document queryAll: ${selector}`);
             },
         },
+        presetBallView: null,
         window: { addEventListener() {}, HomerApplyTheme() {} },
         location: { href: 'https://fixture.invalid/module/dialogue/', origin: 'https://fixture.invalid' },
         localStorage: { getItem() { return null; } },

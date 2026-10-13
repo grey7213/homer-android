@@ -7,6 +7,24 @@ import static org.junit.Assert.assertTrue;
 import org.junit.Test;
 
 public final class PersistentPageNavigationTest {
+    @Test public void legacyHttpCacheIsMigratedOnceInsteadOfDeletingCardResourcesOnEveryUpgrade() {
+        assertTrue(HomerActivity.requiresLegacyHttpCacheMigration(0));
+        assertTrue(HomerActivity.requiresLegacyHttpCacheMigration(1));
+        assertFalse(HomerActivity.requiresLegacyHttpCacheMigration(2));
+        assertFalse(HomerActivity.requiresLegacyHttpCacheMigration(3));
+    }
+    @Test public void dialogueChildSiteLinkRoutesThroughRetainedHostOnlyForTrustedUserNavigation() {
+        String chat = "https://example.test/app/chat.html?app_id=a&conversation_id=c";
+        String workshop = "https://example.test/app/workshop.html";
+        assertTrue(HomerActivity.isDialogueChildPageNavigation(chat, workshop, false, true));
+        assertFalse(HomerActivity.isDialogueChildPageNavigation(chat, workshop, false, false));
+        assertFalse(HomerActivity.isDialogueChildPageNavigation(chat, workshop, true, true));
+        assertFalse(HomerActivity.isDialogueChildPageNavigation(chat, "https://other.test/app/workshop.html", false, true));
+        assertFalse(HomerActivity.isDialogueChildPageNavigation(chat, "https://example.test/app/chat.html?app_id=b", false, true));
+        assertFalse(HomerActivity.isDialogueChildPageNavigation(chat, "https://example.test/app/assets/js/app-core.js", false, true));
+        assertFalse(HomerActivity.isDialogueChildPageNavigation(workshop, workshop, false, true));
+        assertFalse(HomerActivity.isDialogueChildPageNavigation(null, workshop, false, true));
+    }
     @Test
     public void launcherOpensCommunityRegardlessOfPreviouslyVisitedPage() {
         for (String previous : new String[]{"chat.html?conversation_id=c1", "explore.html",

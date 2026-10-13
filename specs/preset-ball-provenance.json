@@ -1,0 +1,11 @@
+{
+  "upstreamModuleSha256": "fc14319990d4aeff66942f434129f9457e8febc4ed04390a20709432fdbe6b54",
+  "authority": "User confirmed possessing source reuse permission on 2026-10-12; no new license inferred",
+  "author": "shiyue67 (original CreditsView)",
+  "upstream": [
+    { "name": "App.vue", "sha256": "be6ff6a7e9ad7c9c196c3e7d8c8a277714b0268d2016e00653ced0d2ddcf4bb1" },
+    { "name": "BatchToolbar.vue", "sha256": "90fb2b71aa0904b253f444681e7d22626e7b5d27d2f8dcc8f07dd53f27f0974f" },
+    { "name": "PresetView.vue", "sha256": "6244af46bf4a00c38593a528cf947bd5f96f2861c1382f6a68c36d1f7ff45f16" },
+    { "name": "PromptItem.vue", "sha256": "36688e307824502eb39f09183c5dfb6a09f64569090d60bc3575842af7cc5d6f" }
+  ]
+}

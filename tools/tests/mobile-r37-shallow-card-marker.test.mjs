@@ -172,6 +172,7 @@ function importerHarness({ sourceCard = card(), storedCard = sourceCard, owner =
         prepareItemizedPrompts: chatId => ({ chatId, pending: Promise.resolve() }),
     });
     vm.runInContext([
+        section(bridge, 'async function enableTavernHelperCardScripts(', 'async function selectLaunchCharacter('),
         section(bridge, 'function cloneCardWithMarker(', 'async function waitForStableCharacterForm('),
         section(bridge, 'async function importLaunchCharacter(', 'function normalizeOpeningMessage('),
         section(bridge, 'async function openLaunchCharacterChat(', 'function getManagedCoverUrl('),

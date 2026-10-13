@@ -1,0 +1,5 @@
+{
+  "source": "verified pinned reconstruction through 20261012-preset-ball-r367.patch",
+  "sha256_lf": "c02a0dcdc2c85626dc084ed7db4d0fec0fde68cd183a90cd4e018785d99828e1",
+  "purpose": "Seal all non-R371 adapter bytes while retaining earlier accepted Helper changes. Original R338 Bk/Q1/EI functional fixtures remain unchanged."
+}

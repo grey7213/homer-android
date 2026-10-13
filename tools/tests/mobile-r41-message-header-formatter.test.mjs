@@ -72,6 +72,7 @@ function harness(messages, { old = false, missingHeader = false } = {}) {
         } };
     }
     const scope = vm.createContext({ Date: TrackedDate, Intl: { DateTimeFormat },
+        messageFrameMenus: null,
         getContext: () => ({ chat: messages }),
         imageGenerationUi: { render: () => events.push(['image']) },
         document: { querySelectorAll: selector => { assert.equal(selector, '#chat .mes'); return elements; } },

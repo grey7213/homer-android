@@ -66,6 +66,7 @@ tasks.register("syncHomerClientAssets", Sync) {
     description = "Bundles the Homer web UI and dialogue client runtime into the APK."
     dependsOn(tasks.named("compileHomerDialogueLibraries"))
     inputs.files(fileTree(new File(workspaceRoot, "tools/webview-compat")) { exclude "node_modules/**" })
+    inputs.files(fileTree(new File(workspaceRoot, "tools/preset-ball-build")) { exclude "node_modules/**" })
     into(generatedClientAssets)
     if (!archiveStarterPath.isEmpty()) {
         File starter = new File(archiveStarterPath)
@@ -88,6 +89,23 @@ tasks.register("syncHomerClientAssets", Sync) {
     doLast {
         File root = generatedClientAssets.get().asFile
         File clientRoot = new File(root, "client")
+        exec {
+            workingDir new File(workspaceRoot, "tools/preset-ball-build")
+            commandLine(System.getProperty("os.name").toLowerCase().contains("windows") ? "npm.cmd" : "npm",
+                    "ci", "--ignore-scripts", "--no-audit", "--no-fund")
+        }
+        exec {
+            workingDir new File(workspaceRoot, "tools/preset-ball-build")
+            commandLine "node", "build.mjs"
+        }
+        // Source compilation happens after Sync has copied the tree; copy only
+        // these task-owned generated files back into the actual APK asset graph.
+        copy {
+            from(new File(dialogueClientSource, "scripts/extensions/homer-preset-ball")) {
+                include "index.build.js", "index.build.js.map", "style.build.css", "build-manifest.json"
+            }
+            into new File(clientRoot, "runtime/scripts/extensions/homer-preset-ball")
+        }
         List<File> compiledLibraries = fileTree(dialogueLibraryOutput)
                 .matching { include "*/output/lib.js" }
                 .files
@@ -138,8 +156,8 @@ android {
         applicationId "org.nebula.horizon.composeai"
         minSdk 26
         targetSdk 35
-        versionCode 366
-        versionName "1.18.13"
+        versionCode 371
+        versionName "1.18.14"
         buildConfigField "String", "PATCH_PUBLIC_KEY_B64", javaString(configuredPatchKey)
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }

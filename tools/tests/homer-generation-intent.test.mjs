@@ -31,7 +31,7 @@ const sender = source.slice(begin, source.indexOf('export function getStreamingR
 test('shipping sender adds the actual call type after settings listeners into the actual POST', async () => {
   const posts = [], permanent = { custom_include_body: '' };
   const scope = { AbortController, attachHomerGenerationIntent, yaml: { parse: JSON.parse },
-    homerGameGenerationGuardFactory: null, oai_settings: permanent,
+    homerGameGenerationGuardFactory: null, homerPresetGenerationGuardFactory: null, oai_settings: permanent,
     getChatCompletionModel: () => 'synthetic-model', beginDiagnostic: () => ({}), requireAvailableModel() {},
     createGenerationParameters: async (_settings, model, _type, messages) => ({ generate_data: { model, messages, custom_include_headers: headers }, stream: false }),
     event_types: { CHAT_COMPLETION_SETTINGS_READY: 'settings' },

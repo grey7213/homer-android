@@ -605,15 +605,21 @@ public final class HomerActivity extends Activity {
             long revision = getPackageManager().getPackageInfo(getPackageName(), 0).lastUpdateTime;
             android.content.SharedPreferences state = getSharedPreferences("homer-web-assets", MODE_PRIVATE);
             if (state.getLong("installed-at", -1) != revision) {
-                // HTTP resource cache only. Never clear cookies, WebStorage,
-                // account preferences, conversation databases or user files.
-                view.clearCache(true);
-                state.edit().putLong("installed-at", revision).apply();
+                // One migration removes legacy year-long first-party JS/CSS
+                // entries. Current ClientAssetStore serves executable/UI files
+                // with no-cache (APK-local revalidation): later upgrades need
+                // not erase ALL cached
+                // card fonts, images and immutable third-party modules again.
+                // Never clear cookies, WebStorage, accounts or conversation DBs.
+                if (requiresLegacyHttpCacheMigration(state.getInt("http-policy", 0))) view.clearCache(true);
+                state.edit().putInt("http-policy", 2).putLong("installed-at", revision).apply();
             }
         } catch (PackageManager.NameNotFoundException ignored) {
             // The current package should always exist; do not erase user state.
         }
     }
+
+    static boolean requiresLegacyHttpCacheMigration(int policy) { return policy < 2; }
 
     private void applyNativeInsetsToWebViews() {
         // The native root is padded by the measured insets above.  Keep the
@@ -1026,6 +1032,17 @@ public final class HomerActivity extends Activity {
 
     static boolean shouldLoadPersistentTarget(String current, String target) {
         return current == null || !current.equals(target);
+    }
+
+    static boolean isDialogueChildPageNavigation(String current, String target, boolean mainFrame, boolean gesture) {
+        if (mainFrame || !gesture || current == null || target == null) return false;
+        try {
+            URI from = URI.create(current), to = URI.create(target);
+            String key = persistentPageKey(target);
+            return "/app/chat.html".equals(from.getPath()) && !key.isEmpty() && !"chat".equals(key)
+                    && java.util.Objects.equals(from.getScheme(), to.getScheme())
+                    && java.util.Objects.equals(from.getRawAuthority(), to.getRawAuthority());
+        } catch (RuntimeException ignored) { return false; }
     }
 
     static boolean canSwitchConversationInPlace(String current, String target) {
@@ -1576,7 +1593,9 @@ public final class HomerActivity extends Activity {
             if (SafeUrls.isTrustedFrameBlobNavigation(BuildConfig.SERVER_BASE_URL,
                     value, request.isForMainFrame(), view.getUrl())) return false;
             if (SafeUrls.isTrustedNavigation(BuildConfig.SERVER_BASE_URL, value)) {
-                if (request.isForMainFrame() && view == liveView && switchPersistentPage(value)) return true;
+                boolean hostNavigation = request.isForMainFrame()
+                        || isDialogueChildPageNavigation(view.getUrl(), value, request.isForMainFrame(), request.hasGesture());
+                if (hostNavigation && view == liveView && switchPersistentPage(value)) return true;
                 return false;
             }
             if (request.isForMainFrame() && ("https".equals(target.getScheme())

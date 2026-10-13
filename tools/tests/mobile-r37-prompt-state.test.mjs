@@ -397,6 +397,7 @@ test('same-owner login observed by actual reconciliation advances epoch before a
     // than a test double that changes epoch before the conditional is evaluated.
     Object.assign(h.context, {
         storageOwner: '', verifiedStorageOwner: '', storageRequests: new Set(),
+        presetBallController: null,
         clearCardTransportMemory,
         cardPreparations: { clear() {} }, sessionPrefetchCache: new Map(), preparedAdminLaunch: null, scopeDrafts: new Map(),
         localStorage: { getItem: key => key === 'ai_xingyue_logged_in' ? '1'

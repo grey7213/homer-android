@@ -1,0 +1,28 @@
+--- a/tools/ai_fengyue_local_server.py
++++ b/tools/ai_fengyue_local_server.py
+@@ -13603,7 +13603,7 @@
+         .get(preset_id, {})
+         if preset_id else {}
+     )
+-    entries = _prompt_preset_public_entries(preset, override_map, source="card_prompt")
++    entries = _prompt_preset_public_entries(preset, override_map, require_user_toggleable=True, source="card_prompt")
+     return {
+         "kind": "card_prompt",
+         "preset_id": preset_id,
+@@ -13781,13 +13781,15 @@
+         app=app,
+     )
+     global_prompt_config = _conversation_prompt_config(store, conv_id, user_id, app)
+-    current_prompt_config = global_prompt_config if global_prompt_config.get("preset_id") else card_prompt_config
++    current_prompt_config = card_prompt_config if card_prompt_config.get("preset_id") and card_prompt_config.get("enabled") else global_prompt_config
+     return {
+         "conversation_id": conv_id,
+         "global_preset_enabled": bool(conversation.get("global_preset_enabled", 1)),
+         "preset": {
+             "current_prompt": current_prompt_config,
+             "prompt": current_prompt_config,
++            "card_prompt": card_prompt_config,
++            "global_prompt": global_prompt_config,
+             "regex": _conversation_regex_config(store, conv_id, user_id, app),
+         },
+         "worldbook": {

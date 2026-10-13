@@ -17,7 +17,7 @@ function harness({ launch, conversations, owner = 'fixture-owner', epoch = 3 } =
         ['ai_xingyue_logged_in', owner ? '1' : '0'],
         ['ai_xingyue_user', JSON.stringify({ id: owner })],
     ]);
-    const context = { launch: launch || { app_id: 'a', conversation_id: 'active' }, runtimeUiData: { conversations: conversations || [
+    const context = { presetBallController: null, launch: launch || { app_id: 'a', conversation_id: 'active' }, runtimeUiData: { conversations: conversations || [
         { id: 'active', app_id: 'a' }, { id: 'peer-1', app_id: 'b' }, { conversation_id: 'peer-2', app_id: 'c' }, { id: 'peer-3', app_id: 'd' },
     ] }, SESSION_PREFETCH_LIMIT: 2, sessionPrefetchTimer: 42,
     sessionPrefetchPeer: null, sessionPrefetchCache: new Map(), loadingLaunch: false,

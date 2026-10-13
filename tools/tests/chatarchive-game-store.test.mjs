@@ -265,7 +265,8 @@ test('actual Chromium IndexedDB verifies durable reopen, cross-owner isolation, 
     let browser;
     try {
         for (let attempt = 0; ; attempt++) {
-            try { if ((await fetch(base + '/app/assets/js/visual-novel-game-store.mjs')).ok) break; } catch {}
+            try { const response = await fetch(base + '/app/assets/js/visual-novel-game-store.mjs');
+                const ready = response.ok; await response.arrayBuffer(); if (ready) break; } catch {}
             if (attempt >= 30) throw new Error('Own synthetic server did not start'); await new Promise(resolve => setTimeout(resolve, 100));
         }
         browser = await chromium.launch({ executablePath, headless: true }); const page = await browser.newPage();

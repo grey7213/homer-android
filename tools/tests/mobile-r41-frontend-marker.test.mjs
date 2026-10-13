@@ -185,7 +185,7 @@ test('actual folding early exits and iframe streaming exclusion stay unchanged',
     }
 });
 
-test('actual shipping Q1 and EI use bounded detector, preserve other bytes and original Bk', () => {
+test('actual shipping Q1 and EI use bounded detector, preserve accepted parent bytes and original Bk', () => {
     assert.ok(current.Q1.includes('hasFrontendMarkupText('));
     assert.ok(current.EI.includes('hasFrontendMarkupText('));
     assert.equal(current.Bk, baseline.functions.Bk);
@@ -196,7 +196,25 @@ test('actual shipping Q1 and EI use bounded detector, preserve other bytes and o
         assert.equal(h.stats.reads, 1, `${name} reads only the first marker node`);
         assert.equal(h.stats.joins, 0, `${name} does not concatenate the full DOM text`);
     }
-    let restored = bundle.replace('import{hasFrontendMarkupText}from"../homer-frontend-marker.mjs";\n', '');
-    for (const name of ['Q1', 'EI']) restored = restored.replace(current[name], baseline.functions[name]);
-    assert.equal(createHash('sha256').update(restored).digest('hex'), baseline.bundle_sha256, 'all non-target bundle bytes exact');
+    // R338's whole-bundle seal predates the accepted R366 iframe batching.
+    // Keep its original function/behavior comparisons above; separately seal
+    // the complete verified R367 parent, permitting only explicit R371 adapters.
+    const activation = ast.body.filter(n => n.type === 'ExpressionStatement'
+        && n.expression.type === 'AssignmentExpression'
+        && n.expression.left.type === 'MemberExpression'
+        && n.expression.left.object.name === 'window'
+        && n.expression.left.property.name === 'HomerTavernHelperActivation');
+    assert.equal(activation.length, 1);
+    let restored = bundle.replace(bundle.slice(activation[0].start, activation[0].end), '');
+    restored = restored.replace('import{deferRemoteFontStylesheets}from"../../../../../scripts/homer-async-fonts.mjs";', '');
+    for (const args of ['source,n.useBlobUrl', 'n.srcdoc,n.useBlobUrl']) {
+        const deferred='let t=deferRemoteFontStylesheets(b1('+args+'),document.documentElement.classList.contains(`homer-embedded-runtime`));return n.useBlobUrl';
+        assert.equal(restored.split(deferred).length-1, 1);
+        restored=restored.replace(deferred,'let t=b1('+args+');return n.useBlobUrl');
+    }
+    const eager = 'loading:document.documentElement.classList.contains(`homer-embedded-runtime`)?`eager`:`lazy`},r.src_prop';
+    assert.equal(restored.split(eager).length - 1, 2);
+    restored = restored.replaceAll(eager, 'loading:`lazy`},r.src_prop').replace(/\r\n/g, '\n');
+    const parent = JSON.parse(readFileSync(new URL('./fixtures/jsrunner-r367-parent.json', import.meta.url)));
+    assert.equal(createHash('sha256').update(restored).digest('hex'), parent.sha256_lf, 'all non-task accepted-parent bytes exact');
 });

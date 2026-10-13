@@ -48,6 +48,7 @@ function harness({ cookieOnly = false } = {}) {
     const cache = new Map(cookieOnly ? [] : [['ai_xingyue_logged_in','1'],['ai_xingyue_user',JSON.stringify({id:'test-owner-a'})]]);
     const requests=[],statuses=[],notices=[],events=[],listeners=new Map(),marks=[],memoryClears=[];
     const context = {
+        presetBallController: null,
         session:{user:{id:'test-owner-a'}},launch:{app_id:'test-card-a',conversation_id:'test-conversation-a',card:{name:'Test'},storage},
         chat:[{mes:'initial text',is_user:false,extra:{}}],chatOutbox:outbox,localSessions:emptyLocalSessions(),sanitizeRuntimeValue,
         captureCloudSync,canApplyCloudSync,createCloudSyncQueue,AbortController,URLSearchParams,memoryFromPayload,memoryReceipt,

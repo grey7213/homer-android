@@ -43,6 +43,15 @@ REQUIRED_STORAGE_ASSETS = (
     'scripts/homer-memory-sync.mjs',
     'scripts/homer-content-digest.mjs',
 )
+REQUIRED_PRESET_BALL_ASSETS = (
+    'scripts/extensions/homer-preset-ball/manifest.json',
+    'scripts/extensions/homer-preset-ball/controller.mjs',
+    'scripts/extensions/homer-preset-ball/index.build.js',
+    'scripts/extensions/homer-preset-ball/index.build.js.map',
+    'scripts/extensions/homer-preset-ball/style.build.css',
+    'scripts/extensions/homer-preset-ball/build-manifest.json',
+)
+REQUIRED_RENDER_ASSETS = ('scripts/homer-message-frames.mjs', 'scripts/homer-async-fonts.mjs')
 REQUIRED_VISUAL_NOVEL_ASSETS = (
     'app/visual-novel.html',
     'app/assets/js/visual-novel-core.mjs',
@@ -157,7 +166,7 @@ def main() -> int:
         stale = [rel for rel in expected if rel not in missing
                  and not matches('web/' + rel, (web_root / rel).read_bytes())]
         runtime_root = ROOT / 'sillytavern-runtime/public'
-        for rel in REQUIRED_STORAGE_ASSETS:
+        for rel in (*REQUIRED_STORAGE_ASSETS, *REQUIRED_PRESET_BALL_ASSETS, *REQUIRED_RENDER_ASSETS):
             if not (runtime_root / rel).is_file() or f'assets/client/runtime/{rel}' not in names:
                 die(f'本机会话保存必需依赖缺失：runtime/{rel}')
         runtime_stale = []

@@ -256,7 +256,7 @@ function installNativeSender(h, { parametersGate } = {}) {
     delay: async () => {}, saveLogprobsForActiveMessage() {},
   });
   vm.runInContext(section(openai, 'let homerGameGenerationGuardFactory =', 'export function getStreamingReply(')
-    .replace('export function setHomerGameGenerationGuard', 'function setHomerGameGenerationGuard'), h.sandbox);
+    .replace(/^export /gm, ''), h.sandbox);
   h.sandbox.setHomerGameGenerationGuard(h.sandbox.captureArchiveGameRequestGuard);
   return { requests, failures };
 }
