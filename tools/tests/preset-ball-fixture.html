@@ -1,0 +1,30 @@
+<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>独立测试数据 · 预设源码移植</title>
+<link rel="stylesheet" href="/runtime/scripts/extensions/homer-preset-ball/style.build.css">
+<style>body{margin:0;background:#202124;color:#eee;font-family:system-ui}nav{display:flex;gap:10px;padding:16px}nav button{min-height:44px}#chat{padding:16px}#chat p{max-width:400px;padding:16px;background:#293d54;border-radius:16px}</style>
+<nav><button id="a">角色 A</button><button id="b">角色 B</button><button id="settings">预设开关</button><button id="send">发送测试请求</button></nav>
+<main id="chat"><p>合成测试会话。消息不会因开关调整而重绘。</p></main><div id="homer-preset-ball-root"><div id="root"></div></div>
+<script type="module">
+import { createPresetBallController } from '/runtime/scripts/extensions/homer-preset-ball/controller.mjs';
+import { mountPresetBall } from '/runtime/scripts/extensions/homer-preset-ball/index.build.js';
+let owner='fixture-owner', epoch=1, conversationId='a';
+let frames=0; window.fixtureRequestLog=[];
+const config = () => ({preset:{current_prompt:{preset_id:'test-preset',kind:'global_prompt',name:'测试角色预设',enabled:true,
+  entries:[{id:'scene',name:'场景描写',user_toggleable:true,toggleable:true,enabled:true,inherited_enabled:true,content:'PRIVATE_SOURCE_DO_NOT_EXPOSE'},
+    {id:'dialogue',name:'角色对白',user_toggleable:true,toggleable:true,enabled:true,inherited_enabled:true},
+    {id:'hidden',name:'PRIVATE_NAME',user_toggleable:false,toggleable:true,enabled:true,inherited_enabled:true}]}}});
+const controller = createPresetBallController({storage:localStorage,
+  current:s=>s.owner===owner && s.epoch===epoch && s.conversationId===conversationId,
+  async request(s,body){const r=await fetch('/api/preset/'+s.conversationId,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});return r.json();},
+  onApplied(){} });
+const view=mountPresetBall(document.querySelector('#root'),controller);
+function bind(id){conversationId=id;controller.bind({owner,epoch,appId:'card-'+id,conversationId:id},config());}
+bind('a');
+document.querySelector('#a').onclick=()=>bind('a');document.querySelector('#b').onclick=()=>bind('b');
+document.querySelector('#settings').onclick=()=>view.open();
+document.querySelector('#send').onclick=async()=>{try{const guard=controller.captureGenerationGuard();guard?.();const r=await fetch('/api/generate/'+conversationId,{method:'POST'});window.fixtureLastGeneration=await r.json();}catch(e){window.fixtureLastGeneration={error:e.code};}};
+window.HomerCloseOverlay=()=>view.close();
+window.fixture={controller,view,bind, config};
+new MutationObserver(()=>frames++).observe(document.querySelector('#chat'),{childList:true,subtree:true});
+window.fixtureChatRepaints=()=>frames;
+</script>

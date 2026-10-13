@@ -27,6 +27,15 @@
             android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/apk_update_paths" />
         </provider>
+        <provider
+            android:name=".CameraFileProvider"
+            android:authorities="${applicationId}.camera-files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/camera_capture_paths" />
+        </provider>
+        <activity android:name=".ArchiveWorkshopActivity" android:exported="false" android:windowSoftInputMode="adjustResize"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode" />
         <activity
             android:name=".HomerActivity"
             android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"

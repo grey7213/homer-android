@@ -1,0 +1,7 @@
+{
+  "name": "homer-authorized-preset-ball-build",
+  "private": true,
+  "type": "module",
+  "scripts": { "build": "node build.mjs" },
+  "dependencies": { "@vue/compiler-sfc": "3.5.22", "vue": "3.5.22", "esbuild": "0.28.2" }
+}

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
+import { emptyLocalSessions } from './helpers/bridge-session-vm.mjs';
 import { captureCloudSync, canApplyCloudSync, createCloudSyncQueue, CHAT_KEEPALIVE_MAX_BYTES, CHAT_SAVED_CACHE_MAX_BYTES }
     from '../../.web-cache/tree/sillytavern-runtime/public/scripts/homer-cloud-sync.mjs';
 
@@ -115,7 +116,7 @@ const bridge = fs.readFileSync(new URL('../../.web-cache/tree/sillytavern-runtim
 function adapterContext() {
     const ack = deferred(), statuses=[], chat=[{mes:'old',extra:{}}];
     const context = {session:{user:{id:'test-account'}},launch:{app_id:'test-card',conversation_id:'test-chat',card:{name:'test'}},
-        captureCloudSync,canApplyCloudSync,chatOutbox:{prepare:async value=>({scope:value.scope,body:value.body})},
+        captureCloudSync,canApplyCloudSync,chatOutbox:{prepare:async value=>({scope:value.scope,body:value.body})},localSessions:emptyLocalSessions(),
         reconcileStorageAccount:()=> 'test-account',storageAccountEpoch:0,storageAcknowledgementEpoch:0,
         cloudSyncQueue:{enqueue:()=>ack.promise,pending:()=>null},
         serializeChat:()=>chat.map(x=>({mes:x.mes,extra:{...x.extra}})),getContext:()=>({chat,characterId:0,

@@ -1,0 +1,50 @@
+--- a/tools/ai_fengyue_local_server.py
++++ b/tools/ai_fengyue_local_server.py
+@@ -9,6 +9,7 @@
+ import hmac
+ import io
+ import json
++from homer_memory_storage import read_runtime_state, write_runtime_state, MemoryStorageError
+ import math
+ import os
+ import random
+@@ -9269,7 +9270,7 @@
+             raise ValueError(f"{field} 过大，最大 {limit} bytes")
+         return normalized, blob
+ 
+-    def get_sillytavern_runtime_state(
++    def _get_sillytavern_runtime_state_legacy(
+         self,
+         user_id: str,
+         app_id: str = "",
+@@ -9327,7 +9328,10 @@
+             "version": 1,
+         }
+ 
+-    def save_sillytavern_runtime_state(
++    def get_sillytavern_runtime_state(self, user_id, app_id="", conversation_id=""):
++        return read_runtime_state(self, user_id, app_id, conversation_id)
++
++    def _save_sillytavern_runtime_state_legacy(
+         self,
+         user_id: str,
+         app_id: str,
+@@ -9394,6 +9398,9 @@
+             )
+             self.conn.commit()
+         return self.get_sillytavern_runtime_state(clean_user, clean_app, clean_conv)
++
++    def save_sillytavern_runtime_state(self, user_id, app_id, conversation_id, data):
++        return write_runtime_state(self, user_id, app_id, conversation_id, data)
+ 
+     def _legacy_llm_preset(self, saved: dict | None = None, include_secrets: bool = True) -> dict:
+         saved = saved or self.get_api_settings_raw()
+@@ -21371,7 +21378,7 @@
+             try:
+                 state = self.store.save_sillytavern_runtime_state(token_user_id, app_id, conv_id, body)
+             except ValueError as exc:
+-                return error_response(str(exc), 400)
++                return error_response(str(exc), exc.status if isinstance(exc, MemoryStorageError) else 400)
+             return ok_response(state)
+ 
+         if normalized == "console/api/web/tavo-plugins/runtime-contributions":

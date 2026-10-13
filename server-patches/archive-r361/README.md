@@ -1,0 +1,23 @@
+# 剧场存档服务增量 R361
+
+本目录是服务端交接，不是已部署证明。只合并 Android PR 或安装 APK 不会使这些路由上线。上线前先部署本增量并验收，否则客户端会明确显示“云备份服务尚未接通，请勿卸载软件”。
+
+## 应用顺序
+
+1. 对已有数据库做可恢复备份，保留当前服务文件。不要覆盖整个后端目录。先按 `server-patches/chat-storage-r354-v2/README.md` 落地并验证 R354 普通聊天存档增量；若已经落地，不重复应用。
+2. 在后端仓库检查 `manifest.json` 的 `source_sha256_lf` 与现有 `tools/ai_fengyue_local_server.py`（UTF-8、CRLF 规范为 LF）的 SHA-256。不同则先审核边界，不强行套补丁。
+3. `git apply --check backend.patch`，核对后 `git apply backend.patch`。将 `homer_archive_storage.py` 放在后端 `tools/`，与 `ai_fengyue_local_server.py` 同目录；不可仅放在 Android 仓库。
+4. `python -m py_compile tools/ai_fengyue_local_server.py tools/homer_archive_storage.py`。按现有部署流程重启服务，不修改账号、模型、计费和普通历史路由。
+5. 用专用测试账号、新专用会话验收 `GET/POST /console/api/web/archive/saves`，不使用真实玩家历史。检查未登录 401、跨账号不可读写、重复 `commit_id` 幂等、旧版本 CAS 409、已确认备份重启数据库后可读。
+6. 确认手机明确显示“进度已备份到账号”，再验收清空测试端数据 → 同账号恢复全部剧情/分支 → 重新下载同修订人物 → 继续。不得在未确认备份时让真实用户卸载。
+
+本清单 `requires_chat_storage_v2=true`，其源摘要等于 R354 清单的结果摘要，保证两个补丁顺序一致。维护者源树已继续演进时，先审核 R354/剧场边界，再用 `python tools/export_archive_server.py --source <已有R354的源文件> --destination <新的空目录>` 重新导出增量；不要对已经含 R354 的源文件再加 `--with-chat-storage`。
+
+## 数据边界
+
+- 手机游戏进度是主数据。云端不会覆盖任何已存在的手机游戏；冲突保留两边，不自动倒退。
+- 云端保存完整游戏/回合/分支、专用会话绑定以及人物资源 UUID、修订 UUID、SHA-256。不上传素材、第三方 Cookie、模型配置凭据或受保护卡源。
+- 三个新增 SQLite 表按需创建；不删除、改名或重置旧表。单游戏最大 4 MiB，含分支上传包最大 28 MiB；超限不截断本机数据。每游戏保留 5 个旧云版本、100 个幂等回执。
+- 写入用独立事务；遇到已有未提交事务返回 503，不把未持久化的数据当“备份成功”，也不替别的请求提交数据。
+- 刚离线产生且未上传的应用私有数据，卸载后无法恢复；这是数据边界，不以 UI 隐藏。
+- 当前本地验证用合成身份/模型；工坊真实样本用于解析与媒体渲染。正式服务器部署和端到端生产账号恢复待维护者完成。

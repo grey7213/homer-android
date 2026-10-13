@@ -1,0 +1,19 @@
+diff --git a/tools/ai_fengyue_local_server.py b/tools/ai_fengyue_local_server.py
+--- a/tools/ai_fengyue_local_server.py
++++ b/tools/ai_fengyue_local_server.py
+@@ -31,2 +31,3 @@
+ from datetime import date
++from homer_generation_intent import continuation_instruction, apply_continuation_intent
+ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+@@ -17955,3 +17956,3 @@
+         if not provider_messages or provider_messages[-1]["role"] != "user":
+-            provider_messages.append({"role": "user", "content": last_user or "请继续。"})
++            provider_messages.append({"role": "user", "content": continuation_instruction(body) or last_user or "请继续。"})
+         payload["system"] = "\n\n".join(system_parts)
+@@ -17986,3 +17987,6 @@
+         payload["messages"] = prefix + messages + suffix
+ 
++    # Preserve a typed continuation request through provider adaptation. Never
++    # append the previous user question as the final instruction for this action.
++    payload["messages"] = apply_continuation_intent(payload["messages"], body)
+     def _float_param(name: str, minimum: float, maximum: float) -> None:

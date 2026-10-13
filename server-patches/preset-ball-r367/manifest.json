@@ -1,0 +1,7 @@
+{
+  "source": "tools/ai_fengyue_local_server.py",
+  "source_sha256_lf": "4aea1dad268faee0b28610bfec12fdfaaf24be68893a8c3d662f1ec0286ada8b",
+  "adapted_sha256_lf": "b410c8bd7d5f3f9a7104ae5d60109de250448cce7a88917ce6065732b011c364",
+  "deployed": false,
+  "behavior": "Expose authorized card/global metadata, prefer explicitly enabled bound card; no provider/account/storage replacement"
+}

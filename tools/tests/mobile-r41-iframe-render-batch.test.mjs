@@ -110,4 +110,6 @@ test('shipping component lifecycle and non-streaming default are wired, not mode
     assert.match(source, /homerMessageIframeBatch\?\.mounted\(n.element,a.value\)/);
     assert.match(source, /homerMessageIframeBatch\?\.disposed\(n.element,a.value\)/);
     assert.match(source, /key:e\+t/);
+    assert.equal(source.split('loading:document.documentElement.classList.contains(`homer-embedded-runtime`)?`eager`:`lazy`},r.src_prop').length-1,2,
+        'Embedded visible messages start immediately; non-embedded lazy behavior remains');
 });

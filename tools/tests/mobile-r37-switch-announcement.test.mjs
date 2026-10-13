@@ -41,6 +41,7 @@ function harness() {
     const context = vm.createContext({
         HOST_CHANNEL: 'homer:dialogue-host:v1', PREVIEW_CACHE_PREFIX: 'homer.dialogue.preview.v2:',
         runtimeReady: true, runtimeBound: true, runtimeState: { generating: false }, activeAppId: 'card-chat-a',
+        requestedPresentation: null, forwardPresentationVisibility() {}, presentationVisibility: null, clearVisibleGameRequest:()=>false,
         activeConversationId: 'chat-a', switchShellScope: '', previewRequestId: 0, launchRequestId: 0,
         readyHandoffTimer: 0, insetsSignature: '', adminPreview: false, adminBindPending: false,
         prewarming: false, pendingTool: null, pendingDraft: '', pendingCommands: [],
@@ -70,6 +71,13 @@ function harness() {
             remove: (...names) => names.forEach(name => classes.delete(name)),
         } }, querySelector: selector => selector === '#preview-settings-title' ? settingsTitle : settingsAvatar },
         getCachedUser: () => ({ id: owner }), safePreviewImage: value => value || '', normalizeMessage: value => value,
+        // Announcements here have no deletion journal or privileged UI. Those
+        // modules have dedicated scope/role tests; retain a live owner adapter.
+        runtimeBindingOwner: () => owner,
+        isConversationDeleted: () => false,
+        filterDeletedConversations: (_owner, rows) => rows,
+        refreshConversationDeletions: async () => [],
+        syncAdminHostControls() {},
         appearance: { refresh() {} }, setPreviewAvatarSource(image, source) { image.src = source; },
         conversationSnapshot: value => value,
         renderMessages(messages) { calls.cachePaints++; previews.push(messages); }, renderHistory() {},

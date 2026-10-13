@@ -39,8 +39,10 @@ test('Homer deferred-scroll printing still renders all requested messages and re
 function loadHarness(fail) {
     const calls = [], chat = [], metadata = {};
     const context = {
-        suppressSync: false, session: { user: { id: 'fixture-owner' } }, holdLargeSourceLayout,
+        suppressSync: false, runtimeVariables: {}, session: { user: { id: 'fixture-owner' } }, holdLargeSourceLayout,
         acknowledgedPromptTickets: new WeakMap(), restoreAcknowledgedPromptStates, samePromptMessageSource, clearPromptMessageState,
+        sessionReadFences: new WeakMap(), storageAccountEpoch: 0, reconcileStorageAccount: () => 'fixture-owner',
+        cloudSyncScope: () => JSON.stringify(['fixture-owner','fixture-card','fixture-chat']),
         launch: { app_id: 'fixture-card', conversation_id: 'fixture-chat', local_chat: [{ mes: 'complete raw message', swipes: ['a', 'b'], extra: { hidden: true } }] },
         getContext: () => ({ chat, chatMetadata: metadata, chatId: 'Homer-fixture-chat', printMessages: async options => { calls.push(['print', options]); if (fail === 'print') throw Error('synthetic render failure'); } }),
         cloneJsonValue: value => JSON.parse(JSON.stringify(value)), conversationModelSettings: () => ({}),
@@ -53,6 +55,7 @@ function loadHarness(fail) {
         restoreCanonicalGreeting, getRegexScripts: () => [], regex_placement: { AI_OUTPUT: 2 },
         getRegexedString: () => assert.fail('plain storage fixture must not replay display rules'),
     };
+    context.sessionReadFences.set(context.session, { owner:'fixture-owner', epoch:0, scope:context.cloudSyncScope() });
     vm.createContext(context);
     vm.runInContext(bridge.slice(bridge.indexOf('function normalizeOpeningMessage('), bridge.indexOf('function cloudMessageToDialogue(')), context);
     vm.runInContext(bridge.slice(bridge.indexOf('async function loadCloudChat('), bridge.indexOf('function serializeChat(')), context);

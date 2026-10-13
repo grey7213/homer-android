@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
+import { emptyLocalSessions } from './helpers/bridge-session-vm.mjs';
 
 const source = fs.readFileSync(new URL('../../.web-cache/tree/sillytavern-runtime/public/scripts/extensions/homer-bridge/index.js', import.meta.url), 'utf8');
 const begin = source.indexOf('function prepareRuntimeModels(');
@@ -13,7 +14,7 @@ const catalog = { list: [{ id: 'disabled', enabled: false }, { id: 'actual-model
 function harness() {
     const calls = [];
     const context = {
-        owner: 'verified-owner', storageAccountEpoch: 0,
+        owner: 'verified-owner', storageAccountEpoch: 0, localSessions: emptyLocalSessions(),
         reconcileStorageAccount: () => context.owner,
         launch: { app_id: 'old-card', conversation_id: 'old-chat' },
         runtimeUiData: { conversations: [{ id: 'preserved-history' }] },
@@ -29,6 +30,7 @@ test('fresh actual model catalog starts beside old-session leave without changin
     const h = harness(), network = deferred();
     h.context.requestJson = async path => { h.calls.push(path); return network.promise; };
     const ticket = h.context.prepareRuntimeModels('target-card', 'target-chat');
+    await new Promise(resolve => setImmediate(resolve));
     assert.deepEqual(h.calls, ['/api/homer/models']);
     assert.equal(h.context.launch.app_id, 'old-card');
     assert.equal(h.context.runtimeUiData.models, undefined);

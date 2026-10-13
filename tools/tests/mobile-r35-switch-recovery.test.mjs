@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
+import { sanitizeRuntimeValue } from '../../sillytavern-runtime/public/scripts/homer-local-runtime.mjs';
 
 const bridge = fs.readFileSync(new URL('../../sillytavern-runtime/public/scripts/extensions/homer-bridge/index.js', import.meta.url), 'utf8');
 const script = fs.readFileSync(new URL('../../sillytavern-runtime/public/script.js', import.meta.url), 'utf8');
@@ -21,9 +22,9 @@ function fixture(options = {}) {
     const oldMetadata = { integrity: 'old-integrity', persona: 'locked-persona.png',
         homer_bridge: { user_id: 'owner-a', app_id: 'card-a', conversation_id: 'conversation-a', runtime: 'dialogue' },
         custom_memory: { entries: ['kept'] } };
-    const previousSession = { user: { id: 'owner-a' }, launch: { app_id: 'card-a', conversation_id: 'conversation-a',
+    const previousSession = { user: { id: 'owner-a' }, launch: { app_id: 'card-a', conversation_id: 'conversation-a', bridge_token: 'synthetic-only',
         card: { toJSON() { throw Error('Source card must never be cloned for recovery'); } } } };
-    const nextSession = { user: { id: 'owner-a' }, launch: { app_id: 'card-b', conversation_id: 'conversation-b' } };
+    const nextSession = { user: { id: 'owner-a' }, launch: { app_id: 'card-b', conversation_id: 'conversation-b', bridge_token: 'synthetic-only' } };
     const classSet = new Set(), handlers = new Map();
     let mirrorFailures = options.mirrorFailure ? 1 : 0;
     const scope = {
@@ -34,7 +35,7 @@ function fixture(options = {}) {
         reaffirmExtensionSettingsAfterReady: false, officialRegexState: { count: 1, errors: [], revision: 'old-rules' },
         lastExtensionSettingsScope: 'card-a\u0000conversation-a', lastExtensionSettingsSignature: 'old signature',
         storageAccountEpoch: 0, owner: 'owner-a', conversationRecoveryBlocked: false,
-        loadingLaunch: false, adminBinding: false, generationBusy: false, rollbackBusy: false,
+        loadingLaunch: false, adminBinding: false, generationBusy: false, rollbackBusy: false, activeGameTurn: null,
         generationSnapshot: null, suppressSync: false, lastSyncSignature: '', requestedAppId: 'card-a', requestedConversationId: 'conversation-a',
         characters: [card('card-a', 'old.png', 'Old'), card('card-b', 'new.png', 'New')],
         this_chid: '0', chat: [oldMessage], chat_metadata: clone(oldMetadata), dom: ['old-live-iframe'],
@@ -51,7 +52,7 @@ function fixture(options = {}) {
         document: { body: { classList: { add: value => classSet.add(value), remove: value => classSet.delete(value) } } },
         performance: { mark: name => calls.push(['mark', name]) },
         reconcileStorageAccount: () => scope.owner,
-        cloneJsonValue: clone, cloneJsonObject: clone,
+        cloneJsonValue: clone, cloneJsonObject: clone, sanitizeRuntimeValue,
         getContext: () => ({ characterId: scope.this_chid, characters: scope.characters, chatId: scope.getCurrentChatId(),
             chat: scope.chat, chatMetadata: scope.chat_metadata, printMessages: async config => {
                 calls.push(['print', scope.this_chid, config]);
@@ -134,10 +135,11 @@ function fixture(options = {}) {
         section(bridge, 'function prepareLaunchMirrorHeader(', 'function prepareInitialCharacterRead('),
         section(bridge, 'function normalizeBootstrapToken(', 'function notifyHostConversation('),
         section(bridge, 'function cloudSyncScope()', 'async function commitConversationBeforeSwitch()'),
+        section(bridge, 'function extensionStorageSnapshot(', 'function captureExtensionStorage('),
         section(bridge, 'function captureExtensionStorage(', 'async function persistExtensionSettingsSnapshot('),
         section(bridge, 'async function syncCloudChat(', 'async function syncCloudChatSnapshot('),
         section(bridge, 'async function switchConversation(', 'async function copyDiagnostic('),
-        section(bridge, '    eventSource.on(event_types.CHAT_COMPLETION_SETTINGS_READY,', "    window.addEventListener('homer-generation-diagnostic'"),
+        section(bridge, '    eventSource.on(event_types.CHAT_COMPLETION_SETTINGS_READY, async data =>', "    window.addEventListener('homer-generation-diagnostic'"),
     ].join('\n'), scope);
     return { scope, calls, events, notices, previousSession, oldMessage: clone(oldMessage), oldMetadata, classSet, handlers };
 }

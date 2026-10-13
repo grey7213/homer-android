@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
+import { emptyLocalSessions } from './helpers/bridge-session-vm.mjs';
+import { sanitizeRuntimeValue } from '../../sillytavern-runtime/public/scripts/homer-local-runtime.mjs';
 
 // Exercise the shipping switch, bounded session row, resource preparation and
 // scheduler together. The established recovery fixture supplies canonical
@@ -12,7 +14,7 @@ const fixtureSource = fs.readFileSync(new URL('./mobile-r35-switch-recovery.test
 const start = fixtureSource.indexOf('function section(');
 const end = fixtureSource.indexOf('async function switchTarget(h)', start);
 assert.ok(start >= 0 && end > start, 'Established shipping-source recovery fixture boundaries');
-const fixtureContext = vm.createContext({ assert, vm, bridge, script, URL });
+const fixtureContext = vm.createContext({ assert, vm, bridge, script, URL, emptyLocalSessions, sanitizeRuntimeValue });
 vm.runInContext(fixtureSource.slice(start, end), fixtureContext);
 
 function section(begin, finish) {
@@ -38,7 +40,7 @@ function harness(options = {}) {
     const gates = new Map();
     let now = 1_000;
     Object.assign(c, {
-        Date: { now: () => now }, URLSearchParams, adminPreviewRequested: false,
+        Date: { now: () => now }, URLSearchParams, adminPreviewRequested: false, localSessions: emptyLocalSessions(),
         SESSION_CACHE_TTL_MS: 30_000, SESSION_PREFETCH_LIMIT: 2,
         sessionPrefetchCache: new Map(), sessionPrefetchTimer: null, sessionPrefetchPeer: null,
         sessionReadFences: new WeakMap(), storageAckStamps: new Map(),
@@ -138,6 +140,7 @@ test('uncached foreground target creates its bounded row before resource prepara
     const h = harness({ holdSession: true, holdLeave: true, large: true });
     const switched = h.switch();
     try {
+        await drain();
         const row = h.row();
         assert.ok(row?.resources, 'First click attaches preparation to the already-created session row');
         assert.equal(row.expiresAt, 31_000);
@@ -186,6 +189,7 @@ test('old queued history timer arriving during durable leave neither reads nor p
     h.c.scheduleSessionPrefetch(); const old = h.latestTimer();
     const switched = h.switch();
     try {
+        await drain();
         const row = h.row();
         h.fire(old); await drain();
         assert.equal(h.c.loadingLaunch, true);

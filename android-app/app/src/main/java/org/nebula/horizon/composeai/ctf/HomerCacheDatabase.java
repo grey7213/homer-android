@@ -12,7 +12,7 @@ import org.json.JSONObject;
 
 public final class HomerCacheDatabase extends SQLiteOpenHelper {
     private static final String DB_NAME = "homer-local-cache.db";
-    private static final int DB_VERSION = 4;
+    private static final int DB_VERSION = 5;
     private static final int MAX_PAYLOAD_CHARS = 2_000_000;
 
     public HomerCacheDatabase(Context context) {
@@ -29,6 +29,7 @@ public final class HomerCacheDatabase extends SQLiteOpenHelper {
                 + "account_scope TEXT NOT NULL DEFAULT '')");
         db.execSQL("INSERT INTO app_state(id) VALUES (1)");
         createConversationCache(db);
+        createConversationDeletions(db);
     }
 
     @Override
@@ -42,6 +43,59 @@ public final class HomerCacheDatabase extends SQLiteOpenHelper {
         if (oldVersion >= 2 && oldVersion < 4) {
             db.execSQL("ALTER TABLE conversation_cache ADD COLUMN last_message TEXT NOT NULL DEFAULT ''");
         }
+        if (oldVersion < 5) createConversationDeletions(db);
+    }
+
+    private static void createConversationDeletions(SQLiteDatabase db) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS conversation_deletions ("
+                + "owner TEXT NOT NULL, conversation_id TEXT NOT NULL, PRIMARY KEY(owner,conversation_id))");
+    }
+
+    /** Exact owned preview deletion; tombstones also fence delayed JS saves. */
+    public synchronized boolean deleteConversationSnapshots(String owner, String identifiers) {
+        if (owner == null || owner.isEmpty() || !owner.equals(readAccountScope())) return false;
+        try {
+            JSONArray ids = new JSONArray(identifiers);
+            if (ids.length() == 0) return false;
+            for (int i = 0; i < ids.length(); i++) {
+                Object id = ids.get(i);
+                if (!(id instanceof String) || ((String) id).isEmpty() || ((String) id).length() > 160) return false;
+            }
+            SQLiteDatabase db = getWritableDatabase();
+            db.beginTransaction();
+            try {
+                for (int i = 0; i < ids.length(); i++) {
+                    String id = ids.getString(i);
+                    ContentValues marker = new ContentValues(); marker.put("owner", owner); marker.put("conversation_id", id);
+                    db.insertWithOnConflict("conversation_deletions", null, marker, SQLiteDatabase.CONFLICT_IGNORE);
+                    db.delete("conversation_cache", "conversation_id=?", new String[]{id});
+                }
+                String last = readLastUrl();
+                String conversation = android.net.Uri.parse(last).getQueryParameter("conversation_id");
+                if (conversation == null) conversation = android.net.Uri.parse(last).getQueryParameter("conv_id");
+                for (int i = 0; i < ids.length(); i++) if (ids.getString(i).equals(conversation)) {
+                    ContentValues legacy = new ContentValues(); legacy.put("snapshot_json", "{}"); legacy.put("last_url", "");
+                    db.update("app_state", legacy, "id=1", null); break;
+                }
+                db.setTransactionSuccessful();
+                return true;
+            } finally { db.endTransaction(); }
+        } catch (JSONException | RuntimeException error) { return false; }
+    }
+
+    private boolean wasConversationDeleted(String id) {
+        try (Cursor cursor = getReadableDatabase().rawQuery(
+                "SELECT 1 FROM conversation_deletions WHERE owner=? AND conversation_id=?",
+                new String[]{readAccountScope(), id})) { return cursor.moveToFirst(); }
+    }
+
+    private boolean isDeletedConversationUrl(String url) {
+        if (url == null || url.isEmpty()) return false;
+        android.net.Uri parsed = android.net.Uri.parse(url);
+        if (!parsed.isHierarchical()) return false;
+        String id = parsed.getQueryParameter("conversation_id");
+        if (id == null) id = parsed.getQueryParameter("conv_id");
+        return id != null && wasConversationDeleted(id);
     }
 
     public synchronized boolean setAccountScope(String owner) {
@@ -109,6 +163,7 @@ public final class HomerCacheDatabase extends SQLiteOpenHelper {
     }
 
     public synchronized boolean saveSnapshot(String payload, String url) {
+        if (isDeletedConversationUrl(url)) return false;
         String sanitized;
         try {
             sanitized = sanitizeSnapshot(payload).toString();
@@ -124,7 +179,7 @@ public final class HomerCacheDatabase extends SQLiteOpenHelper {
 
     public synchronized void saveLastUrl(String url) {
         String safe = safeUrl(url);
-        if (safe.isEmpty()) return;
+        if (safe.isEmpty() || isDeletedConversationUrl(safe)) return;
         ContentValues values = new ContentValues();
         values.put("last_url", safe);
         values.put("updated_at", System.currentTimeMillis());
@@ -179,7 +234,7 @@ public final class HomerCacheDatabase extends SQLiteOpenHelper {
         try {
             JSONObject input = new JSONObject(payload);
             String conversationId = safeIdentifier(input.optString("conversation_id", ""), 160);
-            if (conversationId.isEmpty()) return false;
+            if (conversationId.isEmpty() || wasConversationDeleted(conversationId)) return false;
             String appId = safeIdentifier(input.optString("app_id", ""), 160);
             String title = safeText(input.optString("title", "角色对话"), 120, "角色对话");
             String avatar = safeText(input.optString("avatar", ""), 2_000, "");

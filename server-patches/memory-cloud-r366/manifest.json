@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "source_sha256": "4aea1dad268faee0b28610bfec12fdfaaf24be68893a8c3d662f1ec0286ada8b",
+  "helper_sha256": "0456dbd6ee2c66e6b96d143aa4299e434a4e47506e5a5855ec8251e4cec225e0",
+  "contract": "runtime-state optional private memory v1",
+  "deployed": false
+}

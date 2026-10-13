@@ -35,6 +35,47 @@ REQUIRED_CARD_ASSETS = (
     'app/assets/vendor/spine-webgl.js',
     'app/assets/vendor/SPINE-RUNTIMES-LICENSE.txt',
 )
+REQUIRED_STORAGE_ASSETS = (
+    'scripts/homer-chat-outbox.mjs',
+    'scripts/homer-local-session.mjs',
+    'scripts/homer-local-runtime.mjs',
+    'scripts/homer-cloud-sync.mjs',
+    'scripts/homer-memory-sync.mjs',
+    'scripts/homer-content-digest.mjs',
+)
+REQUIRED_PRESET_BALL_ASSETS = (
+    'scripts/extensions/homer-preset-ball/manifest.json',
+    'scripts/extensions/homer-preset-ball/controller.mjs',
+    'scripts/extensions/homer-preset-ball/index.build.js',
+    'scripts/extensions/homer-preset-ball/index.build.js.map',
+    'scripts/extensions/homer-preset-ball/style.build.css',
+    'scripts/extensions/homer-preset-ball/build-manifest.json',
+)
+REQUIRED_RENDER_ASSETS = ('scripts/homer-message-frames.mjs', 'scripts/homer-async-fonts.mjs')
+REQUIRED_VISUAL_NOVEL_ASSETS = (
+    'app/visual-novel.html',
+    'app/assets/js/visual-novel-core.mjs',
+    'app/assets/js/visual-novel-runtime.mjs',
+    'app/assets/js/visual-novel-library.mjs',
+    'app/assets/js/visual-novel-game-store.mjs',
+    'app/assets/js/visual-novel-game-sync.mjs',
+    'app/assets/js/chatarchive-theme.mjs',
+    'app/assets/js/archive-resource-client.mjs',
+    'app/assets/js/archive-cast.mjs',
+    'app/assets/js/visual-novel-game-session.mjs',
+    'app/assets/js/visual-novel-gameplay.mjs',
+    'app/assets/js/archive-game-ui.mjs',
+    'app/assets/js/visual-novel-services.mjs',
+    'app/assets/js/visual-novel-story-store.mjs',
+    'app/assets/js/visual-novel-asset-cache.mjs',
+    'app/assets/js/visual-novel-conversations.mjs',
+    'app/assets/css/visual-novel-conversations.css',
+    'app/assets/css/visual-novel-reader.css',
+    'app/assets/css/visual-novel-library.css',
+    'app/assets/css/archive-hall.css',
+    'app/assets/css/archive-game.css',
+    'app/assets/images/archive-room.svg',
+)
 
 
 def die(message: str) -> None:
@@ -52,6 +93,13 @@ def main() -> int:
 
     with zipfile.ZipFile(args.apk) as apk:
         names = set(apk.namelist())
+        excluded = [name for name in names if name in {
+            'assets/client/web/app/ai-story.html',
+            'assets/client/web/app/assets/js/ai-story-bootstrap.mjs',
+        } or name.startswith('assets/client/web/app/assets/ai-story/')
+            or '/st-yuzi-phone/' in name]
+        if excluded:
+            die('已停止的内容残留在 APK 中：' + ', '.join(sorted(excluded)[:10]))
         index_name = "assets/client/index.txt"
         if index_name not in names:
             die(f"{index_name} 不在包里 —— syncHomerClientAssets 大概没跑")
@@ -68,6 +116,12 @@ def main() -> int:
 
     with zipfile.ZipFile(args.apk) as apk:
         compat = json.loads(apk.read('assets/client/webview-compat-manifest.json'))
+        # These are used by outer histories/workshop pages, which have no
+        # dialogue globals. A core facade here crashes the entire outer page.
+        for shared in ('scripts/homer-chat-outbox.mjs', 'scripts/homer-local-session.mjs',
+                       'scripts/homer-memory-sync.mjs', 'scripts/homer-content-digest.mjs'):
+            if shared in compat.get('core_bundle', {}).get('modules', {}):
+                die('共享存档模块不能触发完整对话运行时：' + shared)
         digest = lambda data: hashlib.sha256(data).hexdigest()
         for tool, expected_hash in compat['tool'].items():
             if digest((ROOT / 'tools/webview-compat' / tool).read_bytes()) != expected_hash:
@@ -81,11 +135,13 @@ def main() -> int:
         die("仓库根没有 frontend/，先跑 python tools/bootstrap.py")
     # The card experience imports this module even for cards without Spine.
     # Enumerating existing source files cannot detect an accidental deletion.
-    for rel in REQUIRED_CARD_ASSETS:
+    for rel in (*REQUIRED_CARD_ASSETS, *REQUIRED_VISUAL_NOVEL_ASSETS):
         if not (web_root / rel).is_file() or f'assets/client/web/{rel}' not in names:
             die(f'角色体验必需依赖缺失：frontend/{rel}')
 
     def packable(rel: Path) -> bool:
+        if rel.as_posix() in {'app/ai-story.html', 'app/assets/js/ai-story-bootstrap.mjs'} or rel.as_posix().startswith('app/assets/ai-story/'):
+            return False
         # aapt 会丢掉 assets 里以点开头的目录和文件（.well-known/、.gitkeep 这类），
         # 生产包也一样缺，所以这些不算漏。
         return not (SKIP_PARTS & set(rel.parts)) and not any(
@@ -110,6 +166,9 @@ def main() -> int:
         stale = [rel for rel in expected if rel not in missing
                  and not matches('web/' + rel, (web_root / rel).read_bytes())]
         runtime_root = ROOT / 'sillytavern-runtime/public'
+        for rel in (*REQUIRED_STORAGE_ASSETS, *REQUIRED_PRESET_BALL_ASSETS, *REQUIRED_RENDER_ASSETS):
+            if not (runtime_root / rel).is_file() or f'assets/client/runtime/{rel}' not in names:
+                die(f'本机会话保存必需依赖缺失：runtime/{rel}')
         runtime_stale = []
         for path in runtime_root.rglob('*'):
             if not path.is_file(): continue

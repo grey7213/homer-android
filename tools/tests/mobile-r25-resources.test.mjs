@@ -37,5 +37,19 @@ test('regex preview uses native flags, disabled rules, groups and match macro', 
   scope.self.onmessage({ data: { sample: 'cat cat', rules: [{ findRegex: '/(cat)/g', replaceString: '[$1:{{match}}]' }, { findRegex: 'cat', replaceString: 'bad', disabled: true }] } });
   assert.equal(result.output, '[cat:cat] [cat:cat]');
   scope.self.onmessage({ data: { sample: 'test', rules: [{ findRegex: '[' }] } });
-  assert.ok(result.error);
+  assert.match(result.error, /第 1 条规则无法预览：表达式无效/);
+  assert.doesNotMatch(result.error, /Invalid regular expression/);
+});
+
+test('invalid preview rules identify original order including disabled rules and flags', () => {
+  let result;
+  const scope = { self: { postMessage: value => { result = value; } } };
+  vm.runInNewContext(fs.readFileSync(new URL('../../frontend/app/assets/js/regex-preview-worker.mjs', import.meta.url), 'utf8'), scope);
+  for (const flags of ['gg', 'x', 'uv']) {
+    scope.self.onmessage({ data: { sample: 'test', rules: [{ findRegex: '[', disabled: true }, { findRegex: 'test', flags }] } });
+    assert.match(result.error, /第 2 条规则无法预览：匹配标记无效/);
+    assert.equal(result.output, undefined, 'invalid preview must not masquerade as a rendered success');
+  }
+  scope.self.onmessage({ data: { sample: 'test', rules: [{ findRegex: 'test', replaceString: '成功' }] } });
+  assert.equal(result.output, '成功', 'editing the invalid rule allows a subsequent real preview');
 });

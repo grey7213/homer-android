@@ -1,0 +1,232 @@
+diff --git a/tools/ai_fengyue_local_server.py b/tools/ai_fengyue_local_server.py
+--- a/tools/ai_fengyue_local_server.py
++++ b/tools/ai_fengyue_local_server.py
+@@ -9,6 +9,7 @@
+ import hmac
+ import io
+ import json
++from homer_chat_storage import read_chat, write_chat, ChatStorageError
+ import math
+ import os
+ import random
+@@ -6270,183 +6271,11 @@
+             self.conn.commit()
+             return self.conn.execute("select * from messages where id=?", (mid,)).fetchone()
+ 
+-    def sync_sillytavern_chat(
+-        self,
+-        conv_id: str,
+-        user_id: str,
+-        app_id: str,
+-        messages: list,
+-        *,
+-        title: str = "",
+-    ) -> dict:
+-        """Replace a Homer cloud chat with a validated SillyTavern snapshot."""
+-        clean_conv = str(conv_id or "").strip()
+-        clean_user = str(user_id or "").strip()
+-        clean_app = self.resolve_local_app_id(str(app_id or "").strip())
+-        if not clean_conv or not clean_user or not clean_app:
+-            raise ValueError("conversation_id, user_id and app_id are required")
+-        if not isinstance(messages, list):
+-            raise ValueError("messages must be a list")
+-        if len(messages) > 1000:
+-            raise ValueError("too many messages")
+-        if len(json.dumps(messages, ensure_ascii=False, separators=(",", ":"))) > 10_000_000:
+-            raise ValueError("chat snapshot is too large")
+-
+-        base_created_at = now_ms() - max(0, len(messages) - 1)
+-        normalized: list[dict] = []
+-        seen_ids: set[str] = set()
+-        for index, raw in enumerate(messages):
+-            if not isinstance(raw, dict):
+-                continue
+-            if raw.get("is_system") is True:
+-                role = "system"
+-            elif raw.get("is_user") is True:
+-                role = "user"
+-            else:
+-                role = str(raw.get("role") or "assistant").strip().lower()
+-                if role not in {"user", "assistant", "system"}:
+-                    role = "assistant"
+-            content = str(raw.get("mes") if "mes" in raw else raw.get("content") or "")
+-            if len(content) > 500_000:
+-                raise ValueError("message is too large")
+-            extra = raw.get("extra") if isinstance(raw.get("extra"), dict) else {}
+-            sync_id = str(
+-                raw.get("homer_message_id")
+-                or extra.get("homer_message_id")
+-                or extra.get("homer_sync_id")
+-                or ""
+-            ).strip()
+-            try:
+-                message_id = str(uuid.UUID(sync_id)) if sync_id else ""
+-            except (ValueError, AttributeError):
+-                message_id = ""
+-            if not message_id or message_id in seen_ids:
+-                stable_part = str(
+-                    extra.get("homer_sync_id")
+-                    or raw.get("send_date")
+-                    or raw.get("sendDate")
+-                    or index
+-                )
+-                message_id = str(uuid.uuid5(
+-                    uuid.NAMESPACE_URL,
+-                    f"homer-sillytavern:{clean_user}:{clean_conv}:{stable_part}:{index}",
+-                ))
+-                while message_id in seen_ids:
+-                    message_id = str(uuid.uuid4())
+-            seen_ids.add(message_id)
+-
+-            raw_swipes = raw.get("swipes") if isinstance(raw.get("swipes"), list) else []
+-            swipes = [str(item)[:500_000] for item in raw_swipes[:100]]
+-            try:
+-                swipe_index = int(raw.get("swipe_id", raw.get("swipe_index", 0)) or 0)
+-            except (TypeError, ValueError):
+-                swipe_index = 0
+-            if swipes:
+-                swipe_index = max(0, min(swipe_index, len(swipes) - 1))
+-                content = swipes[swipe_index]
+-            else:
+-                swipe_index = 0
+-            try:
+-                created_at = int(
+-                    extra.get("homer_created_at")
+-                    or raw.get("created_at")
+-                    or base_created_at + index
+-                )
+-            except (TypeError, ValueError):
+-                created_at = base_created_at + index
+-            normalized.append({
+-                "id": message_id,
+-                "role": role,
+-                "content": content,
+-                "created_at": max(1, created_at),
+-                "swipes": swipes,
+-                "swipe_index": swipe_index,
+-            })
+-
+-        with self.lock:
+-            conversation = self.conn.execute(
+-                "select * from conversations where id=? and user_id=?",
+-                (clean_conv, clean_user),
+-            ).fetchone()
+-            if (
+-                conversation
+-                and self.resolve_local_app_id(str(conversation["app_id"] or "")) != clean_app
+-            ):
+-                raise ValueError("conversation role mismatch")
+-            try:
+-                self.conn.execute("begin immediate")
+-                ts = now_ms()
+-                if not conversation:
+-                    self.conn.execute(
+-                        """
+-                        insert into conversations(
+-                            id,user_id,app_id,app_name,app_icon,title,last_message,
+-                            created_at,updated_at
+-                        ) values(?,?,?,?,?,?,?,?,?)
+-                        """,
+-                        (
+-                            clean_conv,
+-                            clean_user,
+-                            clean_app,
+-                            "",
+-                            "",
+-                            str(title or "")[:120],
+-                            "",
+-                            ts,
+-                            ts,
+-                        ),
+-                    )
+-                self.conn.execute(
+-                    "delete from messages where conversation_id=? and user_id=?",
+-                    (clean_conv, clean_user),
+-                )
+-                for item in normalized:
+-                    self.conn.execute(
+-                        """
+-                        insert into messages(
+-                            id,conversation_id,user_id,role,content,created_at,swipes,swipe_index
+-                        ) values(?,?,?,?,?,?,?,?)
+-                        """,
+-                        (
+-                            item["id"],
+-                            clean_conv,
+-                            clean_user,
+-                            item["role"],
+-                            item["content"],
+-                            item["created_at"],
+-                            json.dumps(item["swipes"], ensure_ascii=False) if item["swipes"] else None,
+-                            item["swipe_index"],
+-                        ),
+-                    )
+-                last_message = normalized[-1]["content"][:120] if normalized else ""
+-                self.conn.execute(
+-                    """
+-                    update conversations
+-                    set app_id=?,
+-                        title=case when ?<>'' then ? else title end,
+-                        last_message=?,updated_at=?
+-                    where id=? and user_id=?
+-                    """,
+-                    (
+-                        clean_app,
+-                        str(title or "")[:120],
+-                        str(title or "")[:120],
+-                        last_message,
+-                        ts,
+-                        clean_conv,
+-                        clean_user,
+-                    ),
+-                )
+-                self.conn.commit()
+-            except Exception:
+-                self.conn.rollback()
+-                raise
+-        return {
+-            "conversation_id": clean_conv,
+-            "app_id": clean_app,
+-            "message_count": len(normalized),
+-            "messages": self.list_messages(clean_conv, clean_user, limit=1000),
+-        }
++    def sync_sillytavern_chat(self, conv_id, user_id, app_id, messages, *, title="",
++                            storage_version="", storage_commit_id="", storage_fork=False):
++        return write_chat(self, str(user_id), self.resolve_local_app_id(str(app_id)),
++                          str(conv_id), messages, title=title, version=storage_version,
++                          commit_id=storage_commit_id, fork=storage_fork)
+ 
+     def list_conversations(self, user_id: str, limit: int = 50) -> list:
+         safe_limit = max(1, min(int(limit or 50), 200))
+@@ -20336,7 +20165,9 @@
+                 local_app_to_silly_card(app_data, card),
+                 str(app_data.get("cover_url") or card.get("cover_url") or card.get("cover") or ""),
+             )
+-            messages = self.store.list_messages(conversation_id, user_id, limit=500)
++            stored_chat = read_chat(self.store, user_id, app_id, conversation_id,
++                                    parse_query_str(query, "chat_version", ""))
++            messages = stored_chat["messages"]
+             try:
+                 runtime_config = self.store.conversation_runtime_config(conversation_id, user_id)
+             except Exception:
+@@ -20373,6 +20204,7 @@
+                 "conversation": conversation,
+                 "version": locked_version,
+                 "messages": messages,
++                "storage": stored_chat["storage"],
+                 "runtime_config": runtime_config,
+                 "runtime_profile": runtime_profile or {},
+                 "bridge_token": sillytavern_bridge_token_for(user_id, app_id, conversation_id),
+@@ -20406,7 +20238,12 @@
+                     app_id,
+                     body.get("messages"),
+                     title=str(body.get("title") or ""),
++                    storage_version=body.get("storage_version") or "",
++                    storage_commit_id=body.get("storage_commit_id") or "",
++                    storage_fork=body.get("storage_fork") is True,
+                 )
++            except ChatStorageError as exc:
++                return error_response(str(exc), exc.status)
+             except ValueError as exc:
+                 return error_response(str(exc), 400)
+             self.store.log_event(

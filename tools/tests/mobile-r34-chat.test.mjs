@@ -12,6 +12,13 @@ function evaluate(start, end, context) {
     // No history preparation is offered in this legacy behavior fixture.
     // The actual mailbox protocol is covered by mobile-r41-history-preparation-host.
     historyReadPreparation: context.historyReadPreparation || { clear() {}, flush() { return false; } },
+    // These legacy host scenarios have no deletion journal or admin panel.
+    // Exercise those modules in history-deletion and backend-contracts-r366;
+    // do not let a newly imported dependency swallow this fixture's cache path.
+    syncAdminHostControls: context.syncAdminHostControls || (() => {}),
+    isConversationDeleted: context.isConversationDeleted || (() => false),
+    filterDeletedConversations: context.filterDeletedConversations || ((_owner, rows) => rows),
+    refreshConversationDeletions: context.refreshConversationDeletions || (async () => []),
   });
   vm.createContext(context);
   vm.runInContext(host.slice(host.indexOf('function runtimeBindingOwner('), host.indexOf('function openRuntimeTool(')), context);
@@ -111,7 +118,7 @@ test('host insets are sent once per real size and again when the runtime becomes
   const sent = [];
   const context = evaluate('function syncHostInsets(', 'const hostSizeObserver', {
     runtimeReady: false, insetsSignature: '',
-    document: { querySelector: selector => ({ getBoundingClientRect: () => ({ height: selector === '.preview-header' ? 48 : 74 }) }) },
+    document: { body: {classList:{contains:()=>false}}, querySelector: selector => ({ getBoundingClientRect: () => ({ height: selector === '.preview-header' ? 48 : 74 }) }) },
     postRuntimeCommand(type, payload, options) { sent.push({ type, ...payload, ...options }); return true; },
   });
   context.syncHostInsets(); assert.equal(sent.length, 0);

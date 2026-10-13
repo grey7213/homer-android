@@ -27,8 +27,34 @@ public final class LiveBridge {
     public boolean isDebugBuild() { return BuildConfig.DEBUG; }
 
     @JavascriptInterface
+    public String getArchiveMediaStatus() { return activity.archiveMediaStatus(); }
+
+    @JavascriptInterface
+    public String getArchiveWorkshopCatalog() { return activity.archiveWorkshopCatalog(); }
+
+    @JavascriptInterface
+    public void openArchiveWorkshop() { activity.runOnUiThread(() -> activity.openArchiveWorkshop(owner)); }
+
+    @JavascriptInterface
+    public void openArchiveWorkshopResource(String reference) { activity.runOnUiThread(() -> activity.openArchiveWorkshopResource(owner,reference)); }
+
+    @JavascriptInterface
+    public void prepareArchiveMedia(String roleId) { activity.runOnUiThread(() -> activity.prepareArchiveMedia(owner, roleId)); }
+
+    @JavascriptInterface
+    public void importArchiveMedia() { activity.runOnUiThread(() -> activity.importArchiveMedia(owner)); }
+
+    @JavascriptInterface
     public void downloadUserBackup() {
         activity.runOnUiThread(() -> activity.downloadUserBackup(owner));
+    }
+
+    @JavascriptInterface
+    public void exportWorkshopResource(String payload) {
+        final Object documentToken = activity.historyPreparationDocumentToken(owner);
+        // Reject oversized messages before posting another copy to the UI queue.
+        if (payload == null || payload.length() > ResourceExportPolicy.MAX_BYTES * 2 + 16384) return;
+        activity.runOnUiThread(() -> activity.exportWorkshopResource(owner, documentToken, payload));
     }
 
     /** Pure UTF-8 digest only; an empty result requests the existing web fallback. */
@@ -80,7 +106,14 @@ public final class LiveBridge {
     @JavascriptInterface
     public void requestOrientation(String value) {
         final String safe = "landscape".equals(value) ? "landscape" : "default";
-        activity.runOnUiThread(() -> activity.requestOrientation(safe));
+        final Object documentToken = activity.historyPreparationDocumentToken(owner);
+        activity.runOnUiThread(() -> activity.requestOrientation(owner, documentToken, safe));
+    }
+
+    @JavascriptInterface
+    public void refreshArchiveOrientation(String documentUrl) {
+        final Object documentToken = activity.historyPreparationDocumentToken(owner);
+        activity.runOnUiThread(() -> activity.refreshArchiveOrientation(owner, documentToken, documentUrl));
     }
 
     @JavascriptInterface
@@ -124,5 +157,10 @@ public final class LiveBridge {
     @JavascriptInterface
     public boolean saveConversationSnapshot(String payload) {
         return database.saveConversationSnapshot(payload);
+    }
+
+    @JavascriptInterface
+    public boolean deleteConversationSnapshots(String accountOwner, String identifiers) {
+        return database.deleteConversationSnapshots(accountOwner, identifiers);
     }
 }

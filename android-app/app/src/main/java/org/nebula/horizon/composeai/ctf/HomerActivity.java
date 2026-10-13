@@ -93,7 +93,9 @@ public final class HomerActivity extends Activity {
         String next = preparationOwner(owner);
         boolean identityChanged = !availableAccountOwner.equals(next) || next.isEmpty();
         if (identityChanged) {
+            cancelFileChooser();
             pendingHistoryPreparation = null;
+            pendingResourceExport = null;
             // Also reject an off-thread bridge callback captured before logout
             // and a subsequent login to the same account/document (ABA).
             liveDocumentTokens.replaceAll((view, token) -> new Object());
@@ -304,6 +306,10 @@ public final class HomerActivity extends Activity {
 
     void checkForAppUpdate() { if (apkUpdates != null) apkUpdates.check(true); }
     private static final int FILE_CHOOSER_REQUEST = 701;
+    private static final int ARCHIVE_MEDIA_REQUEST = 702;
+    private static final int RESOURCE_EXPORT_REQUEST = 703;
+    private static final int CAMERA_CAPTURE_REQUEST = 704;
+    private static final int CAMERA_PERMISSION_REQUEST = 705;
     private static final int WEB_PERMISSION_REQUEST = 702;
     private static final long READY_POLL_MS = 300L;
     private static final long READY_TIMEOUT_MS = 150_000L;
@@ -384,6 +390,9 @@ public final class HomerActivity extends Activity {
             """;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
+    // Page readiness may be restarted/cancelled on navigation. It must not
+    // clear completion callbacks of an already-written user export.
+    private final Handler readinessHandler = new Handler(Looper.getMainLooper());
     private FrameLayout root;
     private WebView snapshotView;
     private WebView liveView;
@@ -405,7 +414,15 @@ public final class HomerActivity extends Activity {
     private PatchManager patchManager;
     private ApkUpdateController apkUpdates;
     private ClientAssetStore clientAssetStore;
+    private ArchiveMediaStore archiveMediaStore;
+    private ArchiveWorkshopStore archiveWorkshopStore;
     private ValueCallback<Uri[]> fileChooserCallback;
+    private WebView fileChooserSource;
+    private Object fileChooserDocument;
+    private String fileChooserOwner = "";
+    private String fileChooserUrl = "";
+    private boolean fileChooserInFlight;
+    private WebCameraCapture cameraCapture;
     private PermissionRequest pendingPermissionRequest;
     private String[] pendingPermissionResources = new String[0];
     private String pendingDraft = "";
@@ -414,6 +431,7 @@ public final class HomerActivity extends Activity {
     private boolean liveReadyHandled;
     private boolean updateChecked;
     private boolean immersiveLandscape;
+    private final ArchiveOrientationPolicy archiveOrientation = new ArchiveOrientationPolicy();
     private boolean snapshotLoaded;
     private boolean startupFailed;
     private View recoveryPanel;
@@ -434,6 +452,8 @@ public final class HomerActivity extends Activity {
         patchManager = new PatchManager(this);
         patchManager.recoverInterruptedUpdate();
         clientAssetStore = new ClientAssetStore(this, patchManager);
+        archiveMediaStore = new ArchiveMediaStore(this);
+        archiveWorkshopStore = new ArchiveWorkshopStore(this);
         apkUpdates = new ApkUpdateController(this);
 
         root = new FrameLayout(this);
@@ -453,7 +473,7 @@ public final class HomerActivity extends Activity {
             int bottom = 0;
             int left = 0;
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                android.graphics.Insets bars = current.getInsets(WindowInsets.Type.systemBars());
+                android.graphics.Insets bars = current.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
                 top = bars.top;
                 right = bars.right;
                 // Android 15 edge-to-edge does not resize our padded WebViews
@@ -466,6 +486,12 @@ public final class HomerActivity extends Activity {
                 right = current.getSystemWindowInsetRight();
                 bottom = current.getSystemWindowInsetBottom();
                 left = current.getSystemWindowInsetLeft();
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && current.getDisplayCutout() != null) {
+                    top = Math.max(top,current.getDisplayCutout().getSafeInsetTop());
+                    right = Math.max(right,current.getDisplayCutout().getSafeInsetRight());
+                    bottom = Math.max(bottom,current.getDisplayCutout().getSafeInsetBottom());
+                    left = Math.max(left,current.getDisplayCutout().getSafeInsetLeft());
+                }
             }
             // System-bar appearance changes can dispatch the same insets on
             // every tab switch. Only a real bar/keyboard/rotation change needs
@@ -502,14 +528,14 @@ public final class HomerActivity extends Activity {
         prepareSnapshotForTarget(startupTarget);
         // Give the tiny local document the first main-loop turn before the
         // heavier live WebView begins parsing the bundled runtime.
-        handler.post(this::startLivePage);
+        readinessHandler.post(this::startLivePage);
     }
 
     private void showRecovery(String title, String message, boolean updateEngine) {
         if (isFinishing() || isDestroyed()) return;
         startupFailed = true;
         liveRevealed = false;
-        handler.removeCallbacksAndMessages(null);
+        readinessHandler.removeCallbacksAndMessages(null);
         if (recoveryPanel != null) root.removeView(recoveryPanel);
         LinearLayout panel = new LinearLayout(this);
         panel.setOrientation(LinearLayout.VERTICAL);
@@ -579,15 +605,21 @@ public final class HomerActivity extends Activity {
             long revision = getPackageManager().getPackageInfo(getPackageName(), 0).lastUpdateTime;
             android.content.SharedPreferences state = getSharedPreferences("homer-web-assets", MODE_PRIVATE);
             if (state.getLong("installed-at", -1) != revision) {
-                // HTTP resource cache only. Never clear cookies, WebStorage,
-                // account preferences, conversation databases or user files.
-                view.clearCache(true);
-                state.edit().putLong("installed-at", revision).apply();
+                // One migration removes legacy year-long first-party JS/CSS
+                // entries. Current ClientAssetStore serves executable/UI files
+                // with no-cache (APK-local revalidation): later upgrades need
+                // not erase ALL cached
+                // card fonts, images and immutable third-party modules again.
+                // Never clear cookies, WebStorage, accounts or conversation DBs.
+                if (requiresLegacyHttpCacheMigration(state.getInt("http-policy", 0))) view.clearCache(true);
+                state.edit().putInt("http-policy", 2).putLong("installed-at", revision).apply();
             }
         } catch (PackageManager.NameNotFoundException ignored) {
             // The current package should always exist; do not erase user state.
         }
     }
+
+    static boolean requiresLegacyHttpCacheMigration(int policy) { return policy < 2; }
 
     private void applyNativeInsetsToWebViews() {
         // The native root is padded by the measured insets above.  Keep the
@@ -678,7 +710,29 @@ public final class HomerActivity extends Activity {
         view.setDownloadListener(openExternalDownload());
     }
 
-    void requestOrientation(String value) {
+    private void updateArchiveOrientation(String url) {
+        ArchiveOrientationPolicy.Resolution result = archiveOrientation.update(
+                ArchiveOrientationPolicy.isGameUrl(BuildConfig.SERVER_BASE_URL,url),
+                getRequestedOrientation(),immersiveLandscape,ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+        if (result == null) return;
+        immersiveLandscape=result.immersive;
+        if (getRequestedOrientation()!=result.orientation) setRequestedOrientation(result.orientation);
+        applySystemBars();
+    }
+
+    void refreshArchiveOrientation(WebView owner,Object token,String documentUrl) {
+        if(owner==null||owner!=liveView||token==null||token!=liveDocumentTokens.get(owner)
+                || !java.util.Objects.equals(documentUrl,owner.getUrl())
+                || !SafeUrls.isTrustedNavigation(BuildConfig.SERVER_BASE_URL,documentUrl))return;
+        updateArchiveOrientation(documentUrl);
+    }
+
+    void requestOrientation(WebView owner,Object token,String value) {
+        if(owner==null||owner!=liveView||token==null||token!=liveDocumentTokens.get(owner)
+                || !SafeUrls.isTrustedNavigation(BuildConfig.SERVER_BASE_URL,owner.getUrl()))return;
+        // Ordinary card teardown can arrive while a game route is opening.
+        // Only authoritative navigation/URL refresh releases the game rotation.
+        if(archiveOrientation.active()) { applySystemBars();return; }
         immersiveLandscape = "landscape".equals(value);
         int requested = immersiveLandscape
                 ? ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
@@ -752,6 +806,137 @@ public final class HomerActivity extends Activity {
     }
 
     private long lastUserBackupDownload = 0;
+    private ResourceExport pendingResourceExport;
+
+    private static final class ResourceExport {
+        final WebView source;
+        final Object documentToken;
+        final String documentUrl, accountOwner, requestId, filename, mime;
+        final byte[] bytes;
+        ResourceExport(WebView source, Object token, String url, String owner, String requestId,
+                String filename, String mime, byte[] bytes) {
+            this.source=source;documentToken=token;documentUrl=url;accountOwner=owner;
+            this.requestId=requestId;this.filename=filename;this.mime=mime;this.bytes=bytes;
+        }
+    }
+
+    private boolean currentResourceExport(ResourceExport export) {
+        return export != null && !isFinishing() && !isDestroyed() && accountAvailable
+                && export.source == liveView && export.documentToken != null
+                && export.documentToken == liveDocumentTokens.get(export.source)
+                && export.accountOwner.equals(availableAccountOwner)
+                && export.documentUrl.equals(export.source.getUrl())
+                && ResourceExportPolicy.trustedEditor(BuildConfig.SERVER_BASE_URL, export.source.getUrl());
+    }
+
+    private void resourceExportResult(ResourceExport export, String state, String message) {
+        if (!currentResourceExport(export)) return;
+        JSONObject result=new JSONObject();
+        try { result.put("requestId",export.requestId);result.put("state",state);result.put("message",message); }
+        catch(org.json.JSONException impossible){return;}
+        export.source.evaluateJavascript("window.dispatchEvent(new CustomEvent('homer-resource-export-result',{detail:"
+                + result + "}));",null);
+    }
+
+    void exportWorkshopResource(WebView source, Object documentToken, String payload) {
+        if (source == null || source != liveView || documentToken == null
+                || documentToken != liveDocumentTokens.get(source) || !accountAvailable
+                || !ResourceExportPolicy.trustedEditor(BuildConfig.SERVER_BASE_URL,source.getUrl())) return;
+        ResourceExport export=null;
+        try {
+            JSONObject data=new JSONObject(payload);
+            String requestId=data.getString("requestId"),filename=data.getString("filename"),mime=data.getString("mime"),content=data.getString("content");
+            if(!requestId.matches("[A-Za-z0-9._:-]{1,160}"))return;
+            export=new ResourceExport(source,documentToken,source.getUrl(),availableAccountOwner,requestId,filename,mime,new byte[0]);
+            byte[] bytes=ResourceExportPolicy.validate(requestId,filename,mime,content);
+            if("application/json".equals(mime)){
+                org.json.JSONTokener json=new org.json.JSONTokener(content);
+                Object value=json.nextValue();
+                if(!(value instanceof JSONObject || value instanceof JSONArray) || json.nextClean()!=0) throw new IllegalArgumentException("invalid JSON");
+            }
+            export=new ResourceExport(source,documentToken,source.getUrl(),availableAccountOwner,requestId,filename,mime,bytes);
+            if(pendingResourceExport!=null){resourceExportResult(export,"failed","请先完成或取消当前导出。");return;}
+            pendingResourceExport=export;
+            Intent picker=new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
+                    .setType(mime).putExtra(Intent.EXTRA_TITLE,filename);
+            startActivityForResult(picker,RESOURCE_EXPORT_REQUEST);
+        }catch(Exception failure){
+            if(pendingResourceExport==export)pendingResourceExport=null;
+            if(export!=null)resourceExportResult(export,"failed","资源文件无效或无法打开保存窗口，请检查内容后重试。");
+            else android.widget.Toast.makeText(this,"资源文件无效或超过大小限制，未导出。",android.widget.Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void completeResourceExport(int resultCode, Intent data) {
+        ResourceExport export=pendingResourceExport;pendingResourceExport=null;
+        if(!currentResourceExport(export))return;
+        Uri destination=data==null?null:data.getData();
+        if(resultCode!=RESULT_OK || destination==null){resourceExportResult(export,"cancelled","");return;}
+        if(!"content".equals(destination.getScheme())){resourceExportResult(export,"failed","保存位置无效，文件没有导出。");return;}
+        new Thread(()->{
+            boolean saved=false;
+            try(java.io.OutputStream stream=getContentResolver().openOutputStream(destination,"wt")){
+                if(stream==null)throw new java.io.IOException("No document stream");
+                stream.write(export.bytes);stream.flush();saved=true;
+            }catch(Exception unavailable){saved=false;}
+            final boolean written=saved;
+            handler.post(()->resourceExportResult(export,written?"saved":"failed",written?"":"写入文件失败，请选择其他保存位置。"));
+        },"homer-resource-export").start();
+    }
+
+    String archiveMediaStatus() { return archiveMediaStore == null ? "{\"state\":\"unavailable\"}" : archiveMediaStore.status(); }
+
+    String archiveWorkshopCatalog() { return archiveWorkshopStore == null ? "{\"version\":1,\"roles\":[]}" : archiveWorkshopStore.catalog(); }
+
+    void openArchiveWorkshop(WebView owner) {
+        openArchiveWorkshopResource(owner, "");
+    }
+
+    void openArchiveWorkshopResource(WebView owner, String reference) {
+        if (owner == null || owner != liveView) return;
+        try {
+            URI page=URI.create(owner.getUrl()),base=URI.create(BuildConfig.SERVER_BASE_URL);
+            if (!base.getScheme().equals(page.getScheme()) || !base.getRawAuthority().equals(page.getRawAuthority())
+                    || !("/app/visual-novel.html".equals(page.getPath()) || "/app/chat.html".equals(page.getPath()))) return;
+            Intent intent=new Intent(this, ArchiveWorkshopActivity.class);
+            intent.putExtra("dark",getPreferences(MODE_PRIVATE).getBoolean("app_theme_dark",false));
+            if(reference!=null&&!reference.isEmpty()){
+                if(reference.length()>512)return;
+                try{
+                    org.json.JSONObject media=new org.json.JSONObject(reference);
+                    String resource=media.getString("resourceId"), revision=media.getString("revisionId"),sha=media.getString("sha256");
+                    if(!resource.matches("[a-f0-9-]{36}")||!revision.matches("[a-f0-9-]{36}")||!sha.matches("[a-f0-9]{64}"))return;
+                    intent.putExtra("resource",resource);intent.putExtra("revision",revision);intent.putExtra("sha256",sha);
+                }catch(org.json.JSONException invalid){return;}
+            }
+            startActivity(intent);
+        } catch (RuntimeException unavailable) { android.widget.Toast.makeText(this,"无法打开工坊，请重新进入剧场",android.widget.Toast.LENGTH_LONG).show(); }
+    }
+
+    void prepareArchiveMedia(WebView owner, String roleId) {
+        if (owner == null || owner != liveView || archiveMediaStore == null) return;
+        try {
+            URI page = URI.create(owner.getUrl()), base = URI.create(BuildConfig.SERVER_BASE_URL);
+            if (!base.getScheme().equals(page.getScheme()) || !base.getRawAuthority().equals(page.getRawAuthority())
+                    || !"/app/visual-novel.html".equals(page.getPath())) return;
+            archiveMediaStore.prepare(roleId);
+        } catch (RuntimeException invalid) { /* Untrusted document has no resource authority. */ }
+    }
+
+    void importArchiveMedia(WebView owner) {
+        if (owner == null || owner != liveView || archiveMediaStore == null) return;
+        try {
+            URI page = URI.create(owner.getUrl()), base = URI.create(BuildConfig.SERVER_BASE_URL);
+            if (!base.getScheme().equals(page.getScheme()) || !base.getRawAuthority().equals(page.getRawAuthority())
+                    || !"/app/visual-novel.html".equals(page.getPath())) return;
+            Intent picker = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            picker.addCategory(Intent.CATEGORY_OPENABLE);
+            picker.setType("*/*"); // .hcap is not associated with a public MIME type.
+            startActivityForResult(picker, ARCHIVE_MEDIA_REQUEST);
+        } catch (RuntimeException error) {
+            android.widget.Toast.makeText(this, "无法打开文件选择器", android.widget.Toast.LENGTH_LONG).show();
+        }
+    }
 
     void downloadUserBackup(WebView owner) {
         if (owner == null || owner != liveView) return;
@@ -835,6 +1020,7 @@ public final class HomerActivity extends Activity {
             if ("/app/favorites.html".equals(path)) return "favorites";
             if ("/app/community.html".equals(path)) return "community";
             if ("/app/workshop.html".equals(path)) return "workshop";
+            if ("/app/visual-novel.html".equals(path)) return "visual-novel";
             if ("/app/me.html".equals(path)) return "me";
             if ("/dashboard.html".equals(path)) return "account";
             if ("/admin.html".equals(path)) return "admin";
@@ -846,6 +1032,17 @@ public final class HomerActivity extends Activity {
 
     static boolean shouldLoadPersistentTarget(String current, String target) {
         return current == null || !current.equals(target);
+    }
+
+    static boolean isDialogueChildPageNavigation(String current, String target, boolean mainFrame, boolean gesture) {
+        if (mainFrame || !gesture || current == null || target == null) return false;
+        try {
+            URI from = URI.create(current), to = URI.create(target);
+            String key = persistentPageKey(target);
+            return "/app/chat.html".equals(from.getPath()) && !key.isEmpty() && !"chat".equals(key)
+                    && java.util.Objects.equals(from.getScheme(), to.getScheme())
+                    && java.util.Objects.equals(from.getRawAuthority(), to.getRawAuthority());
+        } catch (RuntimeException ignored) { return false; }
     }
 
     static boolean canSwitchConversationInPlace(String current, String target) {
@@ -886,6 +1083,7 @@ public final class HomerActivity extends Activity {
             // A tap before chat.js installs its listener is queued, not treated
             // as an old bundle requiring loadUrl (which would reboot the engine).
             pendingConversationNavigations.put(view, target);
+            if(view==liveView)updateArchiveOrientation(target);
             return true;
         }
         if (!canSwitchConversationInPlace(current, target) && !isPreparedChatUrl(current)) return false;
@@ -913,6 +1111,7 @@ public final class HomerActivity extends Activity {
         if (key.isEmpty()) return;
         persistentPages.put(key, liveView);
         activePersistentPage = key;
+        updateArchiveOrientation(target);
         applySystemBars();
     }
 
@@ -923,11 +1122,13 @@ public final class HomerActivity extends Activity {
         if (activePersistentPage.isEmpty() && persistentPages.isEmpty()) {
             persistentPages.put(key, liveView);
             activePersistentPage = key;
-        applySystemBars();
+            updateArchiveOrientation(target);
+            applySystemBars();
             return false;
         }
         if (key.equals(activePersistentPage)) {
             String current = liveView.getUrl();
+            if(java.util.Objects.equals(current,target))updateArchiveOrientation(target);
             return current != null && (current.equals(target) || switchLiveConversation(liveView, target));
         }
 
@@ -952,6 +1153,7 @@ public final class HomerActivity extends Activity {
         }
         liveView = targetView;
         activePersistentPage = key;
+        updateArchiveOrientation(target);
         applySystemBars();
         String currentTarget = liveView.getUrl();
         boolean targetChanged = shouldLoadPersistentTarget(currentTarget, target);
@@ -1020,7 +1222,8 @@ public final class HomerActivity extends Activity {
             setWebViewVisibility(liveView, View.INVISIBLE);
             liveView = target;
             activePersistentPage = key;
-        applySystemBars();
+            updateArchiveOrientation(target.getUrl());
+            applySystemBars();
             liveView.setAlpha(1f);
             setWebViewVisibility(liveView, View.VISIBLE);
             setWebViewVisibility(snapshotView, View.GONE);
@@ -1122,7 +1325,7 @@ public final class HomerActivity extends Activity {
                 // A partially loaded page is expected until the dialogue runtime reports ready.
             }
             if (System.currentTimeMillis() - liveStartedAt < READY_TIMEOUT_MS) {
-                handler.postDelayed(this::pollLiveReady, READY_POLL_MS);
+                readinessHandler.postDelayed(this::pollLiveReady, READY_POLL_MS);
             } else {
                 updateSnapshotConnectionState(isOnline(), false);
             }
@@ -1274,10 +1477,25 @@ public final class HomerActivity extends Activity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode != FILE_CHOOSER_REQUEST || fileChooserCallback == null) return;
-        Uri[] result = WebChromeClient.FileChooserParams.parseResult(resultCode, data);
-        fileChooserCallback.onReceiveValue(result);
-        fileChooserCallback = null;
+        if (requestCode == RESOURCE_EXPORT_REQUEST) {
+            completeResourceExport(resultCode, data);
+            return;
+        }
+        if (requestCode == ARCHIVE_MEDIA_REQUEST) {
+            if (resultCode == RESULT_OK && data != null && data.getData() != null && archiveMediaStore != null) {
+                archiveMediaStore.install(data.getData());
+            }
+            return;
+        }
+        if (requestCode == CAMERA_CAPTURE_REQUEST) {
+            Uri[] result = resultCode == RESULT_OK && cameraCapture != null && cameraCapture.hasPhoto()
+                    ? new Uri[]{cameraCapture.uri} : null;
+            completeFileChooser(result);
+            return;
+        }
+        if (requestCode == FILE_CHOOSER_REQUEST) {
+            completeFileChooser(WebChromeClient.FileChooserParams.parseResult(resultCode, data));
+        }
     }
 
     @Override
@@ -1287,6 +1505,15 @@ public final class HomerActivity extends Activity {
             int[] grantResults
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == CAMERA_PERMISSION_REQUEST) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED
+                    && fileChooserCurrent()) startCameraCapture();
+            else {
+                completeFileChooser(null);
+                android.widget.Toast.makeText(this, "未拍摄照片，可以重新拍照或从相册选择", android.widget.Toast.LENGTH_LONG).show();
+            }
+            return;
+        }
         if (requestCode == 6107) {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) downloadUserBackup(liveView);
             else android.widget.Toast.makeText(this, "未获得保存权限，备份没有下载", android.widget.Toast.LENGTH_LONG).show();
@@ -1312,6 +1539,7 @@ public final class HomerActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        pendingResourceExport = null;
         pendingHistoryPreparation = null;
         liveDocumentTokens.clear();
         accountAvailable = false;
@@ -1319,9 +1547,12 @@ public final class HomerActivity extends Activity {
         preparingDialogueOwners.clear();
         preparingDialogueEngines.clear();
         if (apkUpdates != null) apkUpdates.close();
+        if (archiveMediaStore != null) archiveMediaStore.close();
         handler.removeCallbacksAndMessages(null);
+        readinessHandler.removeCallbacksAndMessages(null);
         if (pendingPermissionRequest != null) pendingPermissionRequest.deny();
-        if (fileChooserCallback != null) fileChooserCallback.onReceiveValue(null);
+        fileChooserInFlight = false;
+        completeFileChooser(null);
         if (snapshotView != null) snapshotView.destroy();
         Set<WebView> views = new HashSet<>(persistentPages.values());
         if (liveView != null) views.add(liveView);
@@ -1332,11 +1563,25 @@ public final class HomerActivity extends Activity {
     }
 
     private final class LiveClient extends WebViewClient {
+        @Override
+        public void doUpdateVisitedHistory(WebView view, String url, boolean isReload) {
+            super.doUpdateVisitedHistory(view, url, isReload);
+            // replaceState/pushState retains the document and the chat engine.
+            // Its native URL notification can arrive after a JS bridge call;
+            // do not depend on getUrl() already reflecting that new URL.
+            if (startupFailed || view != liveView) return;
+            updateArchiveOrientation(url);
+        }
+
         @Override public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
             return handleRendererExit(view);
         }
         @Override
         public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+            WebResourceResponse workshop = archiveWorkshopStore.intercept(request);
+            if (workshop != null) return workshop;
+            WebResourceResponse media = archiveMediaStore.intercept(request);
+            if (media != null) return media;
             WebResourceResponse local = clientAssetStore.intercept(request);
             return local != null ? local : super.shouldInterceptRequest(view, request);
         }
@@ -1348,7 +1593,9 @@ public final class HomerActivity extends Activity {
             if (SafeUrls.isTrustedFrameBlobNavigation(BuildConfig.SERVER_BASE_URL,
                     value, request.isForMainFrame(), view.getUrl())) return false;
             if (SafeUrls.isTrustedNavigation(BuildConfig.SERVER_BASE_URL, value)) {
-                if (request.isForMainFrame() && view == liveView && switchPersistentPage(value)) return true;
+                boolean hostNavigation = request.isForMainFrame()
+                        || isDialogueChildPageNavigation(view.getUrl(), value, request.isForMainFrame(), request.hasGesture());
+                if (hostNavigation && view == liveView && switchPersistentPage(value)) return true;
                 return false;
             }
             if (request.isForMainFrame() && ("https".equals(target.getScheme())
@@ -1372,6 +1619,7 @@ public final class HomerActivity extends Activity {
                 setWebViewVisibility(view, view.getVisibility());
             }
             if (startupFailed || view != liveView) return;
+            updateArchiveOrientation(url);
             liveStartedAt = System.currentTimeMillis();
             liveReadyHandled = false;
             boolean conversationTarget = StartupPresentation.isConversationUrl(url);
@@ -1389,7 +1637,7 @@ public final class HomerActivity extends Activity {
             applySystemBars();
             applyNativeInsetsToWebViews();
             cacheDatabase.saveLastUrl(url);
-            handler.removeCallbacksAndMessages(null);
+            readinessHandler.removeCallbacksAndMessages(null);
             pollLiveReady();
             scheduleDialoguePreparation();
         }
@@ -1417,16 +1665,35 @@ public final class HomerActivity extends Activity {
                 ValueCallback<Uri[]> callback,
                 FileChooserParams params
         ) {
-            if (fileChooserCallback != null) fileChooserCallback.onReceiveValue(null);
+            // An old picker/camera result must never complete a newer input.
+            if (fileChooserInFlight) { callback.onReceiveValue(null); return true; }
+            cancelFileChooser();
+            if (webView != liveView || !SafeUrls.isTrustedNavigation(BuildConfig.SERVER_BASE_URL, webView.getUrl())) {
+                callback.onReceiveValue(null); return true;
+            }
             fileChooserCallback = callback;
+            fileChooserSource = webView;
+            fileChooserDocument = liveDocumentTokens.get(webView);
+            fileChooserOwner = availableAccountOwner;
+            fileChooserUrl = webView.getUrl();
+            String[] types = FilePickerTypes.normalize(params.getAcceptTypes());
+            if (WebCameraCapture.acceptsPhoto(params.isCaptureEnabled(), types)) {
+                if (checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) startCameraCapture();
+                else {
+                    fileChooserInFlight = true;
+                    try { requestPermissions(new String[]{Manifest.permission.CAMERA}, CAMERA_PERMISSION_REQUEST); }
+                    catch (RuntimeException unavailable) { completeFileChooser(null); }
+                }
+                return true;
+            }
             try {
                 Intent intent = params.createIntent();
                 intent.addCategory(Intent.CATEGORY_OPENABLE);
-                String[] types = FilePickerTypes.normalize(params.getAcceptTypes());
                 intent.setType(types.length == 1 ? types[0] : "*/*");
                 intent.removeExtra(Intent.EXTRA_MIME_TYPES);
                 if (types.length > 1) intent.putExtra(Intent.EXTRA_MIME_TYPES, types);
                 intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, params.getMode() == FileChooserParams.MODE_OPEN_MULTIPLE);
+                fileChooserInFlight = true;
                 startActivityForResult(intent, FILE_CHOOSER_REQUEST);
                 return true;
             } catch (RuntimeException error) {
@@ -1436,10 +1703,10 @@ public final class HomerActivity extends Activity {
                     fallback.addCategory(Intent.CATEGORY_OPENABLE);
                     fallback.setType("*/*");
                     fallback.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, params.getMode() == FileChooserParams.MODE_OPEN_MULTIPLE);
+                    fileChooserInFlight = true;
                     startActivityForResult(fallback, FILE_CHOOSER_REQUEST);
                 } catch (RuntimeException unavailable) {
-                    fileChooserCallback = null;
-                    callback.onReceiveValue(null);
+                    completeFileChooser(null);
                     android.widget.Toast.makeText(HomerActivity.this,
                             "无法打开系统文件选择器，请启用手机的文件管理应用后重试", android.widget.Toast.LENGTH_LONG).show();
                 }
@@ -1450,6 +1717,44 @@ public final class HomerActivity extends Activity {
         @Override
         public void onPermissionRequest(PermissionRequest request) {
             runOnUiThread(() -> handleWebPermissionRequest(request));
+        }
+    }
+
+    private boolean fileChooserCurrent() {
+        return fileChooserCallback != null && !isFinishing() && !isDestroyed()
+                && fileChooserSource == liveView && fileChooserDocument != null
+                && fileChooserSource.getVisibility() == View.VISIBLE
+                && fileChooserUrl.equals(fileChooserSource.getUrl())
+                && fileChooserDocument == liveDocumentTokens.get(fileChooserSource)
+                && fileChooserOwner.equals(availableAccountOwner)
+                && SafeUrls.isTrustedNavigation(BuildConfig.SERVER_BASE_URL, fileChooserSource.getUrl());
+    }
+
+    private void cancelFileChooser() {
+        if (fileChooserCallback != null) { fileChooserCallback.onReceiveValue(null); fileChooserCallback = null; }
+        // Keep an outstanding external result reserved until it returns. If a
+        // new picker starts first, its callback could consume the old result.
+        if (!fileChooserInFlight) completeFileChooser(null);
+    }
+
+    private void completeFileChooser(Uri[] result) {
+        boolean current = fileChooserCurrent();
+        ValueCallback<Uri[]> callback = fileChooserCallback;
+        fileChooserCallback = null; fileChooserInFlight = false;
+        fileChooserSource = null; fileChooserDocument = null; fileChooserOwner = ""; fileChooserUrl = "";
+        if (cameraCapture != null) { cameraCapture.finish(this, current && result != null); cameraCapture = null; }
+        if (callback != null) callback.onReceiveValue(current ? result : null);
+    }
+
+    private void startCameraCapture() {
+        if (!fileChooserCurrent()) { completeFileChooser(null); return; }
+        try {
+            cameraCapture = WebCameraCapture.create(this);
+            fileChooserInFlight = true;
+            startActivityForResult(cameraCapture.intent(), CAMERA_CAPTURE_REQUEST);
+        } catch (Exception unavailable) {
+            completeFileChooser(null);
+            android.widget.Toast.makeText(this, "无法打开相机，请启用相机应用或从相册选择", android.widget.Toast.LENGTH_LONG).show();
         }
     }
 

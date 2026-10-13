@@ -37,7 +37,7 @@ function fixture() {
     for (const target of targets) stored.set(avatar(target.app_id), mirror(target.app_id));
     const c = sessionVM(bridge, {
         Date: class extends Date { static now() { return now; } }, performance: { mark() {} },
-        prewarmOnly: true, adminPreviewRequested: false, adminBinding: false, bridgeStartScheduled: false,
+        prewarmOnly: true, adminPreviewRequested: false, adminBinding: false, bridgeStartScheduled: false, localRuntime: null,
         requestedAppId: '', requestedConversationId: '', launch: null, session: null,
         hostBootstrapEngineToken: 'engine', hostBootstrapDocumentToken: 'document',
         storageOwner: 'owner', SESSION_CACHE_TTL_MS: 30_000, SESSION_PREFETCH_LIMIT: 2,

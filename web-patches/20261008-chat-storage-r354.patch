@@ -1,0 +1,1902 @@
+# homer-android web patch
+# baseline commit: 02069118baa83354f3e01a6d0021562111211373
+# Incremental after seven upstream R353/registration/personal-backup patches.
+# Delivery: 355 / 1.18.2. Never replace prior patches.
+
+diff --git a/frontend/assets/js/chat-control-center.js b/frontend/assets/js/chat-control-center.js
+index e3f59c3163acd9164d613f9a8c88b00349120dd8..fb5363e59027d0fa5f69de69bda564f6f8059064 100644
+--- a/frontend/assets/js/chat-control-center.js
++++ b/frontend/assets/js/chat-control-center.js
+@@ -5,8 +5,17 @@ const paths = {
+  memory:'M12 5C8 2 4 4 4 4v15s4-2 8 1c4-3 8-1 8-1V4s-4-2-8 1Z M12 5v15',
+  mod:'M4 4h6v6H4z M14 4h6v6h-6z M4 14h6v6H4z M17 14v6 M14 17h6',
+  appearance:'M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 0-4h-1a2 2 0 0 1 0-4h5a4 4 0 0 0 4-4c0-3-4-6-9-6Z M7 9h.01 M10 6h.01 M15 6h.01',
++ sync:'M4 10a8 8 0 0 1 13-5l3 3 M20 3v5h-5 M20 14a8 8 0 0 1-13 5l-3-3 M4 21v-5h5',
++ other:'M4 12h16 M12 4v16',
+ };
+-function icon(key){const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('aria-hidden','true');const p=document.createElementNS(svg.namespaceURI,'path');p.setAttribute('d',paths[key]);svg.append(p);return svg;}
++export function controlKey(button){
++ const ids={'homer-open-model-settings':'model','homer-open-preset-settings':'preset','homer-open-memory-books':'memory','homer-open-mods':'mod','homer-chat-storage':'sync'};
++ if(Object.hasOwn(ids,button.id))return ids[button.id];
++ const label=button.getAttribute('aria-label')||button.querySelector('strong')?.textContent||'';
++ const labels={'模型设置':'model','预设开关':'preset','长记忆':'memory','Mod':'mod','界面设置':'appearance','存档同步':'sync'};
++ return Object.hasOwn(labels,label.trim())?labels[label.trim()]:'other';
++}
++function icon(key){const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('aria-hidden','true');const p=document.createElementNS(svg.namespaceURI,'path');p.setAttribute('d',paths[key]||paths.other);svg.append(p);return svg;}
+ export function controlCenter(root){
+  if(!root||root.dataset.controlCenter)return;root.dataset.controlCenter='true';root.classList.add('homer-control-center');
+  const head=root.querySelector('header'),list=root.querySelector('.homer-setting-list,.preview-setting-list'),shortcuts=root.querySelector('.homer-chat-shortcuts');
+@@ -14,13 +23,13 @@ export function controlCenter(root){
+  if(appearance)rows.push(appearance);
+  list.className='homer-control-grid';
+  const groups=['对话能力','扩展与外观'].map(title=>{const section=document.createElement('section'),heading=document.createElement('h3'),items=document.createElement('div');section.className='homer-control-group';heading.textContent=title;items.className='homer-control-group__items';section.append(heading,items);return section;});
+- for(const [i,button] of rows.entries()){
+-  const key=['model','preset','memory','mod','appearance'][i];
++ for(const button of rows){
++  const key=controlKey(button);
+   let copy=button.querySelector('.homer-setting-row__copy,.preview-setting-row__copy');
+   if(!copy){copy=document.createElement('span');const name=document.createElement('strong');name.textContent='界面设置';const desc=document.createElement('small');desc.textContent='气泡与背景';copy.append(name,desc);}
+   copy.className='homer-control-card__copy';for(const child of copy.children)child.className='';
+   const arrow=document.createElement('span');arrow.className='homer-control-chevron';arrow.textContent='›';arrow.setAttribute('aria-hidden','true');
+-  button.className='homer-control-card';button.dataset.control=key;button.replaceChildren(icon(key),copy,arrow);groups[i<3?0:1].lastElementChild.append(button);
++  button.className='homer-control-card';button.dataset.control=key;button.replaceChildren(icon(key),copy,arrow);groups[['model','preset','memory'].includes(key)?0:1].lastElementChild.append(button);
+  }
+  list.replaceChildren(...groups);
+  const caption=document.createElement('p');caption.className='homer-control-caption';caption.textContent='对话设置';head.before(caption);
+diff --git a/sillytavern-runtime/public/script.js b/sillytavern-runtime/public/script.js
+index 99c58f217c647a21f73b2fc4c5e8e9486d7e8ed5..1fe1fd4cb01aed79f1dd74bbd48bef4eeffcff26 100644
+--- a/sillytavern-runtime/public/script.js
++++ b/sillytavern-runtime/public/script.js
+@@ -294,6 +294,18 @@ import { addChatBackupsBrowser } from './scripts/chat-backups.js';
+ import { onboardingExperimentalMacroEngine } from './scripts/macros/engine/MacroDiagnostics.js';
+ import { compressRequest, setRequestCompressionConfig } from './scripts/request-compression.js';
+ import { canJumpToSwipeForMessage, canOpenSwipePickerForMessage, initSwipePicker } from './scripts/swipe-picker.js';
++import { installLocalRuntime } from './scripts/homer-local-runtime.mjs';
++
++export const localRuntime = installLocalRuntime({
++    isEmbedded: new URLSearchParams(window.location.search).get('homer_embed') === '1',
++    owner: () => {
++        try {
++            if (localStorage.getItem('ai_xingyue_logged_in') !== '1') return '';
++            const user = JSON.parse(localStorage.getItem('ai_xingyue_user') || 'null');
++            return String(user?.id || user?.user_id || '');
++        } catch { return ''; }
++    },
++});
+ 
+ // Compatibility API for character-card and extension wiring.
+ const compatibilityApiName = ['Silly', 'Tavern'].join('');
+@@ -815,7 +827,9 @@ async function firstLoadInit() {
+     initSettingsSearch();
+     initBulkEdit();
+     initReasoning();
+-    initWelcomeScreen();
++    // The embedded document is bound to a phone-owned conversation. A delayed
++    // upstream welcome template must never append into that restored history.
++    if (!isHomerEmbedded) initWelcomeScreen();
+     await initScrapers();
+     initCustomSelectedSamplers();
+     initDataMaid();
+diff --git a/sillytavern-runtime/public/scripts/extensions/homer-bridge/index.js b/sillytavern-runtime/public/scripts/extensions/homer-bridge/index.js
+index 9f2f2bd08a7985e989ec6a4c1d7c504f621ab945..dcbcad0a2889501af3931e99eb046caa45eb8e07 100644
+--- a/sillytavern-runtime/public/scripts/extensions/homer-bridge/index.js
++++ b/sillytavern-runtime/public/scripts/extensions/homer-bridge/index.js
+@@ -12,6 +12,7 @@ import {
+     prepareCharacterChatMirrorRead,
+     scrollChatToBottom,
+     scrollOnMediaLoad,
++    localRuntime,
+ } from '../../../script.js';
+ import { oai_settings } from '../../openai.js';
+ import { prefetchPersonaAvatarsForConversation, prefetchPersonaAvatarsForCurrentChat } from '../../personas.js';
+@@ -50,6 +51,8 @@ import { loadTavoUi, decorateTavoMessage, mountTavoComposer, refreshTavoUi, setT
+ import { captureCloudSync, canApplyCloudSync, createCloudSyncQueue } from '../../homer-cloud-sync.mjs';
+ import { createCardPreparationCache } from '../../homer-stable-template.mjs';
+ import { createChatOutbox } from '../../homer-chat-outbox.mjs';
++import { createLocalSessionStore } from '../../homer-local-session.mjs';
++import { sanitizeRuntimeValue } from '../../homer-local-runtime.mjs';
+ import { requestSessionCard } from '../../homer-card-transport.mjs';
+ import { clearCardTransportMemory } from '../../homer-card-transport-cache.mjs';
+ import { holdLargeSourceLayout } from '../../homer-source-layout.mjs';
+@@ -58,11 +61,13 @@ import { capturePromptMessageState, prepareAcknowledgedPromptStates, restoreAckn
+ 
+ const cardPreparations = createCardPreparationCache();
+ const chatOutbox = createChatOutbox();
++const localSessions = createLocalSessionStore();
+ const storageRequests = new Set();
+ let storageAccountEpoch = 0;
+ let verifiedStorageOwner = '';
+ let storageOwner = authenticatedStorageOwner();
+ let outboxReplay = null;
++let storageConflictResolution = null;
+ let extensionSettingsReplayWork = Promise.resolve();
+ const sessionReadFences = new WeakMap();
+ const acknowledgedPromptTickets = new WeakMap();
+@@ -128,7 +133,22 @@ function reconcileStorageAccount() {
+     return owner;
+ }
+ 
+-async function requestScopedStorage(snapshot, kind, options = {}) {
++async function rebasePhoneUpload(snapshot, owner, epoch) {
++    const [, appId, conversationId] = JSON.parse(snapshot.scope);
++    // This is only a pending phone edit, never a read-only history visit.
++    // The provider atomically backs up the old cloud snapshot before accepting
++    // the next CAS. A racing writer still fails CAS and leaves the phone intact.
++    const remote = await requestJson(`/api/homer/session?${queryString(appId, conversationId)}`);
++    acceptVerifiedSessionOwner(remote, owner, epoch);
++    if (String(remote.launch?.app_id) !== appId || String(remote.launch?.conversation_id) !== conversationId
++        || remote.launch?.storage?.protocol !== 2 || remote.launch.storage.complete !== true
++        || !Array.isArray(remote.launch.messages) || remote.launch.messages.length !== remote.launch.storage.message_count)
++        throw new Error('[HM-S428] 服务器保存保护尚未升级，本机进度已保留');
++    if (!await chatOutbox.rebasePending(snapshot, remote.launch.storage.version)) throw new Error('本机进度已变化，等待最新版本同步');
++    snapshot.committed = await chatOutbox.read(snapshot.scope, 'chat');
++}
++
++async function requestScopedStorage(snapshot, kind, options = {}, retry = 0) {
+     const owner = JSON.parse(snapshot.scope)[0];
+     if (!owner || reconcileStorageAccount() !== owner
+         || owner !== String(session?.user?.id || session?.user?.user_id || '')) {
+@@ -144,12 +164,33 @@ async function requestScopedStorage(snapshot, kind, options = {}) {
+     const controller = new AbortController();
+     storageRequests.add(controller);
+     try {
++        const wire = JSON.parse(snapshot.body);
++        if (kind === 'chat') {
++            if (!/^[0-9a-f]{32}$/.test(current.baseVersion || '')) {
++                if (retry) throw new Error('[HM-S428] 同步暂不可用，本机进度已保留');
++                await rebasePhoneUpload(snapshot, owner, epoch);
++                return requestScopedStorage(snapshot, kind, options, 1);
++            }
++            wire.storage_version = current.baseVersion;
++            snapshot.committed.baseVersion = current.baseVersion;
++            wire.storage_commit_id = snapshot.committed.commitId;
++        }
+         const result = await requestJson(kind === 'chat' ? '/api/homer/sync' : '/api/homer/runtime-state', {
+-            method: 'POST', body: snapshot.body, ...options, signal: controller.signal,
++            method: 'POST', body: JSON.stringify(wire), ...options, signal: controller.signal,
+         });
+         if (reconcileStorageAccount() !== owner || epoch !== storageAccountEpoch) throw new Error('会话账号已切换');
+-        if (kind === 'chat' && !Array.isArray(result?.messages)) throw new Error('云端未确认聊天记录');
++        if (kind === 'chat' && (!Array.isArray(result?.messages) || result.storage?.protocol !== 2
++            || result.storage.complete !== true || !/^[0-9a-f]{32}$/.test(result.storage.version || '')
++            || result.messages.length !== result.storage.message_count || result.messages.length !== wire.messages.length))
++            throw new Error('[HM-S428] 服务器保存保护尚未升级，本机进度已保留');
+         return result;
++    } catch (error) {
++        if (kind === 'chat' && retry === 0 && error.status === 409
++            && reconcileStorageAccount() === owner && epoch === storageAccountEpoch) {
++            await rebasePhoneUpload(snapshot, owner, epoch);
++            return requestScopedStorage(snapshot, kind, options, 1);
++        }
++        throw error;
+     } finally { storageRequests.delete(controller); }
+ }
+ 
+@@ -177,7 +218,7 @@ async function replayPendingStorage() {
+             snapshot.committed = latest;
+             try {
+                 await (latest.kind === 'chat' ? cloudSyncQueue : extensionSyncQueue).enqueue(snapshot);
+-            } catch { break; } // Retain the failed and remaining durable rows.
++            } catch { /* Keep this scope pending; continue other histories. */ }
+         }
+     })().catch(() => {
+         console.warn(`${MODULE_ID}: local chat replay remains pending`);
+@@ -242,10 +283,18 @@ async function installTavoConversationUi() {
+             getState: () => ({ scope: scopeDraftKey(), text: document.querySelector('#send_textarea')?.value || '',
+                 generating: Boolean(isGenerating() || generationBusy), disabled: Boolean(loadingLaunch || rollbackBusy || conversationRecoveryBlocked) }),
+             onText: text => setComposerDraft(text),
+-            onSubmit: text => {
++            onSubmit: async text => {
+                 if (isGenerating() || generationBusy || rollbackBusy || loadingLaunch || conversationRecoveryBlocked || !text.trim()) return;
+                 assertCanonicalConversationScope();
+                 setComposerDraft(text);
++                if (!launch?.bridge_token) {
++                    const target = launch;
++                    await refreshBridgeToken();
++                    if (launch !== target || !launch.bridge_token) {
++                        showHostNotice('本机存档可离线使用；生成回复需要联网', 'warning'); return;
++                    }
++                    assertCanonicalConversationScope();
++                }
+                 const send = document.querySelector('#send_but');
+                 if (send && !send.matches(':disabled')) send.click();
+             },
+@@ -614,7 +663,10 @@ async function requestJson(url, options = {}) {
+         // 探测性/可容错的（例如 fetchSession 的嵌入式端点失败后还有回退），
+         // 在最底层弹条会把这些正常回退渲染成一条不消失的「对话服务连接失败」。
+         // 需要提示的调用点自己走 showHostNotice。
+-        throw new Error(String(message));
++        const error = new Error(String(message));
++        error.status = response.status;
++        error.code = String(message).match(/\[(HM-S\d+)\]/)?.[1] || payload?.error?.code || '';
++        throw error;
+     }
+     return unwrap(payload);
+ }
+@@ -834,22 +886,21 @@ function captureExtensionStorage(options = {}) {
+     }
+     return {
+         snapshot: captureCloudSync(cloudSyncScope(), {
+-            app_id: appId, conversation_id: conversationId, extension_settings: snapshot.value,
++            app_id: appId, conversation_id: conversationId, extension_settings: sanitizeRuntimeValue(snapshot.value),
++            variables: sanitizeRuntimeValue(cloneJsonObject(runtimeVariables)),
+         }), scope, signature: snapshot.signature,
+     };
+ }
+ 
+ async function persistExtensionSettingsSnapshot(options = {}, captured = captureExtensionStorage(options)) {
+     if (!captured) return false;
++    const epoch = storageAccountEpoch;
+     captured.snapshot.committed = await chatOutbox.prepare(captured.snapshot, 'extension-settings');
+-    const acknowledgement = await extensionSyncQueue.enqueue(captured.snapshot, {
++    void extensionSyncQueue.enqueue(captured.snapshot, {
+         keepaliveOnly: Boolean(options.keepalive),
+-    });
+-    if (acknowledgement.deferred) return false;
+-    if (acknowledgement.skipped) {
+-        await acknowledgeStorage(captured.snapshot.committed, acknowledgement.response);
+-    }
+-    if (captured.scope === extensionSettingsScope()) {
++    }).catch(() => {});
++    if (epoch === storageAccountEpoch && captured.scope === extensionSettingsScope()
++        && captured.snapshot.scope === cloudSyncScope()) {
+         lastExtensionSettingsScope = captured.scope;
+         lastExtensionSettingsSignature = captured.signature;
+     }
+@@ -1739,6 +1790,26 @@ async function preferLocalSession(payload, appId, conversationId, fence) {
+     const ticket = sessionReadFences.get(payload);
+     const local = await chatOutbox.read(scope, 'chat', fence);
+     if (userId !== reconcileStorageAccount() || epoch !== storageAccountEpoch) throw new Error('会话账号已切换，请重新进入');
++    const storage = payload.launch.storage;
++    const versioned = storage?.protocol === 2 && storage.complete === true && /^[0-9a-f]{32}$/.test(storage.version || '');
++    if (versioned && storage.unchanged) {
++        if (!local || local.pending || local.cloudVersion !== storage.version || local.ackRevision !== local.revision
++            || !Array.isArray(local.ackPayload?.messages) || local.ackPayload.messages.length !== storage.message_count) {
++            const error = new Error('本机缓存已变化，需要完整读取');
++            error.code = 'HOMER_STALE_STORAGE_READ'; throw error;
++        }
++        // The authenticated server verified the same full version, not a TTL guess.
++        payload.launch.messages = local.ackPayload.messages;
++    }
++    if (versioned && !storage.unchanged && !payload.launch.local_session && (!Array.isArray(payload.launch.messages)
++        || payload.launch.messages.length !== storage.message_count)) throw new Error('云端存档不完整，未载入或回存');
++    if (versioned && local?.pending && local.baseVersion !== storage.version) payload.launch.storage_conflict = true;
++    // Reuse full metadata only for an explicitly version-confirmed ACKed copy.
++    const reuseAcknowledged = Boolean(local && !local.pending && Array.isArray(local.payload?.messages));
++    if (versioned && local?.preferred && !local.pending && !reuseAcknowledged) {
++        const error = new Error('保存回执晚于本次读取，需要重新确认云端版本');
++        error.code = 'HOMER_STALE_STORAGE_READ'; throw error;
++    }
+     if (!local && ticket && (ticket.stamp !== storageAckStamps.get(storageAckKey(scope))
+         || ticket.version !== ticket.stamp?.version)) {
+         // A very large acknowledged row may have been evicted by the byte
+@@ -1747,7 +1818,7 @@ async function preferLocalSession(payload, appId, conversationId, fence) {
+         error.code = 'HOMER_STALE_STORAGE_READ';
+         throw error;
+     }
+-    if (!local?.preferred) {
++    if (!local?.pending && !reuseAcknowledged) {
+         // Fresh cloud messages/order remain authoritative. Retain only a
+         // versioned, fully ACKed per-swipe Prompt Template tuple whose exact
+         // canonical source also matches both that ACK and the fresh response.
+@@ -1773,7 +1844,10 @@ async function preferLocalSession(payload, appId, conversationId, fence) {
+     // Retain complete canonical messages (including hidden/swipe/extension
+     // metadata), not the clipped plain-text first-screen preview.
+     payload.launch.local_chat = messages;
++    sessionReadFences.set(payload, { ...ticket, owner: userId, epoch, scope, fence });
+     payload.launch.local_pending = local.pending;
++    payload.launch.storage = { protocol: 2, complete: true,
++        version: local.baseVersion || local.cloudVersion || '', message_count: messages.length };
+     payload.launch.messages = messages.map(message => ({
+         id: String(message.extra?.homer_message_id || message.extra?.homer_sync_id || ''),
+         role: message.is_system && !message.extra?.homer_hidden ? 'system' : message.is_user ? 'user' : 'assistant',
+@@ -1783,7 +1857,7 @@ async function preferLocalSession(payload, appId, conversationId, fence) {
+     return payload;
+ }
+ 
+-async function fetchSession(appId = '', conversationId = '', adminPreview = false, storageRetry = 0, { deferLocalMerge = false } = {}) {
++async function fetchSession(appId = '', conversationId = '', adminPreview = false, storageRetry = 0, { deferLocalMerge = false, forceNetwork = false } = {}) {
+     const owner = reconcileStorageAccount();
+     const requestEpoch = storageAccountEpoch;
+     if (adminPreview) {
+@@ -1792,6 +1866,17 @@ async function fetchSession(appId = '', conversationId = '', adminPreview = fals
+         acceptVerifiedSessionOwner(preview, owner, requestEpoch);
+         return preview;
+     }
++    if (!forceNetwork && owner && appId && conversationId) {
++        const stored = await localSessions.read(owner, appId, conversationId);
++        if (stored) {
++            if (owner !== reconcileStorageAccount() || requestEpoch !== storageAccountEpoch) throw new Error('会话账号已切换');
++            const scope = JSON.stringify([owner, String(appId), String(conversationId)]);
++            const fence = await chatOutbox.fence(scope);
++            stored.launch.local_session = true;
++            sessionReadFences.set(stored, { fence, owner, epoch: requestEpoch, scope, raw: false });
++            return preferLocalSession(stored, appId, conversationId, fence);
++        }
++    }
+     const params = new URLSearchParams();
+     if (appId) {
+         params.set('app_id', appId);
+@@ -1812,9 +1897,13 @@ async function fetchSession(appId = '', conversationId = '', adminPreview = fals
+     const version = stamp?.version;
+     const fence = owner && appId && conversationId
+         ? await chatOutbox.fence(JSON.stringify([owner, String(appId), String(conversationId)])) : null;
++    // One opaque version; never put private messages into the URL. A retry
++    // after local eviction requests the complete body, not another omission.
++    if (storageRetry === 0 && fence?.cloudVersion && !fence.pending) params.set('chat_version', fence.cloudVersion);
++    const versionedSuffix = params.toString() ? `?${params}` : '';
+     let embedded;
+     try {
+-        embedded = await requestSessionCard(`/api/homer/session${suffix}`, {
++        embedded = await requestSessionCard(`/api/homer/session${versionedSuffix}`, {
+             owner, appId, conversationId, request: requestJson,
+             validate: payload => acceptVerifiedSessionOwner(payload, owner, requestEpoch),
+             isCurrent: () => storageAccountEpoch === requestEpoch
+@@ -1830,6 +1919,10 @@ async function fetchSession(appId = '', conversationId = '', adminPreview = fals
+         if (conversationId && String(payload?.launch?.conversation_id) !== String(conversationId)) throw new Error('会话存档信息不一致');
+         const payloadScope = JSON.stringify([String(payload?.user?.id || payload?.user?.user_id || ''), String(payload?.launch?.app_id), String(payload?.launch?.conversation_id)]);
+         const payloadStamp = stamp || storageAckStamp(payloadScope);
++        if (payload.launch.storage?.complete === true && !payload.launch.storage.unchanged) {
++            await localSessions.remember(String(payload.user.id || payload.user.user_id), payload);
++            acceptVerifiedSessionOwner(payload, owner, requestEpoch);
++        }
+         sessionReadFences.set(payload, { fence, stamp: payloadStamp, version: stamp ? version : payloadStamp.version,
+             raw: deferLocalMerge === true, owner: reconcileStorageAccount(), epoch: storageAccountEpoch, scope: payloadScope });
+         // Read-only peer preparation retains the unprojected cloud response.
+@@ -1845,7 +1938,7 @@ async function fetchSession(appId = '', conversationId = '', adminPreview = fals
+     if (embedded?.launch?.card && embedded.launch.bridge_token) return finalize(embedded);
+     // Only use the site fallback when the embedded endpoint really failed or
+     // omitted its launch. Never fetch a second complete large card on success.
+-    const fallback = await requestJson(`/console/api/web/dialogue/session${suffix}`);
++    const fallback = await requestJson(`/console/api/web/dialogue/session${versionedSuffix}`);
+     if (!fallback?.launch?.card || !fallback.launch.bridge_token) throw new Error('会话数据不完整，请重试连接');
+     return finalize(fallback);
+ }
+@@ -2024,6 +2117,8 @@ async function takePrefetchedSession(appId = '', conversationId = '') {
+             throw new Error('会话账号已切换，请重新进入');
+         }
+         const scope = JSON.stringify([currentOwner, String(appId), String(conversationId)]);
++        if (payload?.launch?.local_session && ticket?.owner === currentOwner && ticket.epoch === storageAccountEpoch
++            && ticket.scope === scope) return preferLocalSession(payload, appId, conversationId, await chatOutbox.fence(scope));
+         if (ticket?.raw !== true || ticket.scope !== scope || !payload?.launch
+             || Object.hasOwn(payload.launch, 'local_chat') || Object.hasOwn(payload.launch, 'local_pending')) {
+             // A legacy/consumed/local-projected payload is not fresh cloud
+@@ -2038,7 +2133,7 @@ async function takePrefetchedSession(appId = '', conversationId = '') {
+             // before or during consumption can make its older cloud body look
+             // authoritative once the local row stops being pending. Refetch
+             // with the now verified owner; never invent a zero/local fence.
+-            if (ticket.fence === null && (ticket.stamp !== storageAckStamps.get(storageAckKey(scope))
++            if (!Array.isArray(restored.launch.local_chat) && ticket.fence === null && (ticket.stamp !== storageAckStamps.get(storageAckKey(scope))
+                 || ticket.version !== ticket.stamp?.version)) return await fetchSession(appId, conversationId);
+             return restored;
+         }
+@@ -2211,14 +2306,21 @@ async function refreshBridgeToken() {
+     }
+     const refreshingLaunch = launch;
+     try {
+-        const refreshed = await fetchSession(refreshingLaunch.app_id, refreshingLaunch.conversation_id, Boolean(refreshingLaunch.admin_preview));
++        const refreshed = await fetchSession(refreshingLaunch.app_id, refreshingLaunch.conversation_id, Boolean(refreshingLaunch.admin_preview), 0, { forceNetwork: true });
+         if (launch !== refreshingLaunch || adminBinding || loadingLaunch) return;
+         if (refreshed?.launch?.bridge_token) {
+             if (launch.admin_preview) {
+                 // Refresh authorization, not the ephemeral conversation identity.
+                 launch.bridge_token = refreshed.launch.bridge_token;
+                 session.user = refreshed.user;
+-            } else { session = refreshed; launch = refreshed.launch; }
++            } else {
++                // Authorization may refresh in the background; phone-owned
++                // messages, canonical version and settings must not be replaced.
++                launch.bridge_token = refreshed.launch.bridge_token;
++                launch.bridge_token_ttl_seconds = refreshed.launch.bridge_token_ttl_seconds;
++                session.runtime = refreshed.runtime;
++                session.user = refreshed.user;
++            }
+             applyConnectionConfiguration();
+             updateRuntimeStatus('已连接', 'online');
+         }
+@@ -2728,6 +2830,7 @@ function prepareLaunchMirrorHeader(optionalPreparation = null) {
+ }
+ 
+ function prepareInitialCharacterRead(optionalPreparation = null) {
++    if (launch?.local_session) return null;
+     const targetOwner = reconcileStorageAccount(), targetEpoch = storageAccountEpoch;
+     const targetLaunch = launch, targetSession = session;
+     // Only an authenticated explicit initial selection is eligible. Empty
+@@ -2773,6 +2876,10 @@ async function importLaunchCharacter({ reuseActiveCharacter = false, initialRead
+     const safeKey = String(launch.app_id || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 80) || 'character';
+     const preservedName = `homer-${safeKey}`;
+     const expectedAvatar = `${preservedName}.png`;
++    if (localRuntime && !launch.admin_preview) {
++        await localRuntime.seedCharacter(expectedAvatar, cloneCardWithMarker(prepared));
++        assertCurrent();
++    }
+     if (initialRead && (initialRead.owner !== targetOwner || initialRead.epoch !== targetEpoch
+         || initialRead.targetLaunch !== targetLaunch || initialRead.targetSession !== targetSession
+         || initialRead.avatar !== expectedAvatar)) {
+@@ -2967,9 +3074,16 @@ async function loadCloudChat({ emitChatChanged = true } = {}) {
+     try {
+     const context = getContext();
+     const stateLaunch = launch;
++    const localTicket = sessionReadFences.get(session);
++    if (Array.isArray(launch.local_chat) && (!localTicket || localTicket.owner !== reconcileStorageAccount()
++        || localTicket.epoch !== storageAccountEpoch || localTicket.scope !== cloudSyncScope()
++        || localTicket.owner !== String(session?.user?.id || session?.user?.user_id || ''))) {
++        throw new Error('本机会话所属账号已变化，未读取旧存档');
++    }
+     const promptTicket = acknowledgedPromptTickets.get(stateLaunch);
+     acknowledgedPromptTickets.delete(stateLaunch);
+-    const messages = Array.isArray(launch.local_chat) ? cloneJsonValue(launch.local_chat) : Array.isArray(launch.messages)
++    const fromLocal = Array.isArray(launch.local_chat);
++    const messages = fromLocal ? cloneJsonValue(launch.local_chat) : Array.isArray(launch.messages)
+         ? launch.messages.map(cloudMessageToDialogue)
+         : [];
+     if (Array.isArray(launch.local_chat) && messages.length) {
+@@ -2985,7 +3099,7 @@ async function loadCloudChat({ emitChatChanged = true } = {}) {
+         restoreAcknowledgedPromptStates(messages, promptTicket.states);
+     }
+     delete launch.local_chat;
+-    if (!messages.length) {
++    if (!messages.length && !fromLocal) {
+         const greeting = initialGreetingMessage();
+         if (greeting) {
+             messages.push(greeting);
+@@ -3025,13 +3139,26 @@ async function loadCloudChat({ emitChatChanged = true } = {}) {
+         suppressSync = previousSuppressSync;
+         releaseSourceLayout();
+     }
++    if (!launch.admin_preview && !launch.local_session && launch.storage?.protocol === 2 && !launch.local_pending && !launch.storage_conflict
++        && launch.storage.message_count === getContext().chat.length) {
++        const snapshot = captureCurrentChatStorage();
++        const ticket = sessionReadFences.get(session);
++        // Cache a complete authenticated read without POSTing it back. A local
++        // edit that wins this transaction is never replaced by the read cache.
++        lastSyncSignature = JSON.stringify(snapshot.payload.messages);
++        const cachedLaunch = launch;
++        await chatOutbox.rememberRemote(snapshot, { messages: launch.messages, storage: launch.storage }, ticket?.fence)
++            .catch(() => { if (launch === cachedLaunch) updateRuntimeStatus('本机缓存未保存，云端记录不受影响', 'warning'); });
++    }
+     // Do not force a viewport-sized layout of temporary 3MB source code
+     // while the HTML frontend renderer is replacing it. Scroll the real DOM.
+     scrollChatToBottom({ waitForFrame: true });
+     // Preserve the normal late image/video/audio bottom-position watcher,
+     // but attach it only after frontend conversion has finished.
+     scrollOnMediaLoad();
+-    scheduleSync(100);
++    // Viewing/re-rendering a history is not an edit. Only a new genuinely empty
++    // conversation needs its locally initialized greeting saved once.
++    if (launch.storage?.protocol === 2 && launch.storage.message_count === 0 && getContext().chat.length) scheduleSync(100);
+     scheduleHostStateNotify(0, 'chat-loaded');
+ }
+ 
+@@ -3225,12 +3352,12 @@ function blockConversationRecovery(error, bootstrapToken = '') {
+ 
+ function captureCurrentChatStorage() {
+     assertCanonicalConversationScope();
+-    return captureCloudSync(cloudSyncScope(), {
++    return { ...captureCloudSync(cloudSyncScope(), {
+         app_id: launch.app_id,
+         conversation_id: launch.conversation_id,
+         title: String(launch?.card?.data?.name || launch?.card?.name || '角色对话'),
+         messages: serializeChat(),
+-    });
++    }), storageVersion: launch.storage?.version || '' };
+ }
+ 
+ async function commitConversationBeforeSwitch() {
+@@ -3242,6 +3369,7 @@ async function commitConversationBeforeSwitch() {
+     // objects. Wait for that local work, never its remote network chain.
+     await extensionSettingsReplayWork;
+     if (launch?.admin_preview) return;
++    if (launch?.storage_forked) return;
+     if (reconcileStorageAccount() !== JSON.parse(cloudSyncScope())[0]) throw new Error('请重新登录后再切换会话');
+     const chatSnapshot = captureCurrentChatStorage();
+     const extensionSnapshot = captureExtensionStorage({ force: true });
+@@ -3266,13 +3394,15 @@ async function commitConversationBeforeSwitch() {
+ }
+ 
+ async function syncCloudChat({ keepaliveOnly = false, localOnly = false } = {}) {
+-    if (launch?.admin_preview || suppressSync || !launch?.app_id || !launch?.conversation_id) return false;
++    if (launch?.admin_preview || (suppressSync && !localOnly) || !launch?.app_id || !launch?.conversation_id) return false;
+     if (conversationRecoveryBlocked || !hasCanonicalConversationScope()) {
+         if (localOnly) assertCanonicalConversationScope();
+         return false;
+     }
+     const epoch = storageAccountEpoch;
+     const snapshot = captureCurrentChatStorage();
++    if (!launch.local_pending && !launch.storage_conflict && launch.storage?.protocol === 2
++        && JSON.stringify(snapshot.payload.messages) === lastSyncSignature) return true;
+     try {
+         snapshot.committed = await chatOutbox.prepare(snapshot);
+         if (localOnly) {
+@@ -3303,6 +3433,11 @@ async function syncCloudChatSnapshot(snapshot, { keepaliveOnly = false } = {}) {
+         if (JSON.parse(snapshot.scope)[0] !== reconcileStorageAccount()
+             || epoch !== storageAccountEpoch || !canApplyCloudSync(snapshot, cloudSyncScope(), serializeChat())) return true;
+         const result = acknowledgement.response;
++        const durable = await chatOutbox.read(snapshot.scope, 'chat');
++        if (!durable || durable.pending || durable.commitId !== snapshot.committed.commitId
++            || durable.revision !== snapshot.committed.revision) return true;
++        if (JSON.parse(snapshot.scope)[0] !== reconcileStorageAccount() || epoch !== storageAccountEpoch
++            || !canApplyCloudSync(snapshot, cloudSyncScope(), serializeChat())) return true;
+         const context = getContext();
+         result.messages.forEach((message, index) => {
+             if (!context.chat[index]) return;
+@@ -3315,13 +3450,20 @@ async function syncCloudChatSnapshot(snapshot, { keepaliveOnly = false } = {}) {
+         });
+         lastSyncSignature = JSON.stringify(serializeChat());
+         launch.local_pending = false;
++        delete launch.storage_conflict;
+         queueMessageMenuRender();
+         if (!cloudSyncQueue.pending(snapshot.scope)) updateRuntimeStatus('云端已同步', 'online');
++        if (result.storage?.protocol === 2) launch.storage = result.storage;
+         return true;
+-    } catch {
++    } catch (error) {
+         console.warn(`${MODULE_ID}: chat cloud save remains pending`);
+         if (JSON.parse(snapshot.scope)[0] === reconcileStorageAccount() && epoch === storageAccountEpoch
+-            && snapshot.scope === cloudSyncScope()) updateRuntimeStatus('等待同步', 'warning');
++            && snapshot.scope === cloudSyncScope()) {
++            if (/HM-S(?:409|428)/.test(String(error?.code || error?.message || ''))) {
++                launch.storage_conflict = true;
++                updateRuntimeStatus('本机进度已保留，云端未被覆盖', 'warning');
++            } else updateRuntimeStatus('本机已保存，等待云端确认', 'warning');
++        }
+         return false;
+     }
+ }
+@@ -3336,6 +3478,8 @@ async function commitConfirmedCloudMutation() {
+         swipes: message.swipes || [], swipe_index: Number(message.swipe_id || 0),
+     }));
+     await acknowledgeStorage(snapshot.committed, { messages });
++    // A rollback/delete route can change the server token independently. The
++    // next save is a harmless identical-data ACK or a protected conflict.
+     launch.local_pending = false;
+ }
+ 
+@@ -3398,6 +3542,57 @@ function confirmHomerAction({
+     });
+ }
+ 
++function resolveChatStorageConflict() {
++    if (!launch?.storage_conflict || generationBusy || isGenerating() || loadingLaunch) return Promise.resolve(false);
++    if (storageConflictResolution) return storageConflictResolution;
++    const owner = reconcileStorageAccount(), epoch = storageAccountEpoch, original = launch;
++    storageConflictResolution = (async () => {
++        const accepted = await confirmHomerAction({ id: 'homer-storage-conflict-dialog',
++            title: '两份进度都保留', eyebrow: '存档同步保护',
++            notice: '云端进度已变化，或本机旧存档缺少版本信息。不会覆盖任何云端记录。你可以把本机进度另存为独立会话；取消后本机进度仍然保留。',
++            confirmLabel: '另存本机进度' });
++        if (!accepted) return false;
++        if (original !== launch || owner !== reconcileStorageAccount() || epoch !== storageAccountEpoch
++            || generationBusy || isGenerating()) throw new Error('会话已变化，未执行另存');
++        const snapshot = captureCurrentChatStorage();
++        snapshot.committed = await chatOutbox.prepare(snapshot);
++        const result = await requestJson('/api/homer/sync', { method: 'POST', body: JSON.stringify({
++            ...snapshot.payload, storage_fork: true, storage_commit_id: `${snapshot.committed.commitId}.fork`,
++        }) });
++        if (!result.conversation_id || result.conversation_id === original.conversation_id
++            || result.storage?.protocol !== 2 || result.storage.complete !== true
++            || !/^[0-9a-f]{32}$/.test(result.storage.version || '')
++            || !Array.isArray(result.messages) || result.messages.length !== result.storage.message_count
++            || result.messages.length !== snapshot.payload.messages.length) throw new Error('服务器未确认另存，本机进度仍然保留');
++        if (original !== launch || owner !== reconcileStorageAccount() || epoch !== storageAccountEpoch) return false;
++        // Cache the fork's complete canonical metadata as well as its new IDs.
++        const messages = cloneJsonValue(snapshot.payload.messages);
++        result.messages.forEach((message, index) => {
++            if (messages[index]) messages[index].extra = { ...messages[index].extra,
++                homer_message_id: message.id, homer_sync_id: message.id, homer_created_at: message.created_at };
++        });
++        const forkScope = JSON.stringify([owner, original.app_id, result.conversation_id]);
++        const forkSnapshot = captureCloudSync(forkScope, { ...snapshot.payload,
++            conversation_id: result.conversation_id, messages });
++        forkSnapshot.storageVersion = result.storage.version;
++        await chatOutbox.rememberRemote(forkSnapshot, result, await chatOutbox.fence(forkScope));
++        const unchanged = canApplyCloudSync(snapshot, cloudSyncScope(), serializeChat());
++        if (!unchanged || !await chatOutbox.markForked(snapshot.committed, result.conversation_id)) {
++            showHostNotice('已另存；期间新增的本机编辑仍保留在原会话，请再次同步', 'warning'); return false;
++        }
++        original.storage_forked = true;
++        try { await switchConversation({ app_id: original.app_id, id: result.conversation_id }); }
++        finally { delete original.storage_forked; }
++        showHostNotice('本机进度已另存，原云端会话保持不变', 'success');
++        return true;
++    })().catch(() => {
++        if (owner === reconcileStorageAccount() && epoch === storageAccountEpoch)
++            showHostNotice('另存未完成，本机进度仍然保留。请联网后在设置中打开“存档同步”重试', 'warning');
++        return false;
++    }).finally(() => { storageConflictResolution = null; });
++    return storageConflictResolution;
++}
++
+ function confirmRollback(messageIndex) {
+     return confirmHomerAction({
+         id: 'homer-rollback-dialog',
+@@ -3413,8 +3608,8 @@ async function rollbackToMessage(target, { askConfirmation = true } = {}) {
+     let index = resolved?.messageIndex ?? -1;
+     let message = resolved?.message || null;
+     let messageId = cloudHomerMessageId(message);
+-    if (!message || !messageId) {
+-        showHostNotice('这条消息仍在同步，请稍后再回溯', 'warning');
++    if (!message) {
++        showHostNotice('目标消息不存在', 'warning');
+         return false;
+     }
+     if (rollbackBusy || generationBusy || loadingLaunch) {
+@@ -3429,7 +3624,7 @@ async function rollbackToMessage(target, { askConfirmation = true } = {}) {
+     index = resolved?.messageIndex ?? -1;
+     message = resolved?.message || null;
+     messageId = cloudHomerMessageId(message);
+-    if (!message || !messageId) {
++    if (!message) {
+         showHostNotice('目标消息已经变化，未执行回溯', 'warning');
+         return false;
+     }
+@@ -3438,45 +3633,49 @@ async function rollbackToMessage(target, { askConfirmation = true } = {}) {
+     document.body.classList.add('homer-rollback-busy');
+     queueMessageMenuRender();
+     const previousSuppressSync = suppressSync;
++    let originalChat;
++    let localCommitted = false;
++    const context = getContext(), chatRef = context.chat;
++    const stateLaunch = launch, owner = reconcileStorageAccount(), epoch = storageAccountEpoch, scope = cloudSyncScope();
++    const current = () => launch === stateLaunch && owner === reconcileStorageAccount()
++        && epoch === storageAccountEpoch && scope === cloudSyncScope() && getContext().chat === chatRef;
+     try {
+-        if (!await syncCloudChat()) throw new Error('当前消息尚未同步，请联网后再回溯');
+-        const result = await requestJson(
+-            siteUrl(`/console/api/web/messages/${encodeURIComponent(messageId)}/rollback`),
+-            { method: 'POST', body: '{}' },
+-        );
+-        const context = getContext();
+         suppressSync = true;
+-        context.chat.splice(index);
+-        if (Array.isArray(launch?.messages)) {
+-            const launchIndex = launch.messages.findIndex(item => String(item?.id || '') === messageId);
+-            if (launchIndex >= 0) {
+-                launch.messages.splice(launchIndex);
+-            }
+-        }
++        originalChat = cloneJsonValue(chatRef);
++        chatRef.splice(index);
++        await syncCloudChat({ localOnly: true });
++        localCommitted = true;
++        if (!current()) return false;
+         try {
+             await context.saveChat();
+         } catch (error) {
+             console.warn(`${MODULE_ID}: rolled-back local mirror was not saved`, error);
+         }
++        if (!current()) return false;
+         await context.printMessages();
++        if (!current()) return false;
+         dialogueEventLogMuted += 1;
+         try {
+             await eventSource.emit(event_types.MESSAGE_DELETED, context.chat.length);
++            if (!current()) return false;
+             await eventSource.emit(event_types.CHAT_LOADED, context.chatId);
+         } finally {
+             dialogueEventLogMuted = Math.max(0, dialogueEventLogMuted - 1);
+         }
+-        lastSyncSignature = JSON.stringify(serializeChat());
+-        await commitConfirmedCloudMutation();
+-        await logDialogueEvent('rewind', index, message);
++        if (!current()) return false;
++        void logDialogueEvent('rewind', index, message).catch(() => {});
+         closeMessageMenu();
+         queueMessageMenuRender();
+-        updateRuntimeStatus('云端已同步', 'online');
+-        showHostNotice(`已回溯，移除 ${Number(result?.deleted_count || 0)} 条消息`, 'success');
++        updateRuntimeStatus('本机已保存，后台同步', 'warning');
++        showHostNotice(`已回溯，移除 ${originalChat.length - index} 条消息`, 'success');
+         return true;
+     } catch (error) {
++        if (!localCommitted && originalChat && (current() || getContext().chat !== chatRef)) {
++            chatRef.splice(0, chatRef.length, ...originalChat);
++            if (current()) await context.printMessages();
++        }
+         console.error(`${MODULE_ID}: rollback failed`, error);
+-        showHostNotice(String(error?.message || '回溯失败，请重试'), 'error');
++        if (current()) showHostNotice(String(error?.message || '回溯失败，请重试'), 'error');
+         return false;
+     } finally {
+         suppressSync = previousSuppressSync;
+@@ -3523,7 +3722,10 @@ async function loadRuntimeState(preparedRead = null, modelCatalogWork = Promise.
+     if (read.expiresAt !== undefined && read.expiresAt <= Date.now()) {
+         return loadRuntimeState(prepareRuntimeState(stateLaunch.app_id, stateLaunch.conversation_id), modelCatalogWork);
+     }
+-    if (local?.preferred) state.extension_settings = local.payload.extension_settings;
++    if (local) {
++        state.extension_settings = local.payload.extension_settings;
++        if (local.payload.variables) state.variables = local.payload.variables;
++    }
+     const savedExtensionSettings = state?.extension_settings
+         && typeof state.extension_settings === 'object'
+         && !Array.isArray(state.extension_settings)
+@@ -3589,8 +3791,13 @@ function prepareRuntimeState(appId, conversationId) {
+         assertOwner();
+         const fence = await chatOutbox.fence(scope, 'extension-settings');
+         assertOwner();
++        const cached = await localSessions.resource(scope, 'runtime-state');
++        assertOwner();
++        if (cached) return { state: cached, fence };
+         const state = await requestJson(`/api/homer/runtime-state?${queryString(targetAppId, targetConversationId)}`);
+         assertOwner();
++        await localSessions.rememberResource(scope, 'runtime-state', state);
++        assertOwner();
+         return { state, fence };
+     })().then(value => ({ value }), error => ({ error }));
+     // A failed leave/session can discard this read before it is consumed.
+@@ -3617,8 +3824,11 @@ function prepareConversationResources(appId, conversationId) {
+         const modelList = payloadList(modelResult.value).filter(item => item?.enabled !== false);
+         const modelId = selectRuntimeModelId(stateResult.value.state?.variables, modelList, modelResult.value?.default_id);
+         const params = new URLSearchParams({ app_id: String(appId).trim(), conversation_id: String(conversationId).trim(), model: modelId });
+-        const payload = await requestJson(`/api/homer/regex?${params}`);
++        const ruleKey = modelId ? `regex:${modelId}` : 'regex';
++        const cachedRules = await localSessions.resource(scope, ruleKey);
++        const payload = cachedRules || await requestJson(`/api/homer/regex?${params}`);
+         if (owner !== reconcileStorageAccount() || epoch !== storageAccountEpoch) throw new Error('会话账号已切换');
++        if (!cachedRules) await localSessions.rememberResource(scope, ruleKey, payload);
+         return { modelId, payload };
+     })().then(value => ({ value }), error => ({ error })) });
+     const resources = Object.freeze({ owner, epoch, scope, state, models, regex, character: cached?.characterPreparation || null });
+@@ -3631,7 +3841,7 @@ function prepareConversationResources(appId, conversationId) {
+     return resources;
+ }
+ 
+-async function refreshOfficialRegex(modelId = '', preparedRead = null) {
++async function refreshOfficialRegex(modelId = '', preparedRead = null, { forceNetwork = false } = {}) {
+     if (launch?.admin_preview) {
+         // Fail closed: do not generate with silently stale admin settings.
+         await refreshAdminConfiguration(modelId);
+@@ -3643,7 +3853,6 @@ async function refreshOfficialRegex(modelId = '', preparedRead = null) {
+     const selectedId = String(modelId || conversationModelSettings().model_id || '');
+     const current = () => launch === regexLaunch && owner === reconcileStorageAccount()
+         && epoch === storageAccountEpoch && selectedId === String(conversationModelSettings().model_id || '');
+-    setOfficialDisplayRules({ scripts: [] });
+     const params = new URLSearchParams({ app_id: launch.app_id, model: selectedId });
+     if (!launch.admin_preview) params.set('conversation_id', launch.conversation_id);
+     try {
+@@ -3658,12 +3867,17 @@ async function refreshOfficialRegex(modelId = '', preparedRead = null) {
+         }
+         // Model edits, expiry, failed preparation and every generation use a
+         // fresh authorized read; a peer's old model never supplies its rules.
+-        const payload = prepared || await requestJson(`/api/homer/regex?${params}`);
++        const ruleKey = selectedId ? `regex:${selectedId}` : 'regex';
++        const cached = !forceNetwork ? await localSessions.resource(cloudSyncScope(), ruleKey) : null;
++        const payload = (forceNetwork ? null : prepared) || cached || await requestJson(`/api/homer/regex?${params}`);
++        if (!current()) return;
++        if (!cached) await localSessions.rememberResource(cloudSyncScope(), ruleKey, payload);
+         if (!current()) return;
+         officialRegexState = setOfficialDisplayRules(payload);
+         if (officialRegexState.errors.length) showHostNotice(`[HM-R422] ${officialRegexState.errors.length} 条官方正则语法无效，请管理员检查`, 'error');
+     } catch (error) {
+         if (!current()) return;
++        if (forceNetwork) throw error;
+         officialRegexState = { count: 0, errors: ['HM-R503'] };
+         showHostNotice('[HM-R503] 官方展示规则读取失败，请重试或联系管理员更新服务', 'warning');
+     }
+@@ -3674,14 +3888,17 @@ async function persistRuntimeVariables() {
+     const context = getContext();
+     delete context.chatMetadata.homer_preset_overrides;
+     context.chatMetadata.homer_model_settings = { ...conversationModelSettings() };
+-    await requestJson('/api/homer/runtime-state', {
+-        method: 'POST',
+-        body: JSON.stringify({
+-            app_id: launch.app_id,
+-            conversation_id: launch.conversation_id,
+-            variables: runtimeVariables,
+-        }),
++    const snapshot = captureExtensionStorage({ force: true });
++    if (!snapshot) throw new Error('本机设置尚未准备好，未保存');
++    const stateLaunch = launch, owner = reconcileStorageAccount(), epoch = storageAccountEpoch;
++    snapshot.snapshot.committed = await chatOutbox.prepare(snapshot.snapshot, 'extension-settings');
++    if (launch !== stateLaunch || owner !== reconcileStorageAccount() || epoch !== storageAccountEpoch
++        || snapshot.snapshot.scope !== cloudSyncScope()) throw new Error('会话已切换，旧设置只保留在原会话');
++    await localSessions.rememberResource(snapshot.snapshot.scope, 'runtime-state', {
++        extension_settings: snapshot.snapshot.payload.extension_settings,
++        variables: snapshot.snapshot.payload.variables,
+     });
++    void extensionSyncQueue.enqueue(snapshot.snapshot).catch(() => {});
+ }
+ 
+ async function persistModelSettings(settings) {
+@@ -3699,7 +3916,7 @@ async function persistModelSettings(settings) {
+     await refreshOfficialRegex(settings.model_id);
+     confirmModelChange(settings.model_id);
+     applyConnectionConfiguration();
+-    if (launch?.conversation_id && !launch.admin_preview) {
++    if (launch?.conversation_id && !launch.admin_preview && !launch.local_session) {
+         launch.runtime_config = await requestJson(
+             `/api/homer/conversations/${encodeURIComponent(launch.conversation_id)}/runtime-config`,
+         );
+@@ -3728,8 +3945,13 @@ function prepareRuntimeModels(appId, conversationId) {
+     // Start beside the durable leave; consume only after the target is bound.
+     const pending = (async () => {
+         assertOwner();
++        const cached = await localSessions.resource(scope, 'models');
++        assertOwner();
++        if (cached) return cached;
+         const payload = await requestJson('/api/homer/models');
+         assertOwner();
++        await localSessions.rememberResource(scope, 'models', payload);
++        assertOwner();
+         return payload;
+     })().then(value => ({ value }), error => ({ error }));
+     return Object.freeze({ owner, epoch, scope, pending });
+@@ -3805,11 +4027,22 @@ function refreshModDialog() {
+ 
+ async function loadConversationHistory() {
+     if (launch?.admin_preview) return;
++    const owner = reconcileStorageAccount(), epoch = storageAccountEpoch;
++    const local = await localSessions.list(owner);
++    if (owner !== reconcileStorageAccount() || epoch !== storageAccountEpoch) return;
++    if (local.length) {
++        const known = new Set(local.map(row => String(row.id)));
++        runtimeUiData.conversations = [...local, ...runtimeUiData.conversations.filter(row => !known.has(String(row.id)))];
++        populateHistoryList(document.querySelector('#homer-history-count'), document.querySelector('#homer-history-list'));
++    }
+     try {
+         const conversationsPayload = await requestJson('/api/homer/conversations');
++        if (owner !== reconcileStorageAccount() || epoch !== storageAccountEpoch) return;
++        const remote = payloadList(conversationsPayload);
++        const known = new Set(local.map(row => String(row.id)));
+         runtimeUiData = {
+             ...runtimeUiData,
+-            conversations: payloadList(conversationsPayload),
++            conversations: [...local, ...remote.filter(row => !known.has(String(row.id)))],
+         };
+         populateHistoryList(
+             document.querySelector('#homer-history-count'),
+@@ -4242,8 +4475,8 @@ function messageMenuActions(resolved) {
+         { id: 'image', label: '生图', icon: 'fa-regular fa-image' },
+         { id: 'copy', label: '复制', icon: 'fa-regular fa-copy' },
+         { id: 'edit', label: '改写', icon: 'fa-solid fa-pen' },
+-        { id: 'rollback', label: '回溯', icon: 'fa-solid fa-clock-rotate-left', cloud: true },
+-        { id: 'delete', label: '删除', icon: 'fa-regular fa-trash-can', cloud: true, danger: true },
++        { id: 'rollback', label: '回溯', icon: 'fa-solid fa-clock-rotate-left' },
++        { id: 'delete', label: '删除', icon: 'fa-regular fa-trash-can', danger: true },
+         { id: 'hide', label: resolved?.message?.extra?.homer_hidden ? '取消隐藏' : '隐藏', icon: 'fa-regular fa-eye' },
+         { id: 'select', label: '多选', icon: 'fa-solid fa-list-check' },
+         { id: 'collapse', label: resolved?.message?.extra?.homer_collapsed ? '展开' : '折叠', icon: 'fa-solid fa-angles-down' },
+@@ -4712,8 +4945,8 @@ async function openNativeMessageEditor(target) {
+ async function deleteCloudMessage(target, alreadyConfirmed = false) {
+     let resolved = resolveMessageMenuTarget(target);
+     let messageId = cloudHomerMessageId(resolved?.message);
+-    if (!resolved || !messageId) {
+-        showHostNotice('这条消息仍在同步，请稍后再删除', 'warning');
++    if (!resolved) {
++        showHostNotice('目标消息不存在', 'warning');
+         return false;
+     }
+     const confirmed = alreadyConfirmed || await confirmHomerAction({
+@@ -4728,7 +4961,7 @@ async function deleteCloudMessage(target, alreadyConfirmed = false) {
+     }
+     resolved = resolveMessageMenuTarget(target);
+     messageId = cloudHomerMessageId(resolved?.message);
+-    if (!resolved || !messageId) {
++    if (!resolved) {
+         showHostNotice('目标消息已经变化，未执行删除', 'warning');
+         return false;
+     }
+@@ -4736,48 +4969,49 @@ async function deleteCloudMessage(target, alreadyConfirmed = false) {
+     document.body.classList.add('homer-rollback-busy');
+     queueMessageMenuRender();
+     const previousSuppressSync = suppressSync;
++    let originalChat;
++    let localCommitted = false;
++    const context = getContext(), chatRef = context.chat;
++    const stateLaunch = launch, owner = reconcileStorageAccount(), epoch = storageAccountEpoch, scope = cloudSyncScope();
++    const current = () => launch === stateLaunch && owner === reconcileStorageAccount()
++        && epoch === storageAccountEpoch && scope === cloudSyncScope() && getContext().chat === chatRef;
+     try {
+-        if (!await syncCloudChat()) throw new Error('当前消息尚未同步，请联网后再删除');
+-        const result = await requestJson(
+-            siteUrl(`/console/api/web/messages/${encodeURIComponent(messageId)}/delete`),
+-            { method: 'POST', body: '{}' },
+-        );
+-        if (result?.deleted !== true) {
+-            throw new Error('消息不存在或已被删除');
+-        }
+-        const context = getContext();
+         const { messageIndex, message } = resolved;
+         suppressSync = true;
+-        context.chat.splice(messageIndex, 1);
+-        if (Array.isArray(launch?.messages)) {
+-            const launchIndex = launch.messages.findIndex(item => String(item?.id || '') === messageId);
+-            if (launchIndex >= 0) {
+-                launch.messages.splice(launchIndex, 1);
+-            }
+-        }
++        originalChat = cloneJsonValue(chatRef);
++        chatRef.splice(messageIndex, 1);
++        await syncCloudChat({ localOnly: true });
++        localCommitted = true;
++        if (!current()) return false;
+         try {
+             await context.saveChat();
+         } catch (error) {
+             console.warn(`${MODULE_ID}: deleted local mirror was not saved`, error);
+         }
++        if (!current()) return false;
+         await context.printMessages();
++        if (!current()) return false;
+         dialogueEventLogMuted += 1;
+         try {
+             await eventSource.emit(event_types.MESSAGE_DELETED, context.chat.length);
++            if (!current()) return false;
+             await eventSource.emit(event_types.CHAT_LOADED, context.chatId);
+         } finally {
+             dialogueEventLogMuted = Math.max(0, dialogueEventLogMuted - 1);
+         }
+-        lastSyncSignature = JSON.stringify(serializeChat());
+-        await logDialogueEvent('message_delete', messageIndex, message);
+-        await commitConfirmedCloudMutation();
+-        updateRuntimeStatus(launch.local_pending ? '本机已保存，等待同步' : '云端已同步', launch.local_pending ? 'warning' : 'online');
++        if (!current()) return false;
++        void logDialogueEvent('message_delete', messageIndex, message).catch(() => {});
++        updateRuntimeStatus(launch.local_pending ? '本机已保存，后台同步' : '云端已同步', launch.local_pending ? 'warning' : 'online');
+         showHostNotice('已删除这条消息', 'success');
+         queueMessageMenuRender();
+         return true;
+     } catch (error) {
++        if (!localCommitted && originalChat && (current() || getContext().chat !== chatRef)) {
++            chatRef.splice(0, chatRef.length, ...originalChat);
++            if (current()) await context.printMessages();
++        }
+         console.error(`${MODULE_ID}: message delete failed`, error);
+-        showHostNotice(String(error?.message || '删除失败，请重试'), 'error');
++        if (current()) showHostNotice(String(error?.message || '删除失败，请重试'), 'error');
+         return false;
+     } finally {
+         suppressSync = previousSuppressSync;
+@@ -4942,7 +5176,7 @@ function renderMessageSelection() {
+     const hidden = messageSelection.targets.filter(item => item.message.extra?.homer_hidden).length;
+     root.querySelector('[data-selection-hide]').disabled = selected.size === hidden;
+     root.querySelector('[data-selection-show]').disabled = hidden === 0;
+-    root.querySelector('[data-selection-delete]').disabled = !selected.size || messageSelection.targets.some(item => !cloudHomerMessageId(item.message));
++    root.querySelector('[data-selection-delete]').disabled = !selected.size;
+ }
+ 
+ function startMessageSelection(target) {
+@@ -5164,10 +5398,19 @@ async function runAction(type, options = {}) {
+         return;
+     }
+     const logMessage = resolved?.message || null;
++    const stateLaunch = launch;
+     generationBusy = true;
+     document.body.classList.add('homer-generating');
+     queueMessageMenuRender();
+     try {
++        assertCanonicalConversationScope();
++        if (!launch?.bridge_token) {
++            await refreshBridgeToken();
++            if (launch !== stateLaunch || !launch?.bridge_token) {
++                showHostNotice('本机存档可离线使用；生成回复需要联网', 'warning'); return;
++            }
++            assertCanonicalConversationScope();
++        }
+         if (resolved) {
+             const label = type === 'regenerate' ? '重写' : type === 'next' ? '推进下一回' : '续写';
+             if (!await truncateAfterMessage(resolved, label)) {
+@@ -6400,6 +6643,17 @@ function buildRuntimeUi() {
+             }
+         }
+     } else settingList.append(modelButton, presetButton, memoryButton, modButton);
++    if (!launch.admin_preview) {
++        const storageButton = createSettingButton('↥', '存档同步',
++            launch.local_pending || launch.storage_conflict ? '本机已保存，联网自动同步' : '本机存档优先，云端备份', 'homer-chat-storage');
++        storageButton.addEventListener('click', () => {
++            returnToDesktopNavigation();
++            void syncCloudChat({ localOnly: true });
++            void replayPendingStorage();
++            showHostNotice('本机进度已保留，正在尝试后台同步', 'info');
++        });
++        settingList.append(storageButton);
++    }
+     const appearance = chatAppearance = bindChatAppearance(() => ({ owner: session?.user?.id || session?.user?.user_id, conversation: launch?.conversation_id }));
+     const shortcuts = createElement('nav', 'homer-chat-shortcuts');
+     shortcuts.setAttribute('aria-label', '对话快捷操作');
+@@ -6714,7 +6968,7 @@ async function switchConversation(conversation, bootstrapToken = '') {
+             homer_app_id: launch.app_id,
+             homer_conversation_id: launch.conversation_id,
+         }, '', nextUrl);
+-        updateRuntimeStatus(launch.local_pending ? '本机已保存，等待同步' : '云端已同步', launch.local_pending ? 'warning' : 'online');
++        updateRuntimeStatus(launch.storage_conflict ? '两份进度已保留，请在设置中打开“存档同步”' : launch.local_pending ? '本机已保存，等待同步' : '云端已同步', launch.storage_conflict || launch.local_pending ? 'warning' : 'online');
+         reaffirmConversationConnection();
+         window.setTimeout(reaffirmConversationConnection, 800);
+         conversationRecoveryBlocked = false;
+@@ -6841,25 +7095,25 @@ function installEventHandlers() {
+     eventSource.on(event_types.MESSAGE_RECEIVED, () => window.setTimeout(renderDiagnosticButtons, 100));
+     eventSource.on(event_types.CHAT_LOADED, () => window.setTimeout(renderDiagnosticButtons, 100));
+     eventSource.on(event_types.MESSAGE_SENT, messageIndex => {
+-        scheduleSync();
++        void syncCloudChat({ localOnly: true }).catch(() => showHostNotice('本机保存失败，请勿退出', 'error'));
+         void logDialogueEvent('message_send', Number(messageIndex));
+         queueMessageMenuRender();
+         scheduleHostStateNotify(0, 'message-sent');
+     });
+     eventSource.on(event_types.MESSAGE_EDITED, messageIndex => {
+-        scheduleSync();
++        void syncCloudChat({ localOnly: true }).catch(() => showHostNotice('本机保存失败，请勿退出', 'error'));
+         void logDialogueEvent('message_edit', Number(messageIndex));
+         queueMessageMenuRender();
+         scheduleHostStateNotify(0, 'message-edited');
+     });
+     eventSource.on(event_types.MESSAGE_DELETED, messageIndex => {
+-        scheduleSync();
++        if (!suppressSync) void syncCloudChat({ localOnly: true }).catch(() => showHostNotice('本机保存失败，请勿退出', 'error'));
+         void logDialogueEvent('message_delete', Number(messageIndex));
+         queueMessageMenuRender();
+         scheduleHostStateNotify(0, 'message-deleted');
+     });
+     eventSource.on(event_types.MESSAGE_SWIPED, messageIndex => {
+-        scheduleSync();
++        void syncCloudChat({ localOnly: true }).catch(() => showHostNotice('本机保存失败，请勿退出', 'error'));
+         void logDialogueEvent('swipe', Number(messageIndex));
+         queueMessageMenuRender();
+         scheduleHostStateNotify(0, 'message-swiped');
+@@ -6874,7 +7128,12 @@ function installEventHandlers() {
+     eventSource.on(event_types.CHAT_COMPLETION_SETTINGS_READY, async data => {
+         if (!launch) return;
+         assertCanonicalConversationScope();
+-        await refreshOfficialRegex(String(data.model || ''));
++        if (!launch.bridge_token) {
++            await refreshBridgeToken();
++            if (!launch.bridge_token) throw new Error('[HM-N001] 本机存档可离线使用；生成回复需要联网，请恢复网络后重试');
++            data.custom_include_headers = oai_settings.custom_include_headers;
++        }
++        await refreshOfficialRegex(String(data.model || ''), null, { forceNetwork: true });
+         assertCanonicalConversationScope();
+         // Per-request only: never persist private admin drafts into account settings.
+         if (launch.admin_preview) data.custom_include_body = JSON.stringify({ homer_preview: adminConversationDraft });
+@@ -6977,6 +7236,18 @@ function installEventHandlers() {
+     });
+     window.addEventListener('online', refreshBridgeToken);
+     window.addEventListener('online', () => { void replayPendingStorage(); });
++    document.addEventListener('visibilitychange', () => {
++        if (document.visibilityState === 'visible') {
++            void refreshBridgeToken();
++            void replayPendingStorage();
++        } else if (!loadingLaunch && hasCanonicalConversationScope()) {
++            void syncCloudChat({ localOnly: true, keepaliveOnly: true });
++        }
++    });
++    // Opportunistic bounded cadence; no provider generation is ever replayed.
++    window.setInterval(() => {
++        if (document.visibilityState === 'visible' && navigator.onLine !== false) void replayPendingStorage();
++    }, 30_000);
+     window.addEventListener('pagehide', () => {
+         // Stop delayed visibility work, retaining image registration for a
+         // possible back/forward document restore. Root replacement disposes it.
+@@ -7084,7 +7355,7 @@ async function bootstrapLaunch(preloadedSession = null, administratorExtensionsP
+         cleanUrl.searchParams.delete('conversation_id');
+         cleanUrl.searchParams.delete('conv_id');
+         window.history.replaceState({}, '', cleanUrl);
+-        updateRuntimeStatus(launch.local_pending ? '本机已保存，等待同步' : '云端已同步', launch.local_pending ? 'warning' : 'online');
++        updateRuntimeStatus(launch.storage_conflict ? '两份进度已保留，请在设置中打开“存档同步”' : launch.local_pending ? '本机已保存，等待同步' : '云端已同步', launch.storage_conflict || launch.local_pending ? 'warning' : 'online');
+         reaffirmConversationConnection();
+         window.setTimeout(reaffirmConversationConnection, 800);
+         setRuntimeGate('梦境已就绪', '正在呈现完整对话界面…');
+diff --git a/sillytavern-runtime/public/scripts/homer-chat-outbox.mjs b/sillytavern-runtime/public/scripts/homer-chat-outbox.mjs
+index 6a0c02a4a212e505b3f0422877a47ae4d7bf16a8..b3703fef75393f2f5d7622f68d17a2e56b2b320b 100644
+--- a/sillytavern-runtime/public/scripts/homer-chat-outbox.mjs
++++ b/sillytavern-runtime/public/scripts/homer-chat-outbox.mjs
+@@ -1,4 +1,8 @@
+-// Durable chat-storage snapshots only. No model requests or login credentials.
++// Durable phone-owned chat snapshots. Cloud acknowledgement never makes a
++// conversation disposable: only an explicit user delete may remove its bytes.
++// No model requests or login credentials.
++// Historical cache thresholds remain exported for compatibility with consumers;
++// they no longer limit the authoritative on-device conversation store.
+ export const OUTBOX_ACK_MAX_ROWS = 24;
+ export const OUTBOX_ACK_MAX_BYTES = 32 * 1024 * 1024;
+ const STORE = 'snapshots';
+@@ -24,20 +28,28 @@ function capture(snapshot, kind) {
+         throw new TypeError('Outbox body does not match its scope');
+     }
+     const allowed = kind === 'chat' ? ['app_id', 'conversation_id', 'title', 'messages']
+-        : ['app_id', 'conversation_id', 'extension_settings'];
++        : ['app_id', 'conversation_id', 'extension_settings', 'variables'];
+     if (Object.keys(payload).some(key => !allowed.includes(key))) throw new TypeError('Unsupported outbox fields');
+     if (kind === 'chat' && !Array.isArray(payload.messages)) throw new TypeError('Outbox messages are required');
+     if (kind === 'extension-settings' && (!payload.extension_settings
+         || typeof payload.extension_settings !== 'object' || Array.isArray(payload.extension_settings))) {
+         throw new TypeError('Outbox extension settings are required');
+     }
+-    return { ...id, body: snapshot.body, bytes: encoder.encode(snapshot.body).byteLength };
++    if (payload.variables !== undefined && (!payload.variables || typeof payload.variables !== 'object' || Array.isArray(payload.variables))) {
++        throw new TypeError('Outbox variables must be an object');
++    }
++    const storageVersion = typeof snapshot.storageVersion === 'string' && /^[0-9a-f]{32}$/.test(snapshot.storageVersion)
++        ? snapshot.storageVersion : '';
++    return { ...id, body: snapshot.body, bytes: encoder.encode(snapshot.body).byteLength, storageVersion };
+ }
+ 
+ function handle(row) {
+     return { scope: row.scope, owner: row.owner, app_id: row.app_id, conversation_id: row.conversation_id,
+         kind: row.kind, revision: row.revision, ackRevision: row.ackRevision || 0,
+-        commitId: row.commitId, body: row.body, bytes: row.bytes, pending: row.pending === 1 };
++        commitId: row.commitId, body: row.body, bytes: row.bytes, pending: row.pending === 1,
++        ...(row.baseVersion ? { baseVersion: row.baseVersion } : {}),
++        ...(row.cloudVersion ? { cloudVersion: row.cloudVersion } : {}),
++        ...(row.lineage ? { lineage: row.lineage } : {}) };
+ }
+ 
+ function safeAcknowledgement(kind, response) {
+@@ -45,7 +57,12 @@ function safeAcknowledgement(kind, response) {
+     if (!Array.isArray(response?.messages)) throw new TypeError('Cloud did not acknowledge chat messages');
+     // Do not persist arbitrary response/config/header/token fields.
+     const fields = ['id', 'role', 'content', 'created_at', 'swipes', 'swipe_index'];
+-    return { messages: response.messages.map(message => {
++    const storage = response?.storage;
++    if (storage?.protocol === 2 && (storage.complete !== true || storage.message_count !== response.messages.length
++        || !/^[0-9a-f]{32}$/.test(storage.version || ''))) throw new TypeError('Incomplete versioned cloud acknowledgement');
++    return { ...(storage?.protocol === 2 && storage.complete === true && /^[0-9a-f]{32}$/.test(storage.version)
++        ? { storage: { protocol: 2, version: storage.version, complete: true, message_count: response.messages.length } } : {}),
++        messages: response.messages.map(message => {
+         const item = {};
+         if (!message || typeof message !== 'object' || Array.isArray(message)) throw new TypeError('Invalid cloud message');
+         for (const field of fields) if (Object.prototype.hasOwnProperty.call(message, field)) item[field] = message[field];
+@@ -108,26 +125,6 @@ export function createChatOutbox({ indexedDB = globalThis.indexedDB, databaseNam
+         });
+     }
+ 
+-    function pruneAcknowledged(store, guarded) {
+-        const rows = [];
+-        let bytes = 0;
+-        const request = store.index('pending').openCursor(0);
+-        request.onsuccess = guarded(() => {
+-            const cursor = request.result;
+-            if (cursor) {
+-                const row = cursor.value;
+-                const size = Number(row.bytes || 0) + Number(row.ackBytes || 0);
+-                rows.push({ key: row.key, size, updatedAt: row.updatedAt || 0 }); bytes += size;
+-                cursor.continue(); return;
+-            }
+-            rows.sort((a, b) => a.updatedAt - b.updatedAt);
+-            while (rows.length > OUTBOX_ACK_MAX_ROWS || bytes > OUTBOX_ACK_MAX_BYTES) {
+-                const oldest = rows.shift(); if (!oldest) break;
+-                bytes -= oldest.size; store.delete(oldest.key);
+-            }
+-        });
+-    }
+-
+     function readStored(id) {
+         return transaction('readonly', (store, done, guarded) => {
+             const request = store.get(id.key);
+@@ -161,6 +158,8 @@ export function createChatOutbox({ indexedDB = globalThis.indexedDB, databaseNam
+                     if (previous?.body === captured.body) { done(handle(previous)); return; }
+                     const row = { ...captured, revision: (previous?.revision || 0) + 1,
+                         commitId: `${instanceId}-${++sequence}`,
++                        lineage: previous?.lineage || `${instanceId}-${sequence}`,
++                        baseVersion: previous?.pending === 1 ? previous.baseVersion || '' : captured.storageVersion || previous?.cloudVersion || '',
+                         ackRevision: previous?.ackRevision || 0, pending: 1, ackPayload: null, ackBytes: 0, updatedAt: Date.now() };
+                     store.put(row); done(handle(row));
+                 });
+@@ -172,7 +171,27 @@ export function createChatOutbox({ indexedDB = globalThis.indexedDB, databaseNam
+             const ackPayload = safeAcknowledgement(id.kind, response);
+             const ackBody = JSON.stringify(ackPayload);
+             const stored = await readStored(id);
+-            if (!sameCommittedRow(stored, expected)) return { applied: false, revision: stored?.revision || 0 };
++            if (!sameCommittedRow(stored, expected)) {
++                // An earlier save can finish after a newer local edit. Advance only
++                // its proven local lineage's CAS base; never clear the newer edit.
++                const version = ackPayload.storage?.version;
++                if (version && stored?.pending === 1 && stored.revision > committed.revision
++                    && stored.lineage && stored.lineage === committed.lineage
++                    && stored.baseVersion === committed.baseVersion) {
++                    return transaction('readwrite', (store, done, guarded) => {
++                        const request = store.get(id.key);
++                        request.onsuccess = guarded(() => {
++                            const row = request.result;
++                            if (row?.pending === 1 && row.revision > committed.revision
++                                && row.lineage === committed.lineage && row.baseVersion === committed.baseVersion) {
++                                row.baseVersion = version; store.put(row);
++                            }
++                            done({ applied: false, revision: row?.revision || 0 });
++                        });
++                    });
++                }
++                return { applied: false, revision: stored?.revision || 0 };
++            }
+             // An identical cached cloud response is not a new storage ACK.
+             // Do not rewrite a large row, refresh its eviction age, or scan
+             // every acknowledged body again. The caller's version fence must
+@@ -181,6 +200,12 @@ export function createChatOutbox({ indexedDB = globalThis.indexedDB, databaseNam
+             if (sameAcknowledgement(stored, ackBody)) {
+                 return { applied: false, revision: stored.revision, unchanged: true };
+             }
++            if ((stored.baseVersion || '') !== (committed.baseVersion || '')) {
++                // A newer verified token may have rebased this exact body while
++                // an earlier request was in flight. Its delayed ACK is not the
++                // acknowledgement of that newly rebased upload.
++                return { applied: false, revision: stored.revision };
++            }
+             return transaction('readwrite', (store, done, guarded) => {
+                 const request = store.get(id.key);
+                 request.onsuccess = guarded(() => {
+@@ -194,10 +219,13 @@ export function createChatOutbox({ indexedDB = globalThis.indexedDB, databaseNam
+                     if (sameAcknowledgement(row, ackBody)) {
+                         done({ applied: false, revision: row.revision, unchanged: true }); return;
+                     }
++                    if ((row.baseVersion || '') !== (committed.baseVersion || '')) {
++                        done({ applied: false, revision: row.revision }); return;
++                    }
+                     row.pending = 0; row.ackRevision = row.revision;
++                    if (ackPayload.storage?.version) row.baseVersion = row.cloudVersion = ackPayload.storage.version;
+                     row.ackPayload = ackPayload; row.ackBytes = encoder.encode(ackBody).byteLength;
+                     row.updatedAt = Date.now(); store.put(row);
+-                    pruneAcknowledged(store, guarded);
+                     done({ applied: true, revision: row.revision });
+                 });
+             });
+@@ -207,7 +235,10 @@ export function createChatOutbox({ indexedDB = globalThis.indexedDB, databaseNam
+             return transaction('readonly', (store, done, guarded) => {
+                 const request = store.get(id.key);
+                 request.onsuccess = guarded(() => done({ revision: request.result?.revision || 0, ackRevision: request.result?.ackRevision || 0,
+-                    commitId: request.result?.commitId || null }));
++                    commitId: request.result?.commitId || null,
++                    ...(request.result?.baseVersion ? { baseVersion: request.result.baseVersion } : {}),
++                    ...(request.result?.cloudVersion ? { cloudVersion: request.result.cloudVersion } : {}),
++                    pending: request.result?.pending === 1 }));
+             });
+         },
+         async read(scope, kind = 'chat', fence) {
+@@ -236,6 +267,78 @@ export function createChatOutbox({ indexedDB = globalThis.indexedDB, databaseNam
+                 });
+             });
+         },
++        async rebasePending(snapshot, storageVersion) {
++            if (typeof storageVersion !== 'string' || !/^[0-9a-f]{32}$/.test(storageVersion)) {
++                throw new TypeError('A verified complete cloud storage version is required');
++            }
++            const captured = capture(snapshot, 'chat');
++            const expected = snapshot.committed;
++            // A fresh server token is not permission to overwrite a different
++            // account/chat or a later local edit. Legacy rows may have no lineage
++            // or version; their exact existing commit identity still fences them.
++            if (!expected || expected.scope !== captured.scope || expected.kind !== 'chat'
++                || expected.owner !== captured.owner || expected.app_id !== captured.app_id
++                || expected.conversation_id !== captured.conversation_id
++                || expected.body !== captured.body || expected.pending !== true
++                || !Number.isSafeInteger(expected.revision) || expected.revision <= 0
++                || typeof expected.commitId !== 'string' || !expected.commitId) return false;
++            return transaction('readwrite', (store, done, guarded) => {
++                const request = store.get(captured.key);
++                request.onsuccess = guarded(() => {
++                    const row = request.result;
++                    if (row?.pending !== 1 || row.scope !== captured.scope || row.kind !== 'chat'
++                        || row.owner !== captured.owner || row.app_id !== captured.app_id
++                        || row.conversation_id !== captured.conversation_id || !sameCommittedRow(row, expected)
++                        || (row.lineage || '') !== (expected.lineage || '')
++                        || (row.baseVersion || '') !== (expected.baseVersion || '')
++                        || (row.cloudVersion || '') !== (expected.cloudVersion || '')) {
++                        done(false); return;
++                    }
++                    // This rebases an upload, not the phone's contents or a save
++                    // acknowledgement. Delayed token fetches cannot regress a
++                    // rebase because the prior base/cloud versions are CAS checked.
++                    if (row.baseVersion !== storageVersion || row.cloudVersion !== storageVersion) {
++                        row.baseVersion = storageVersion;
++                        row.cloudVersion = storageVersion;
++                        store.put(row);
++                    }
++                    done(true);
++                });
++            });
++        },
++        async rememberRemote(snapshot, response, fence) {
++            const captured = capture(snapshot, 'chat');
++            const ackPayload = safeAcknowledgement('chat', response);
++            if (!ackPayload.storage?.version) return false;
++            return transaction('readwrite', (store, done, guarded) => {
++                const request = store.get(captured.key);
++                request.onsuccess = guarded(() => {
++                    const row = request.result;
++                    if (row?.pending === 1 || (row?.revision || 0) !== (fence?.revision || 0)
++                        || (row?.commitId || null) !== (fence?.commitId || null)) { done(false); return; }
++                    const revision = (row?.revision || 0) + 1;
++                    const identity = `${instanceId}-${++sequence}`;
++                    const saved = { ...captured, revision, ackRevision: revision,
++                        commitId: identity, lineage: identity, pending: 0,
++                        baseVersion: ackPayload.storage.version, cloudVersion: ackPayload.storage.version,
++                        ackPayload, ackBytes: encoder.encode(JSON.stringify(ackPayload)).byteLength, updatedAt: Date.now() };
++                    store.put(saved); done(true);
++                });
++            });
++        },
++        async markForked(committed, conversationId) {
++            const id = identity(committed.scope, 'chat');
++            return transaction('readwrite', (store, done, guarded) => {
++                const request = store.get(id.key);
++                request.onsuccess = guarded(() => {
++                    const row = request.result;
++                    if (!sameCommittedRow(row, committed)) { done(false); return; }
++                    row.pending = 0; row.forkedTo = conversationId;
++                    row.baseVersion = ''; row.cloudVersion = ''; row.ackPayload = null; row.ackRevision = 0;
++                    store.put(row); done(true);
++                });
++            });
++        },
+         async close() { const db = opening ? await opening : null; db?.close(); opening = null; },
+     };
+ }
+diff --git a/sillytavern-runtime/public/scripts/homer-cloud-sync.mjs b/sillytavern-runtime/public/scripts/homer-cloud-sync.mjs
+index ee7c351b46f0c400a5a24924d62a14c03731f410..e4a1f0b3b557915cd7519646452b137136f9b5ee 100644
+--- a/sillytavern-runtime/public/scripts/homer-cloud-sync.mjs
++++ b/sillytavern-runtime/public/scripts/homer-cloud-sync.mjs
+@@ -7,7 +7,10 @@ export const CHAT_SAVED_CACHE_MAX_BYTES = 4 * 1024 * 1024;
+ function safeSavedResponse(response) {
+     const fields = ['id', 'role', 'content', 'created_at', 'swipes', 'swipe_index'];
+     if (!Array.isArray(response?.messages)) return {};
+-    return { messages: response.messages.map(message => {
++    const storage = response?.storage;
++    return { ...(storage?.protocol === 2 && storage.complete === true && /^[0-9a-f]{32}$/.test(storage.version)
++        ? { storage: { protocol: 2, version: storage.version, complete: true, message_count: response.messages.length } } : {}),
++        messages: response.messages.map(message => {
+         const item = {};
+         for (const key of fields) if (message && Object.prototype.hasOwnProperty.call(message, key)) item[key] = message[key];
+         return item;
+@@ -45,7 +48,9 @@ export function createCloudSyncQueue(send) {
+         enqueue(snapshot, { keepaliveOnly = false } = {}) {
+             const state = stateFor(snapshot.scope);
+             if (state.latest?.snapshot.body === snapshot.body && !state.latest.settled) return state.latest.promise;
+-            if (state.saved === snapshot.body && !state.pending) return Promise.resolve({ snapshot, skipped: true,
++            if (state.saved === snapshot.body && !state.pending
++                && (!snapshot.committed || (!snapshot.committed.pending
++                    && (!state.savedResponse?.storage?.version || snapshot.committed.cloudVersion === state.savedResponse.storage.version)))) return Promise.resolve({ snapshot, skipped: true,
+                 response: JSON.parse(JSON.stringify(state.savedResponse)) });
+             const entry = { snapshot, settled: false, promise: null };
+             state.latest = entry;
+diff --git a/sillytavern-runtime/public/scripts/homer-local-runtime.mjs b/sillytavern-runtime/public/scripts/homer-local-runtime.mjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..dbda3188428d32ba896b7161d00700ecf4cd24d8
+--- /dev/null
++++ b/sillytavern-runtime/public/scripts/homer-local-runtime.mjs
+@@ -0,0 +1,326 @@
++// Embedded-runtime compatibility mirrors live on this device. They are not
++// account authorization, the canonical chat archive, or a cloud upload queue.
++const STORE = 'records';
++const INSTALL = Symbol.for('homer.localRuntime.v1');
++const clone = value => JSON.parse(JSON.stringify(value));
++const sensitive = /^(?:password|passwd|api[_-]?keys?|access[_-]?token|refresh[_-]?token|bridge[_-]?token|csrf[_-]?token|token|authorization|cookies?|headers|is_admin|isAdmin|admin|secrets?)$/i;
++const privateSetting = /^(?:api[_-]?key.*|.*[_-](?:api[_-]?key|password|token|headers)|reverse_proxy|proxy_password)$/i;
++const READS = new Set(['/version', '/api/settings/get', '/api/extensions/discover', '/api/avatars/get',
++    '/api/backgrounds/all', '/api/backgrounds/folders', '/api/image-metadata/all', '/api/image-metadata/folders', '/api/modules', '/api/homer/extensions']);
++const WRITES = new Set(['/api/settings/save', '/api/characters/import', '/api/characters/merge-attributes',
++    '/api/worldinfo/edit', '/api/worldinfo/delete', '/api/chats/save', '/api/chats/delete']);
++const MIRROR_READS = new Set(['/api/characters/get', '/api/worldinfo/get', '/api/chats/get']);
++const safeId = value => typeof value === 'string' && value.length > 0 && value.length <= 250 && !/[\u0000-\u001f/\\]/.test(value);
++const jsonResponse = (value, status = 200) => new Response(JSON.stringify(value), {
++    status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Homer-Local-Runtime': '1' },
++});
++
++/** Redact structured credentials, including settings' nested JSON envelope. */
++export function sanitizeRuntimeValue(value, field = '') {
++    if (typeof value === 'string' && field === 'settings') {
++        try { return JSON.stringify(sanitizeRuntimeValue(JSON.parse(value))); }
++        catch { throw new TypeError('Invalid runtime settings'); }
++    }
++    if (Array.isArray(value)) return value.map(item => sanitizeRuntimeValue(item));
++    if (!value || typeof value !== 'object') return value;
++    const result = {};
++    for (const [key, item] of Object.entries(value)) {
++        if (!sensitive.test(key) && !privateSetting.test(key)) result[key] = sanitizeRuntimeValue(item, key);
++    }
++    // Runtime compression is unnecessary for device-local mirror requests and
++    // older WebViews do not expose DecompressionStream.
++    if (Object.hasOwn(result, 'request_compression')) result.request_compression = { enabled: false };
++    // Upstream's single-user mode treats every local user as administrator.
++    // Use a non-privileged runtime-only account instead of caching that claim.
++    if (Object.hasOwn(result, 'enable_accounts')) result.enable_accounts = true;
++    return result;
++}
++
++/** Strict, non-evicting account-scoped local mirror store. */
++export function createLocalRuntimeStore({ indexedDB = globalThis.indexedDB, databaseName = 'homer-local-runtime-v1' } = {}) {
++    let opening;
++    function open() {
++        return opening ||= new Promise((resolve, reject) => {
++            if (!indexedDB?.open) { reject(new Error('本机运行配置未保存')); return; }
++            const request = indexedDB.open(databaseName, 1);
++            let abandoned = false;
++            request.onupgradeneeded = () => {
++                if (!request.result.objectStoreNames.contains(STORE)) request.result.createObjectStore(STORE, { keyPath: 'key' });
++            };
++            request.onerror = () => reject(request.error || new Error('本机运行配置无法读取'));
++            request.onblocked = () => { abandoned = true; reject(new Error('本机运行配置正在更新')); };
++            request.onsuccess = () => {
++                if (abandoned) { request.result.close(); return; }
++                request.result.onversionchange = () => { request.result.close(); opening = null; };
++                resolve(request.result);
++            };
++        }).catch(error => { opening = null; throw error; });
++    }
++    async function transaction(mode, execute) {
++        const db = await open();
++        return new Promise((resolve, reject) => {
++            let tx, result, failure;
++            try {
++                try { tx = db.transaction(STORE, mode, mode === 'readwrite' ? { durability: 'strict' } : undefined); }
++                catch (error) { if (!(error instanceof TypeError)) throw error; tx = db.transaction(STORE, mode); }
++                tx.oncomplete = () => resolve(result);
++                tx.onabort = () => reject(failure || tx.error || new Error('本机运行配置未保存'));
++                tx.onerror = event => { failure ||= event.target?.error || tx.error; };
++                const guarded = callback => (...args) => { try { callback(...args); } catch (error) { failure = error; tx.abort(); } };
++                execute(tx.objectStore(STORE), value => { result = value; }, guarded);
++            } catch (error) { if (tx) { failure = error; try { tx.abort(); } catch { reject(error); } } else reject(error); }
++        });
++    }
++    const key = (owner, type, id) => {
++        if (!safeId(owner) || !safeId(type) || typeof id !== 'string' || !id || id.length > 700) throw new TypeError('Invalid local runtime scope');
++        return [owner, type, id];
++    };
++    return {
++        async read(owner, type, id) {
++            const identity = key(owner, type, id);
++            return transaction('readonly', (store, done, guarded) => {
++                const request = store.get(identity);
++                request.onsuccess = guarded(() => done(request.result ? clone(request.result.value) : null));
++            });
++        },
++        async update(owner, type, id, updater) {
++            const identity = key(owner, type, id);
++            return transaction('readwrite', (store, done, guarded) => {
++                const request = store.get(identity);
++                request.onsuccess = guarded(() => {
++                    const result = updater(request.result ? clone(request.result.value) : null);
++                    if (result === undefined) { done(null); return; }
++                    if (result === null) store.delete(identity);
++                    else store.put({ key: identity, value: clone(result) });
++                    done(result === null ? null : clone(result));
++                });
++            });
++        },
++    };
++}
++
++/**
++ * Install only in the application's embedded document. Same-origin local
++ * mirrors never upload automatically. Non-allowlisted APIs always reach the
++ * authenticated network once; this includes Homer sync, login and generation.
++ */
++export function createLocalRuntimeAdapter({ fetcher = globalThis.fetch.bind(globalThis), owner,
++    origin = globalThis.location?.origin, storage = createLocalRuntimeStore(), now = Date.now } = {}) {
++    if (typeof owner !== 'function' || !origin) throw new TypeError('Local runtime requires an account scope');
++    const flights = new Map();
++    let csrf = '', csrfAt = 0, csrfOwner = '', csrfFlight, epoch = 0;
++    const currentOwner = () => { const value = String(owner() || ''); return safeId(value) ? value : ''; };
++    const captureOwner = () => ({ owner: currentOwner(), epoch });
++    const assertOwner = captured => {
++        if (!captured?.owner || currentOwner() !== captured.owner || epoch !== captured.epoch) throw new Error('账号已切换，未读写旧会话');
++    };
++    const uuid = () => globalThis.crypto?.randomUUID?.() || `local-${now().toString(36)}-${Math.random().toString(36).slice(2)}`;
++    async function authorization(captured, signal) {
++        assertOwner(captured);
++        if (csrf && csrfOwner === captured.owner && now() - csrfAt < 60000) return csrf;
++        if (!csrfFlight || csrfOwner !== captured.owner) {
++            csrfOwner = captured.owner;
++            const work = (async () => {
++                const response = await fetcher(new URL('/csrf-token', origin).href, { credentials: 'include', cache: 'no-store', signal });
++                if (!response.ok) throw new Error('会话授权暂不可用，请联网后重试');
++                const payload = await response.json();
++                assertOwner(captured);
++                if (typeof payload?.token !== 'string' || !payload.token) throw new Error('会话授权暂不可用，请联网后重试');
++                csrf = payload.token; csrfAt = now(); return csrf;
++            })().finally(() => { if (csrfFlight === work) csrfFlight = null; });
++            csrfFlight = work;
++        }
++        return csrfFlight;
++    }
++    async function network(request, captured) {
++        assertOwner(captured);
++        let outbound = request;
++        if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method)) {
++            const headers = new Headers(request.headers);
++            headers.set('X-CSRF-Token', await authorization(captured, request.signal));
++            assertOwner(captured);
++            outbound = new Request(request, { headers });
++        }
++        const response = await fetcher(outbound);
++        assertOwner(captured);
++        return response;
++    }
++    async function body(request) {
++        const type = request.headers.get('content-type') || '';
++        if (type.includes('multipart/form-data')) return request.clone().formData();
++        let text;
++        if (request.headers.get('content-encoding') === 'gzip') {
++            if (!globalThis.DecompressionStream) throw new Error('本机存档暂不支持压缩请求');
++            text = await new Response(request.clone().body.pipeThrough(new DecompressionStream('gzip'))).text();
++        } else text = await request.clone().text();
++        return text ? JSON.parse(text) : {};
++    }
++    function requestKey(path, request, value) {
++        if (MIRROR_READS.has(path)) {
++            if (path === '/api/characters/get') return ['character', String(value.avatar_url || '')];
++            if (path === '/api/worldinfo/get') return ['world', String(value.name || '')];
++            return ['chat', JSON.stringify([value.avatar_url || '', value.file_name || ''])];
++        }
++        return ['boot', `${request.method}:${path}`];
++    }
++    async function freshRead(request, captured, type, id) {
++        const response = await network(request, captured);
++        assertOwner(captured);
++        if (!response.ok) return response;
++        const value = sanitizeRuntimeValue(await response.clone().json());
++        const stored = type === 'character' && value?.homer_character_transport?.version === 2
++            && value.character && value.homer_character_transport.not_modified !== true
++            ? { ...value.character, ...(value.fresh_stats || {}) } : value;
++        assertOwner(captured);
++        await storage.update(captured.owner, type, id, previous => {
++            assertOwner(captured);
++            return previous?.localMutation ? undefined : { data: stored, localMutation: false };
++        });
++        return jsonResponse(value);
++    }
++    function refresh(request, captured, type, id) {
++        const key = JSON.stringify([captured.owner, captured.epoch, type, id]);
++        if (flights.has(key)) return;
++        const work = freshRead(request, captured, type, id).catch(() => {}).finally(() => { if (flights.get(key) === work) flights.delete(key); });
++        flights.set(key, work);
++    }
++    async function localWrite(path, request, captured) {
++        const value = await body(request);
++        assertOwner(captured);
++        if (path === '/api/characters/import') {
++            if (!(value instanceof FormData)) return jsonResponse({ error: 'invalid_card' }, 400);
++            const file = value.get('avatar');
++            const name = String(value.get('preserved_name') || '');
++            if (!safeId(name) || typeof file?.text !== 'function' || String(value.get('file_type')) !== 'json') return jsonResponse({ error: 'invalid_card' }, 400);
++            const card = JSON.parse(await file.text());
++            if (!card?.data?.extensions?.homer_bridge?.app_id || !card?.data?.name) return jsonResponse({ error: 'invalid_card_scope' }, 400);
++            assertOwner(captured);
++            const avatar = `${name}.png`;
++            const character = sanitizeRuntimeValue({ ...card.data, data: card.data, spec: card.spec || 'chara_card_v2',
++                spec_version: card.spec_version || '2.0', avatar, chat: '', chat_size: 0, date_last_chat: 0 });
++            await storage.update(captured.owner, 'character', avatar, () => { assertOwner(captured); return { data: character, localMutation: true }; });
++            return jsonResponse({ file_name: avatar });
++        }
++        if (path === '/api/settings/save') {
++            const settings = sanitizeRuntimeValue(value);
++            await storage.update(captured.owner, 'boot', 'POST:/api/settings/get', previous => { assertOwner(captured); return ({
++                data: { ...(previous?.data || {}), settings: JSON.stringify(settings), enable_accounts: true,
++                    request_compression: { enabled: false }, homer_capabilities: { readonly_chat_header: true } }, localMutation: true,
++            }); });
++            return jsonResponse({ result: 'ok' });
++        }
++        if (path === '/api/characters/merge-attributes') {
++            const avatar = String(value.avatar || value.avatar_url || '');
++            if (!safeId(avatar)) return jsonResponse({ error: 'invalid_character' }, 400);
++            let missing = false;
++            await storage.update(captured.owner, 'character', avatar, previous => {
++                assertOwner(captured);
++                if (!previous) { missing = true; return undefined; }
++                const overlay = sanitizeRuntimeValue(value);
++                delete overlay.avatar; delete overlay.avatar_url;
++                return { data: { ...previous.data, ...overlay, data: { ...previous.data.data, ...(overlay.data || {}) } }, localMutation: true };
++            });
++            return jsonResponse(missing ? { error: 'missing_character' } : { ok: true }, missing ? 404 : 200);
++        }
++        if (path.startsWith('/api/worldinfo/')) {
++            const name = String(value.name || '');
++            if (!safeId(name)) return jsonResponse({ error: 'invalid_world' }, 400);
++            await storage.update(captured.owner, 'world', name, () => { assertOwner(captured); return path.endsWith('/delete') ? null : { data: sanitizeRuntimeValue(value.data), localMutation: true }; });
++            // Refresh the local world selector, not a stale server settings copy.
++            await storage.update(captured.owner, 'boot', 'POST:/api/settings/get', previous => {
++                assertOwner(captured);
++                if (!previous) return undefined;
++                const names = new Set(previous.data.world_names || []);
++                path.endsWith('/delete') ? names.delete(name) : names.add(name);
++                return { ...previous, data: { ...previous.data, world_names: [...names] }, localMutation: true };
++            });
++            return jsonResponse({ ok: true });
++        }
++        const avatar = String(value.avatar_url || ''), file = String(value.file_name || '');
++        if (!safeId(avatar) || !safeId(file)) return jsonResponse({ error: 'invalid_chat' }, 400);
++        const id = JSON.stringify([avatar, file]);
++        if (path.endsWith('/delete')) {
++            await storage.update(captured.owner, 'chat', id, () => { assertOwner(captured); return null; }); return jsonResponse({ ok: true });
++        }
++        if (!Array.isArray(value.chat) || !value.chat[0]?.chat_metadata?.integrity) return jsonResponse({ error: 'invalid_chat' }, 400);
++        let conflict = false;
++        await storage.update(captured.owner, 'chat', id, previous => {
++            assertOwner(captured);
++            const header = Array.isArray(previous?.data) ? previous.data[0] : previous?.data;
++            if (header?.chat_metadata?.integrity && header.chat_metadata.integrity !== value.chat[0].chat_metadata.integrity) {
++                conflict = true; return undefined;
++            }
++            return { data: sanitizeRuntimeValue(value.chat), localMutation: true };
++        });
++        return jsonResponse(conflict ? { error: 'integrity' } : { ok: true }, conflict ? 409 : 200);
++    }
++    return {
++        async fetch(input, init) {
++            const request = new Request(input instanceof Request ? input : new URL(String(input), origin).href, init);
++            const url = new URL(request.url), path = url.pathname, captured = captureOwner();
++            if (url.origin !== origin || !captured.owner) return fetcher(request);
++            if (path === '/csrf-token' && request.method === 'GET') return jsonResponse({ token: '' });
++            // The embedded product has no secret editor. Never request or cache
++            // provider credentials merely to initialize its native runtime.
++            if (path === '/api/secrets/settings') return jsonResponse({ allowKeysExposure: false });
++            if (path === '/api/secrets/view') return jsonResponse({ error: 'forbidden' }, 403);
++            if (path === '/api/secrets/read') return jsonResponse({});
++            if (path === '/api/users/me' && request.method === 'GET') {
++                return jsonResponse({ handle: 'default-user', name: '本机用户', admin: false, enabled: true });
++            }
++            if (WRITES.has(path) && request.method === 'POST') {
++                try { const response = await localWrite(path, request, captured); assertOwner(captured); return response; }
++                catch (error) { assertOwner(captured); throw error; }
++            }
++            if ((READS.has(path) || MIRROR_READS.has(path)) && ['GET', 'POST'].includes(request.method)) {
++                const value = request.method === 'POST' ? await body(request) : {};
++                const [type, id] = requestKey(path, request, value);
++                assertOwner(captured);
++                if (MIRROR_READS.has(path) && type !== 'chat' && !safeId(id)) return jsonResponse({ error: 'invalid_scope' }, 400);
++                const local = await storage.read(captured.owner, type, id);
++                assertOwner(captured);
++                if (local) {
++                    if (type === 'boot' && !local.localMutation) refresh(request, captured, type, id);
++                    const data = path === '/api/chats/get' && value.metadata_only && Array.isArray(local.data) ? local.data[0] : local.data;
++                    return jsonResponse(data);
++                }
++                if (path === '/api/chats/get') {
++                    const [avatar, file] = JSON.parse(id);
++                    if (!safeId(avatar) || !safeId(file)) return jsonResponse({ error: 'invalid_chat' }, 400);
++                    const header = { chat_metadata: { integrity: uuid() }, user_name: 'unused', character_name: 'unused' };
++                    const saved = await storage.update(captured.owner, type, id, previous => {
++                        assertOwner(captured); return previous || { data: [header], localMutation: true };
++                    });
++                    assertOwner(captured);
++                    return jsonResponse(value.metadata_only ? saved.data[0] : saved.data);
++                }
++                return freshRead(request, captured, type, id);
++            }
++            return network(request, captured);
++        },
++        refreshAuthorization: signal => authorization(captureOwner(), signal),
++        clearAuthorization() { epoch++; csrf = ''; csrfAt = 0; csrfOwner = ''; csrfFlight = null; },
++        async seedCharacter(avatar, card) {
++            const captured = captureOwner(); assertOwner(captured);
++            if (!safeId(avatar) || !card?.data?.extensions?.homer_bridge?.app_id) throw new TypeError('Invalid local character');
++            const data = sanitizeRuntimeValue({ ...card.data, data: card.data, avatar, chat: '', chat_size: 0, date_last_chat: 0 });
++            await storage.update(captured.owner, 'character', avatar, () => { assertOwner(captured); return { data, localMutation: true }; });
++            assertOwner(captured);
++        },
++        pendingRefreshes: () => Promise.all([...flights.values()]),
++    };
++}
++
++export function installLocalRuntime({ target = globalThis, owner, isEmbedded = false, storage } = {}) {
++    if (!isEmbedded) return null;
++    if (target[INSTALL]) return target[INSTALL];
++    const original = target.fetch.bind(target);
++    const adapter = createLocalRuntimeAdapter({ fetcher: original, owner, origin: target.location.origin, storage });
++    target.fetch = adapter.fetch;
++    target[INSTALL] = adapter;
++    target.addEventListener?.('homer-account-cleared', () => adapter.clearAuthorization());
++    target.addEventListener?.('storage', event => {
++        if (!event.key || ['ai_xingyue_user', 'ai_xingyue_logged_in'].includes(event.key)) adapter.clearAuthorization();
++    });
++    return adapter;
++}
+diff --git a/sillytavern-runtime/public/scripts/homer-local-session.mjs b/sillytavern-runtime/public/scripts/homer-local-session.mjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..c3a9aefe512d4981d3245cfd828067a6b1d5863c
+--- /dev/null
++++ b/sillytavern-runtime/public/scripts/homer-local-session.mjs
+@@ -0,0 +1,215 @@
++// Full phone-owned launch archives. Message edits remain in the canonical chat
++// outbox; callers overlay those messages when opening an archived launch.
++// A remote refresh never replaces an established local archive. No eviction.
++const STORE = 'entries';
++const PUBLIC_USER_FIELDS = new Set(['id', 'user_id', 'name', 'username', 'display_name', 'avatar', 'avatar_url']);
++const PUBLIC_APP_FIELDS = ['id', 'name', 'title', 'icon', 'avatar', 'avatar_url', 'cover', 'cover_url', 'image', 'image_url', 'slug'];
++const VERSION = /^[0-9a-f]{32}$/;
++const own = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
++
++function identifier(value, label) {
++    if (typeof value !== 'string' || !value.trim() || value.length > 160) throw new TypeError(`Invalid local session ${label}`);
++    return value;
++}
++
++function scopeIdentity(scope) {
++    let parts;
++    try { parts = JSON.parse(scope); } catch { throw new TypeError('Invalid local resource scope'); }
++    if (!Array.isArray(parts) || parts.length !== 3) throw new TypeError('Invalid local resource scope');
++    const [owner, app_id, conversation_id] = parts.map(value => identifier(value, 'scope'));
++    return { owner, app_id, conversation_id, key: parts, scope: JSON.stringify(parts) };
++}
++
++function secretField(key) {
++    // Inspect property names only: authored code, book entries, regex source and
++    // message text can legitimately contain words such as "token" or "secret".
++    const name = key.toLowerCase().replace(/[^a-z0-9]/g, '');
++    return /password|passwd|passphrase|credential|authorization|authentication|apikey|apitoken|apisecret|csrf|xsrf|clientsecret|privatekey|secret/.test(name)
++        || /^(?:auth|bearer|cookie|cookies|setcookie|token|tokens|jwt|sessionid|sessionkey|accesskey|accesskeyid|isadmin|issuperuser|isstaff|admin|administrator|adminstartupdata|previewclaims)$/.test(name)
++        || /token$|headers$/.test(name)
++        || /^(?:auth|authentication|bridge|access|refresh|oauth|session|bearer)(?:key|credentials?|headers?)$/.test(name);
++}
++
++function sanitizedClone(value, seen = new Set(), depth = 0) {
++    if (value === null || typeof value === 'string' || typeof value === 'boolean') return value;
++    if (typeof value === 'number' && Number.isFinite(value)) return value;
++    if (typeof value !== 'object' || depth > 256 || seen.has(value)) throw new TypeError('Local session must contain finite, acyclic JSON data');
++    seen.add(value);
++    let result;
++    if (Array.isArray(value)) {
++        result = value.map(item => item === undefined ? null : sanitizedClone(item, seen, depth + 1));
++    } else {
++        const prototype = Object.getPrototypeOf(value);
++        if (prototype !== null && Object.getPrototypeOf(prototype) !== null) throw new TypeError('Local session must contain plain JSON objects');
++        result = {};
++        for (const key of Object.keys(value)) {
++            if (secretField(key) || value[key] === undefined) continue;
++            Object.defineProperty(result, key, { value: sanitizedClone(value[key], seen, depth + 1), enumerable: true, writable: true, configurable: true });
++        }
++    }
++    seen.delete(value);
++    return result;
++}
++
++function assertPayloadOwner(owner, user) {
++    if (!user || typeof user !== 'object' || Array.isArray(user)) throw new TypeError('Local session requires a verified account');
++    const identities = ['id', 'user_id'].filter(key => user[key] !== undefined && user[key] !== null && user[key] !== '');
++    if (!identities.length || identities.some(key => !matchesIdentity(user[key], owner))) throw new TypeError('Local session account does not match owner');
++}
++
++function matchesIdentity(value, expected) {
++    return (typeof value === 'string' || (typeof value === 'number' && Number.isSafeInteger(value))) && String(value) === expected;
++}
++
++function captureSession(owner, payload) {
++    identifier(owner, 'owner');
++    assertPayloadOwner(owner, payload?.user);
++    const launch = payload?.launch;
++    if (!launch || typeof launch !== 'object' || Array.isArray(launch) || launch.admin_preview) throw new TypeError('Only ordinary full sessions can be archived');
++    const app_id = identifier(launch.app_id, 'app'), conversation_id = identifier(launch.conversation_id, 'conversation');
++    const storage = launch.storage;
++    if (!launch.card || typeof launch.card !== 'object' || Array.isArray(launch.card)
++        || !Array.isArray(launch.messages) || launch.messages.some(message => !message || typeof message !== 'object' || Array.isArray(message))
++        || storage?.protocol !== 2 || storage.complete !== true || storage.unchanged
++        || !VERSION.test(storage.version || '') || !Number.isSafeInteger(storage.message_count)
++        || storage.message_count !== launch.messages.length) throw new TypeError('A verified complete server session is required');
++    const captured = sanitizedClone(payload);
++    // Offline launch identity is public display data, never account authority.
++    captured.user = Object.fromEntries(Object.entries(captured.user).filter(([key]) => PUBLIC_USER_FIELDS.has(key)));
++    return { owner, app_id, conversation_id, type: 'session', key: [owner, app_id, conversation_id, 'session'], payload: captured };
++}
++
++function resourceKind(kind) {
++    if (!['runtime-state', 'models', 'regex'].includes(kind)
++        && !(typeof kind === 'string' && kind.startsWith('regex:') && kind.slice(6).trim() && kind.length <= 166)) throw new TypeError('Invalid local resource kind');
++    return kind;
++}
++
++function assertResourceIdentity(id, data) {
++    if (!data || typeof data !== 'object') return;
++    if (data.user !== undefined) assertPayloadOwner(id.owner, data.user);
++    for (const [key, expected] of [['owner', id.owner], ['user_id', id.owner], ['app_id', id.app_id], ['conversation_id', id.conversation_id]]) {
++        if (own(data, key) && !matchesIdentity(data[key], expected)) throw new TypeError('Local resource identity does not match scope');
++    }
++}
++
++function sessionMetadata(row) {
++    const payload = row.payload, launch = payload.launch;
++    const card = launch.card?.data || launch.card || {};
++    const source = launch.app || payload.app || launch.character || payload.character || card;
++    const app = Object.fromEntries(PUBLIC_APP_FIELDS.filter(key => own(source, key)).map(key => [key, source[key]]));
++    app.id ||= row.app_id;
++    app.name ||= launch.app_name || card.name || '';
++    const conversation = launch.conversation || payload.conversation || {};
++    return { app_id: row.app_id, id: row.conversation_id, conversation_id: row.conversation_id,
++        title: String(launch.title || conversation.title || app.name || ''),
++        app, app_name: String(launch.app_name || app.name || card.name || ''),
++        app_icon: String(launch.app_icon || app.icon || app.avatar || app.avatar_url || ''),
++        last_message: String(launch.messages.at(-1)?.content || '').slice(0, 4000),
++        message_count: launch.messages.length, created_at: conversation.created_at || launch.created_at || row.createdAt,
++        updated_at: conversation.updated_at || launch.updated_at || row.createdAt };
++}
++
++export function createLocalSessionStore({ indexedDB = globalThis.indexedDB, databaseName = 'homer-local-sessions-v1' } = {}) {
++    let opening = null;
++    function open() {
++        if (opening) return opening;
++        opening = new Promise((resolve, reject) => {
++            if (!indexedDB?.open) { reject(new Error('Local session storage is unavailable')); return; }
++            let abandoned = false;
++            const request = indexedDB.open(databaseName, 1);
++            request.onupgradeneeded = () => {
++                const db = request.result;
++                if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: 'key' }).createIndex('owner', 'owner');
++            };
++            request.onerror = () => reject(request.error || new Error('Local session storage could not open'));
++            request.onblocked = () => { abandoned = true; reject(new Error('Local session storage upgrade is blocked')); };
++            request.onsuccess = () => {
++                const db = request.result;
++                if (abandoned) { db.close(); return; }
++                db.onversionchange = () => { db.close(); opening = null; };
++                resolve(db);
++            };
++        }).catch(error => { opening = null; throw error; });
++        return opening;
++    }
++
++    async function transaction(mode, execute) {
++        const db = await open();
++        return new Promise((resolve, reject) => {
++            let tx, result, failure;
++            try {
++                try { tx = db.transaction(STORE, mode, mode === 'readwrite' ? { durability: 'strict' } : undefined); }
++                catch (error) { if (!(error instanceof TypeError)) throw error; tx = db.transaction(STORE, mode); }
++                tx.oncomplete = () => resolve(result);
++                tx.onabort = () => reject(failure || tx.error || new Error('Local session transaction aborted'));
++                tx.onerror = event => { failure ||= event.target?.error || tx.error; };
++                const guarded = callback => (...args) => {
++                    try { callback(...args); } catch (error) { failure = error; tx.abort(); }
++                };
++                execute(tx.objectStore(STORE), value => { result = value; }, guarded);
++            } catch (error) {
++                failure = error;
++                if (tx) { try { tx.abort(); } catch { reject(error); } } else reject(error);
++            }
++        });
++    }
++
++    function readEntry(key) {
++        return transaction('readonly', (store, done, guarded) => {
++            const request = store.get(key);
++            request.onsuccess = guarded(() => done(request.result ? sanitizedClone(request.result.payload) : null));
++        });
++    }
++
++    return {
++        async remember(owner, payload) {
++            const captured = captureSession(owner, payload);
++            // Recheck in a single completed write transaction so concurrent full
++            // cloud reads cannot replace the first phone-owned launch archive.
++            return transaction('readwrite', (store, done, guarded) => {
++                const request = store.get(captured.key);
++                request.onsuccess = guarded(() => {
++                    if (request.result) { done(sanitizedClone(request.result.payload)); return; }
++                    store.put({ ...captured, createdAt: Date.now() });
++                    done(sanitizedClone(captured.payload));
++                });
++            });
++        },
++        async read(owner, appId, conversationId) {
++            const key = [identifier(owner, 'owner'), identifier(appId, 'app'), identifier(conversationId, 'conversation'), 'session'];
++            return readEntry(key);
++        },
++        async list(owner) {
++            identifier(owner, 'owner');
++            return transaction('readonly', (store, done, guarded) => {
++                const rows = [], request = store.index('owner').openCursor(owner);
++                request.onsuccess = guarded(() => {
++                    const cursor = request.result;
++                    if (!cursor) { done(rows.sort((a, b) => Number(b.updated_at) - Number(a.updated_at))); return; }
++                    if (cursor.value.type === 'session') rows.push(sanitizedClone(sessionMetadata(cursor.value)));
++                    cursor.continue();
++                });
++            });
++        },
++        async rememberResource(scope, kind, data) {
++            const id = scopeIdentity(scope);
++            resourceKind(kind);
++            assertResourceIdentity(id, data);
++            const payload = sanitizedClone(data);
++            return transaction('readwrite', (store, done) => {
++                store.put({ ...id, key: [...id.key, 'resource', kind], type: 'resource', kind, payload, updatedAt: Date.now() });
++                done(sanitizedClone(payload));
++            });
++        },
++        async resource(scope, kind) {
++            const id = scopeIdentity(scope);
++            resourceKind(kind);
++            return readEntry([...id.key, 'resource', kind]);
++        },
++        async close() {
++            const db = opening ? await opening : null;
++            db?.close(); opening = null;
++        },
++    };
++}

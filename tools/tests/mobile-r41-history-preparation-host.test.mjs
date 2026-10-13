@@ -90,6 +90,9 @@ function historyFixture() {
       profile: async () => ({ data: state.owner }), points: async () => ({ points: 0 }) },
     setCachedUser() {}, ApiError: class extends Error {}, messagePreview: value => value,
     historyPreparationOwner, selectFreshHistoryTargets,
+    // This fixture isolates preparation, not the separate durable deletion tests.
+    refreshConversationDeletions: async () => [], filterDeletedConversations: (_owner, rows) => rows,
+    deletionStatus: () => ({ pending: 0, blocked: 0 }),
   };
   const source = readFileSync(new URL('../../frontend/app/assets/js/hub-pages.js', import.meta.url), 'utf8')
     .replace(/^import .*;\r?$/gm, '').replace(/^export /gm, '');
@@ -115,6 +118,23 @@ test('actual history cached paint does not send preparation on rejected fresh re
   await page.init();
   assert.equal(page.conversations[0].id, 'cached');
   assert.equal(calls.length, 0);
+});
+
+test('initial profile completion re-reads a fenced history rather than leaving it empty', async () => {
+  const { state, context, page } = historyFixture();
+  state.owner = {};
+  context.isLoggedIn = () => true;
+  context.setCachedUser = user => { state.owner = user; };
+  context.api.profile = async () => ({ data: { id: 'owner-a' } });
+  let calls = 0;
+  context.api.conversations = async () => {
+    calls += 1;
+    await new Promise(resolve => setTimeout(resolve, 10));
+    return { data: { list: [{ id: 'kept', app_id: 'card' }] } };
+  };
+  await page.init();
+  assert.equal(calls, 2);
+  assert.equal(page.conversations[0].id, 'kept');
 });
 
 test('actual history stale epoch, changed owner and destroy reject late fresh results', async () => {
