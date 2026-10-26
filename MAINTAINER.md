@@ -22,8 +22,8 @@ grey7213/homer-android（公开）        原生壳源码 + 装配脚本
 grey7213/homer-android-apk（公开）    只走 Releases，不进 git 历史
 ```
 
-`android-app/` 的源码此前只存在于 `E:\homer-apk-1140`，不在任何版本控制内。
-现在 homer-android 是它的真源，`E:\homer-apk-1140` 退化成我本地的出包工作区。
+`android-app/` 的源码此前只存在于 `E:\HomerWorkspace\build`，不在任何版本控制内。
+现在 homer-android 是它的真源，`E:\HomerWorkspace\build` 退化成我本地的出包工作区。
 
 ## main 的保护规则
 
@@ -64,7 +64,7 @@ gh pr merge 12 --squash --delete-branch
 `--squash` 把贡献者的多个提交压成一个，主线历史干净。合完拉下来出包：
 
 ```powershell
-cd E:\homer-android
+cd E:\HomerWorkspace\android
 git checkout main && git pull
 ```
 
@@ -74,7 +74,7 @@ merge 范围内，见「收一个 PR」。
 ## 收一个 PR
 
 ```powershell
-cd E:\homer-android
+cd E:\HomerWorkspace\android
 git fetch origin
 git checkout -b pr-12 origin/fix/explore-blank-screen
 python tools/bootstrap.py        # 对齐 pin，通常已就位
@@ -85,13 +85,13 @@ python tools/bootstrap.py        # 对齐 pin，通常已就位
 ```powershell
 # 在主仓库工作区试算，不真的改文件
 cd E:\酒馆开发
-git apply -3 --check --stat "E:\homer-android\web-patches\20260902-1430-修复探索页白屏.patch"
+git apply -3 --check --stat "E:\HomerWorkspace\android\web-patches\20260902-1430-修复探索页白屏.patch"
 ```
 
 `--check` 通过就落地：
 
 ```powershell
-git apply -3 "E:\homer-android\web-patches\20260902-1430-修复探索页白屏.patch"
+git apply -3 "E:\HomerWorkspace\android\web-patches\20260902-1430-修复探索页白屏.patch"
 git status --short frontend sillytavern-runtime
 ```
 
@@ -122,14 +122,14 @@ cd E:\酒馆开发
 python tools\sync_apk_build_workspace.py
 
 # 2. 原生壳改动同步过去（homer-android 是真源，方向是 homer-android → 1140）
-robocopy E:\homer-android\android-app E:\homer-apk-1140\android-app /MIR /XD .gradle build /XF local.properties
+robocopy E:\HomerWorkspace\android\android-app E:\HomerWorkspace\build\android-app /MIR /XD .gradle build /XF local.properties
 
 # 3. 构建
-cd E:\homer-apk-1140\android-app
+cd E:\HomerWorkspace\build\android-app
 .\gradlew.bat testReleaseUnitTest assembleRelease -PHOMER_SERVER_BASE_URL=https://patcher.villainy.top/
 ```
 
-签名材料在 `E:\homer-apk-1140\_sign\`（本机，不在版本库）。alias、口令、
+签名材料在 `E:\HomerWorkspace\build\_sign\`（本机，不在版本库）。alias、口令、
 证书指纹见 `AGENTS.md` 的构建段 —— **仓库已公开，这些不写进这个文件**。
 读 keystore 要 JDK 17+，build-tools 用 `E:\Android\Sdk\build-tools\36.1.0`。
 版本号在 `android-app/app/build.gradle` 的 `versionCode` / `versionName`。
@@ -158,7 +158,7 @@ cd E:\homer-apk-1140\android-app
 我这边 web 端有新改动后，贡献者要能拉到。推 `web-base` 分支：
 
 ```powershell
-python E:\homer-android\tools\push_web_base.py
+python E:\HomerWorkspace\android\tools\push_web_base.py
 ```
 
 它从主仓库当前 HEAD 取那两棵树，创建一份新的 web 基线提交，并更新
@@ -173,7 +173,7 @@ python E:\homer-android\tools\push_web_base.py
 之后每个 PR 都红灯。删补丁和提交 pin 放同一个提交里：
 
 ```powershell
-cd E:\homer-android
+cd E:\HomerWorkspace\android
 git rm web-patches\<已落地的补丁>.patch
 git commit -m "推进 web 基线到 <主仓库 commit>" web-base.json web-patches
 git push

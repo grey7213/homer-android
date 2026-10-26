@@ -1,5 +1,12 @@
 # Homer Android working notes
 
+## Local workspace paths (2026-10-26)
+
+- Native source now lives at `E:\HomerWorkspace\android`; Web/backend source remains `E:\酒馆开发`.
+- Create review worktrees only under `E:\HomerWorkspace\worktrees` with `E:\酒馆开发\tools\New-HomerWorktree.ps1 -Name <name> -Repository android`. Do not create new `E:\homer-*` directories or loose root files.
+- Local backups, legacy build workspace, signing handover, releases and archives are grouped under `E:\HomerWorkspace`. See its `README.md` for the exact map; historical paths below do not authorize recreating old root directories.
+- `.web-cache/tree` contains a nested Git repository and local Web patches. A clean outer repository does not prove this tree disposable. Preserve its edits and fix absolute Junctions after moves.
+
 - Current release: 1.18.1 / 354 (2026-10-07), PR #20 merged at `465e2a9`. Personal backup download/preview/private-copy import is live; Pixel 6 verified DownloadManager save, system picker import and signed 353→354 upgrade with login retained. Production is `160.202.46.157` / `ser0YeymdcIz0pT`; use the existing SSH key and main-workspace publisher. See `specs/user-local-backup-20261007.md`. Earlier PR #19 generation/switching verification remains in `specs/pr19-review-20261007.md`.
 
 - Native source of truth: this repository's `android-app/`. Web source of truth: `E:\酒馆开发` (`grey7213/AIXingYue`). Never overwrite either tree with a contributor's full copy; apply and inspect patches against their pinned baseline.
